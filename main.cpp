@@ -26,23 +26,36 @@ using namespace cv;
 
 
 const char USAGE[] =
-"Usage:     matcher <options>\n"
+"Usage:     slam -idev <input> <options>\n"
 "\n"
-"Options:   -lcmod <left camera model xml file>\n"
-"           -rcmod <right camera model xml file>\n"
-"           -lfile <regular expression for left image channel>\n"
-"           -rfile <regular expression for right image channel>\n"
+"where input device can be: FileReader Bumblebee2 etc\n"
 "\n"
-"Example:   matcher -lcmod lcmod.xml -rcmod rcmod.xm -lfile \"left*pgm\"  -rfile \"right*.pgm\"\n\n";
+"Input Specific Options:\n"
+"   FileReader:      -lfile <regular expression for left image channel>\n"
+"                    -rfile <regular expression for right image channel>\n"
+"\n"
+"General Options:    -lcmod <left camera model xml file>\n"
+"                    -rcmod <right camera model xml file>\n"
+"\n"
+"Example:\n"
+"slam -idev FileReader -lcmod lcmod.xml -rcmod rcmod.xm -lfile \"left*pgm\"  -rfile \"right*.pgm\"\n\n";
 
 
 /********************************************************
  * Function Stubs										*
  ********************************************************/
 void tracker_Main( void );
-void tracker_DescriptorExtractor( const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors );
-void tracker_Matcher(const vector<KeyPoint>& queryK, const Mat& queryD,
-					 const vector<KeyPoint>& trainK, const Mat& trainD, vector<DMatch>& matches );
+
+void tracker_DescriptorExtractor( const Mat& image,
+								  vector<KeyPoint>& keypoints,
+								  Mat& descriptors );
+
+void tracker_Matcher(const vector<KeyPoint>& queryK,
+					 const Mat& queryD,
+					 const vector<KeyPoint>& trainK,
+					 const Mat& trainD,
+					 vector<DMatch>& matches );
+
 int loadTexture_Mat( Mat image, GLuint *text );
 
 
@@ -166,36 +179,47 @@ private:
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// da main dude!
+// da main
 int main( int argc, char** argv )
 {
-    if( argc != 5 ) {
+    if( argc < 3 ) {
         std::cout << USAGE;
         return -1;
     }
 
     GetPot cl(argc,argv);
-//    string sLeftCameraModel  = cl.follow( "", 1, "-lcmod" );
-//    string sRightCameraModel = cl.follow( "", 1, "-rcmod" );
-    string sLeftImageFile    = cl.follow( "", 1, "-lfile" );
-    string sRightImageFile   = cl.follow( "", 1, "-rfile" );
 
-    cam.SetProperty("Channel-0", sLeftImageFile );
-    cam.SetProperty("Channel-1", sRightImageFile );
-    cam.SetProperty("NumChannels", 2 );
-    cam.SetProperty("Rate", 0.0 );
+    // get input device
+    string sInputDevice  = cl.follow( "", 1, "-idev" );
 
-    cam.InitDriver( "FileReader" );
+    // get camera models (optional)
+    string sLeftCameraModel  = cl.follow( "", 1, "-lcmod" );
+    string sRightCameraModel = cl.follow( "", 1, "-rcmod" );
 
-//    std::cout << cam.GetProperty("Channel-0")   << std::endl;
-//    std::cout << cam.GetProperty("Channel-1")   << std::endl;
-//    std::cout << cam.GetProperty("NumChannels") << std::endl;
-//    std::cout << cam.GetProperty("Rate")        << std::endl;
+
+    if( sInputDevice == "FileReader" ) {
+        string sLeftImageFile    = cl.follow( "", 1, "-lfile" );
+        string sRightImageFile   = cl.follow( "", 1, "-rfile" );
+        if( sLeftImageFile.empty() && sRightImageFile.empty() ) {
+            std::cout << "One or more file names is missing!\n" << std::endl;
+            std::cout << USAGE;
+            return -1;
+        }
+        cam.SetProperty("Channel-0", sLeftImageFile );
+        cam.SetProperty("Channel-1", sRightImageFile );
+        cam.SetProperty("NumChannels", 2 );
+    }
+
+    // init driver
+    if( !cam.InitDriver( sInputDevice ) ) {
+    	std::cout << "Invalid input device." << std::endl;
+    	return -1;
+    }
 
 	// run once to have an initial image
 	tracker_Main();
 
-	GLWindow* pWin = new GLWindow( 0, 0, 1024, 384, "Matcher" );
+	GLWindow* pWin = new GLWindow( 0, 0, 1024, 384, "SLAM" );
 	pWin->end();
     pWin->resizable( pWin );
     pWin->show();
@@ -217,7 +241,7 @@ void tracker_Main( void )
     Mat		imgLeft, imgRight;
 
     // get images
-    std::vector<Mat> vImages(2);
+    std::vector<Mat> vImages;
     if( !cam.Capture( vImages ) )
     	exit(1);
 
