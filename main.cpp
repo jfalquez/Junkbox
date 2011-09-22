@@ -245,7 +245,7 @@ void tracker_Main( void )
     if( !cam.Capture( vImages ) )
     	exit(1);
 
-   	// get keypoints and compute descriptors
+    // get keypoints and compute descriptors
     detector.detect( vImages[0], keypointsLeft );
     detector.detect( vImages[1], keypointsRight );
 
