@@ -13,13 +13,16 @@
 #include "GLHelpers.h"
 
 #include <cv.h>
-#include "opencv2/core/core.hpp"
-#include "opencv2/features2d/features2d.hpp"
-#include "opencv2/highgui/highgui.hpp"
+#include <opencv2/core/core.hpp>
+#include <opencv2/features2d/features2d.hpp>
+#include <opencv2/highgui/highgui.hpp>
 
 #include <RPG/Utils/GetPot>
 #include <RPG/Devices/Camera/CameraDevice.h>
 
+#include <mvl/camera/camera.h>
+#include <mvl/image/image.h>
+#include <mvl/stereo/stereo.h>
 #include <Mvlpp/Utils.h>
 
 using namespace cv;
@@ -63,8 +66,8 @@ int loadTexture_Mat( Mat image, GLuint *text );
 /********************************************************
  * Classes, Global Variables & Constants				*
  ********************************************************/
-int&  dArea =
-		CVarUtils::CreateCVar( "dArea", 4, "Area around feature pixel to compute descriptor." );
+int&  window =
+		CVarUtils::CreateCVar( "window", 2, "Area around feature pixel to compute descriptor. It follows: ( 2 * window ) + 1" );
 int&  sArea =
 		CVarUtils::CreateCVar( "sArea", 10, "Search area size for matching features." );
 int&  tFactor =
@@ -85,6 +88,9 @@ bool& PAUSED =
 Mat				showImg;					// Image to show on screen
 CameraDevice 	cam;						// The camera handle
 
+mvl_camera_t *left_cmod, * right_cmod;		// For rectification
+double left_hpose[16], right_hpose[16];
+
 
 // FLTK OpenGL window
 class GLWindow : public Fl_Gl_Window
@@ -93,7 +99,9 @@ class GLWindow : public Fl_Gl_Window
 	static void Timer(void *userdata)
 	{
 		GLWindow *pWin = (GLWindow*)userdata;
-		tracker_Main();
+		if ( !PAUSED ) {
+			tracker_Main();
+		}
 		pWin->redraw();
 		Fl::repeat_timeout( FPS, Timer, userdata );
 	}
@@ -196,6 +204,16 @@ int main( int argc, char** argv )
     string sLeftCameraModel  = cl.follow( "", 1, "-lcmod" );
     string sRightCameraModel = cl.follow( "", 1, "-rcmod" );
 
+    if( !sLeftCameraModel.empty() && !sRightCameraModel.empty() ) {
+    	/* Read in the left and right camera model */
+    	left_cmod  = mvl_read_camera( sLeftCameraModel.c_str(), left_hpose );
+    	right_cmod = mvl_read_camera( sRightCameraModel.c_str(), right_hpose );
+
+    	if( left_cmod == NULL || right_cmod == NULL ) {
+            std::cout << "Error reading camera model!\n" << std::endl;
+            return -1;
+        }
+    }
 
     if( sInputDevice == "FileReader" ) {
         string sLeftImageFile    = cl.follow( "", 1, "-lfile" );
@@ -231,29 +249,53 @@ int main( int argc, char** argv )
 // main feature matcher code
 void tracker_Main( void )
 {
-
-	FastFeatureDetector detector( 60 );						// FAST feature extractor
-	std::vector<KeyPoint> keypointsLeft, keypointsRight;	// Feature vector
-	Mat descriptorsLeft, descriptorsRight;					// Descriptor matrix
-	std::vector<DMatch> matches;							// All matches
-	std::vector<DMatch> good_matches;						// Good matches
-
     Mat		imgLeft, imgRight;
+    mvl_image_t *left_img, *left_img_rect, *right_img, *right_img_rect;
+
 
     // get images
     std::vector<Mat> vImages;
     if( !cam.Capture( vImages ) )
     	exit(1);
 
+
+
+	// OpenCV image to MVL image
+    left_img = mvl_image_alloc(vImages[0].cols,vImages[0].rows,GL_UNSIGNED_BYTE,GL_LUMINANCE,vImages[0].data);
+    right_img = mvl_image_alloc(vImages[1].cols,vImages[1].rows,GL_UNSIGNED_BYTE,GL_LUMINANCE,vImages[1].data);
+
+
+	// rectify
+    left_img_rect = mvl_image_alloc(vImages[0].cols,vImages[0].rows,GL_UNSIGNED_BYTE,GL_LUMINANCE,NULL);
+    right_img_rect = mvl_image_alloc(vImages[1].cols,vImages[1].rows,GL_UNSIGNED_BYTE,GL_LUMINANCE,NULL);
+    mvl_rectify( left_cmod, left_img, left_img_rect );
+    mvl_rectify( right_cmod, right_img, right_img_rect );
+
+
+	// MVL image to OpenCV
+    memcpy(vImages[0].data, left_img_rect->data,vImages[0].cols*vImages[0].rows );
+    memcpy(vImages[1].data, right_img_rect->data,vImages[1].cols*vImages[1].rows );
+
+
     // get keypoints and compute descriptors
+	FastFeatureDetector detector( 20 );						// FAST feature extractor
+	std::vector<KeyPoint> keypointsLeft, keypointsRight;	// Feature vector
     detector.detect( vImages[0], keypointsLeft );
     detector.detect( vImages[1], keypointsRight );
 
     // compute descriptors
+	Mat descriptorsLeft, descriptorsRight;					// Descriptor matrix
     tracker_DescriptorExtractor( vImages[0], keypointsLeft, descriptorsLeft );
     tracker_DescriptorExtractor( vImages[1], keypointsRight, descriptorsRight );
 
+    SurfDescriptorExtractor extractor;
+	Mat SurfDescriptorsLeft, SurfDescriptorsRight;
+//    extractor.compute( vImages[0], keypointsLeft, SurfDescriptorsLeft );
+//    extractor.compute( vImages[1], keypointsRight, SurfDescriptorsRight );
+
+    
     // match keypoints based on descriptors
+	std::vector<DMatch> matches;							// All matches
     tracker_Matcher( keypointsLeft, descriptorsLeft, keypointsRight, descriptorsRight, matches );
 
     // find distances between matches
@@ -268,6 +310,7 @@ void tracker_Main( void )
     // select only "good" matches (i.e. distance less threshold)
     // if there is an exact match, min_dist will be 0
     // change to 1 to accept a slightly higher threshold
+	std::vector<DMatch> good_matches;						// Good matches
     if( min_dist == 0 )
     	min_dist = 1;
     for( int i = 0; i < descriptorsLeft.rows; i++ ) {
@@ -298,8 +341,10 @@ void tracker_Main( void )
 // compute descriptors for each feature/keypoint
 void tracker_DescriptorExtractor( const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors )
 {
-	int oX, oY, numDescs, numElems;
+	int oX, oY, numDescs, numElems, dArea;
 
+	// dArea is the "real" search area for the descriptor. If window = 1, then dArea is 3 (ie. 3x3 area)
+	dArea = (2 * window) + 1;
 	numDescs = 0;
 	descriptors.create( keypoints.size(), (dArea * dArea), CV_8UC1 );
 	for( vector<KeyPoint>::iterator i = keypoints.begin(); i != keypoints.end(); ++i ) {
