@@ -5,6 +5,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <fstream>
+#include <vector>
 
 #include <FL/Fl.H>
 #include <FL/Fl_Gl_Window.H>
@@ -49,6 +51,11 @@ const char USAGE[] =
  ********************************************************/
 void tracker_Main( void );
 
+int tracker_Export( const vector<Mat>vImages,
+					vector<KeyPoint>& keypointsLeft,
+					vector<KeyPoint>& keypointsRight,
+					vector<DMatch>& matches );
+
 void tracker_DescriptorExtractor( const Mat& image,
 								  vector<KeyPoint>& keypoints,
 								  Mat& descriptors );
@@ -79,9 +86,10 @@ bool& DRAW_ALL_LEFT =
 bool& DRAW_ALL_RIGHT =
 		CVarUtils::CreateCVar( "drawAll.right", false, "Draw all keypoints (right image) regarding if "
 													   "they match or not (toggle).");
-bool& PAUSED =
+bool& f_PAUSED =
 		CVarUtils::CreateCVar( "pause", false, "Pause data capture (toggle)." );
 
+bool f_EXPORT = false;
 
 #define FPS (1.0 / 10.0)					// Refresh rate, how fast it reads images from disk
 
@@ -91,6 +99,7 @@ CameraDevice 	cam;						// The camera handle
 mvl_camera_t *left_cmod, * right_cmod;		// For rectification
 double left_hpose[16], right_hpose[16];
 
+unsigned int exportID = 0;					// ID to keep track of data exporting (ie. image_000, etc).
 
 // FLTK OpenGL window
 class GLWindow : public Fl_Gl_Window
@@ -99,7 +108,7 @@ class GLWindow : public Fl_Gl_Window
 	static void Timer(void *userdata)
 	{
 		GLWindow *pWin = (GLWindow*)userdata;
-		if ( !PAUSED ) {
+		if ( !f_PAUSED ) {
 			tracker_Main();
 		}
 		pWin->redraw();
@@ -164,11 +173,14 @@ public:
 						return 1;
 					case 'q':
 						exit(1);
+					case 'c':
+						f_EXPORT = true;
+						return 1;
 					case ' ':
-						if( PAUSED )
-							PAUSED = false;
+						if( f_PAUSED )
+							f_PAUSED = false;
 						else
-							PAUSED = true;
+							f_PAUSED = true;
 						return 1;
 					}
 				break;
@@ -259,6 +271,7 @@ void tracker_Main( void )
     	exit(1);
 
 
+    // FIX: the whole rectification process can be speeded up by not doing so many memcopies
 
 	// OpenCV image to MVL image
     left_img = mvl_image_alloc(vImages[0].cols,vImages[0].rows,GL_UNSIGNED_BYTE,GL_LUMINANCE,vImages[0].data);
@@ -272,7 +285,7 @@ void tracker_Main( void )
     mvl_rectify( right_cmod, right_img, right_img_rect );
 
 
-	// MVL image to OpenCV
+	// MVL image to OpenCV image
     memcpy(vImages[0].data, left_img_rect->data,vImages[0].cols*vImages[0].rows );
     memcpy(vImages[1].data, right_img_rect->data,vImages[1].cols*vImages[1].rows );
 
@@ -288,19 +301,13 @@ void tracker_Main( void )
     tracker_DescriptorExtractor( vImages[0], keypointsLeft, descriptorsLeft );
     tracker_DescriptorExtractor( vImages[1], keypointsRight, descriptorsRight );
 
-    SurfDescriptorExtractor extractor;
-	Mat SurfDescriptorsLeft, SurfDescriptorsRight;
-//    extractor.compute( vImages[0], keypointsLeft, SurfDescriptorsLeft );
-//    extractor.compute( vImages[1], keypointsRight, SurfDescriptorsRight );
-
-    
     // match keypoints based on descriptors
-	std::vector<DMatch> matches;							// All matches
-    tracker_Matcher( keypointsLeft, descriptorsLeft, keypointsRight, descriptorsRight, matches );
+	std::vector<DMatch> matches;
+    // match left to right
+	tracker_Matcher( keypointsLeft, descriptorsLeft, keypointsRight, descriptorsRight, matches );
 
     // find distances between matches
     double max_dist = 0; double min_dist = 1000;
-
     for( int i = 0; i < descriptorsLeft.rows; i++ ) {
 		double dist = matches[i].distance;
 		if( dist < min_dist ) min_dist = dist;
@@ -317,6 +324,15 @@ void tracker_Main( void )
 		if( matches[i].distance <= tFactor * min_dist )
 		    good_matches.push_back( matches[i] );
     }
+
+	// export data (save to disk)
+	if( f_EXPORT ) {
+		if( tracker_Export( vImages, keypointsLeft, keypointsRight, good_matches ) ) {
+			std::cout << "Data " << exportID - 1 << " exported succesfully." << std::endl;
+		}
+		f_EXPORT = false;
+	}
+
 
     if ( DRAW_ALL_LEFT )
         drawKeypoints( vImages[0], keypointsLeft, vImages[0], Scalar::all(255), DrawMatchesFlags::DEFAULT );
@@ -338,6 +354,52 @@ void tracker_Main( void )
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// save data to disk
+int tracker_Export( const vector<Mat>vImages,
+					 vector<KeyPoint>& keypointsLeft,
+					 vector<KeyPoint>& keypointsRight,
+					 vector<DMatch>& matches )
+{
+    char filename[100];
+
+	std::cout << "Keypoints in " << keypointsLeft.size() << std::endl;
+    // surf descriptors
+	SurfDescriptorExtractor extractor;
+	Mat SurfDescriptors;
+    extractor.compute( vImages[0], keypointsLeft, SurfDescriptors );
+	std::cout << "Keypoints out " << keypointsLeft.size() << std::endl;
+
+    // export images
+    sprintf(filename,"img_left-%03d.png",exportID);
+    if( !imwrite( filename, vImages[0] ) ) {
+    	std::cout << "export: Error saving left image " << filename << std::endl;
+    	return false;
+    }
+    sprintf(filename,"img_right-%03d.png",exportID);
+    if( !imwrite( filename, vImages[1] ) ) {
+    	std::cout << "export: Error saving right image " << filename << std::endl;
+    	return false;
+    }
+
+    // export coordinates and descriptors
+    std::ofstream file;
+    sprintf(filename,"features-%03d.txt",exportID);
+    file.open (filename);
+	for( vector<DMatch>::iterator i = matches.begin(); i != matches.end(); ++i ) {
+	    file << keypointsLeft[i->queryIdx].pt.x << " ";
+	    file << keypointsLeft[i->queryIdx].pt.y << " ";
+	    file << keypointsLeft[i->queryIdx].pt.x - keypointsRight[i->trainIdx].pt.x << " ";
+	    file << SurfDescriptors.row(i->queryIdx) << std::endl;
+	}
+	file.close();
+	std::cout << "Good Matches: " << matches.size() << std::endl;
+	exportID++;
+	return true;
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // compute descriptors for each feature/keypoint
 void tracker_DescriptorExtractor( const Mat& image, vector<KeyPoint>& keypoints, Mat& descriptors )
 {
@@ -355,7 +417,8 @@ void tracker_DescriptorExtractor( const Mat& image, vector<KeyPoint>& keypoints,
 		// check to see if dArea is out of bounds
 		if( oX < 0 || (oX + dArea) > image.cols ||
 		    oY < 0 || (oY + dArea) > image.rows ) {
-			// if so, delete... bad keypoint 
+			// if so, delete... bad keypoint
+			std::cout << "matcher: Bad keypoint.. deleted!" << std::endl;
 			i = keypoints.erase(i);
 		} else {
 			// copy the neighborhood to the descriptors matrix
@@ -389,8 +452,11 @@ void tracker_Matcher( const vector<KeyPoint>& queryK, const Mat& queryD, const v
 		minInd = 0;
 		minVal = 999999;
 		for( int j = 0; j < trainD.rows; j++ ) {
+			// now that the images are rectified you can use this 'y' comparison, before you needed
+			// a threshold like the line below
 			if( trainK[j].pt.x > (queryK[i].pt.x - sArea) && trainK[j].pt.x < (queryK[i].pt.x + sArea)
-			  && trainK[j].pt.y > (queryK[i].pt.y - sArea) && trainK[j].pt.y < (queryK[i].pt.y + sArea) ) {
+			  && trainK[j].pt.y == queryK[i].pt.y ) {
+//			  && trainK[j].pt.y > (queryK[i].pt.y - sArea) && trainK[j].pt.y < (queryK[i].pt.y + sArea) ) {
 				absdiff( queryD.row(i), trainD.row(j), res );
 				// crappy method to sum all elements in a row
 				acc = 0;
