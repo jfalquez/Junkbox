@@ -1,6 +1,6 @@
 cmake_minimum_required( VERSION 2.8 )
 
-project( Matcher )
+project( SLAM )
 
 include( Common.cmake )
 
@@ -15,8 +15,8 @@ include_directories( ${RPG_INCLUDE_DIRS} )
 include_directories( ${MVL_INCLUDE_DIRS} )
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 
-add_executable( matcher main.cpp )
-target_link_libraries( matcher
+add_executable( slam main.cpp )
+target_link_libraries( slam
        	${OpenCV_LIBS} 
 	${FLTK_LIBRARIES}
        	${OPENGL_LIBRARIES} 
