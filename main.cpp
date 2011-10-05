@@ -22,9 +22,6 @@
 #include <RPG/Utils/GetPot>
 #include <RPG/Devices/Camera/CameraDevice.h>
 
-#include <mvl/camera/camera.h>
-#include <mvl/image/image.h>
-#include <mvl/stereo/stereo.h>
 #include <Mvlpp/Utils.h>
 
 using namespace cv;
@@ -95,9 +92,6 @@ bool f_EXPORT = false;
 
 Mat				showImg;					// Image to show on screen
 CameraDevice 	cam;						// The camera handle
-
-mvl_camera_t *left_cmod, * right_cmod;		// For rectification
-double left_hpose[16], right_hpose[16];
 
 unsigned int exportID = 0;					// ID to keep track of data exporting (ie. image_000, etc).
 
@@ -212,20 +206,19 @@ int main( int argc, char** argv )
     // get input device
     string sInputDevice  = cl.follow( "", 1, "-idev" );
 
-    // get camera models (optional)
-    string sLeftCameraModel  = cl.follow( "", 1, "-lcmod" );
-    string sRightCameraModel = cl.follow( "", 1, "-rcmod" );
 
-    if( !sLeftCameraModel.empty() && !sRightCameraModel.empty() ) {
-    	/* Read in the left and right camera model */
-    	left_cmod  = mvl_read_camera( sLeftCameraModel.c_str(), left_hpose );
-    	right_cmod = mvl_read_camera( sRightCameraModel.c_str(), right_hpose );
-
-    	if( left_cmod == NULL || right_cmod == NULL ) {
-            std::cout << "Error reading camera model!\n" << std::endl;
+    if( sInputDevice == "Bumblebee2" ) {
+        string sLeftCameraModel  = cl.follow( "", 1, "-lcmod" );
+        string sRightCameraModel = cl.follow( "", 1, "-rcmod" );
+        if( sLeftCameraModel.empty() && sRightCameraModel.empty() ) {
+            std::cout << "One or more camera model files are missing!\n" << std::endl;
+            std::cout << USAGE;
             return -1;
         }
+        cam.SetProperty("CamModel-L", sLeftCameraModel );
+        cam.SetProperty("CamModel-R", sRightCameraModel );
     }
+
 
     if( sInputDevice == "FileReader" ) {
         string sLeftImageFile    = cl.follow( "", 1, "-lfile" );
@@ -261,33 +254,10 @@ int main( int argc, char** argv )
 // main feature matcher code
 void tracker_Main( void )
 {
-    Mat		imgLeft, imgRight;
-    mvl_image_t *left_img, *left_img_rect, *right_img, *right_img_rect;
-
-
     // get images
     std::vector<Mat> vImages;
     if( !cam.Capture( vImages ) )
     	exit(1);
-
-
-    // FIX: the whole rectification process can be speeded up by not doing so many memcopies
-
-	// OpenCV image to MVL image
-    left_img = mvl_image_alloc(vImages[0].cols,vImages[0].rows,GL_UNSIGNED_BYTE,GL_LUMINANCE,vImages[0].data);
-    right_img = mvl_image_alloc(vImages[1].cols,vImages[1].rows,GL_UNSIGNED_BYTE,GL_LUMINANCE,vImages[1].data);
-
-
-	// rectify
-    left_img_rect = mvl_image_alloc(vImages[0].cols,vImages[0].rows,GL_UNSIGNED_BYTE,GL_LUMINANCE,NULL);
-    right_img_rect = mvl_image_alloc(vImages[1].cols,vImages[1].rows,GL_UNSIGNED_BYTE,GL_LUMINANCE,NULL);
-    mvl_rectify( left_cmod, left_img, left_img_rect );
-    mvl_rectify( right_cmod, right_img, right_img_rect );
-
-
-	// MVL image to OpenCV image
-    memcpy(vImages[0].data, left_img_rect->data,vImages[0].cols*vImages[0].rows );
-    memcpy(vImages[1].data, right_img_rect->data,vImages[1].cols*vImages[1].rows );
 
 
     // get keypoints and compute descriptors
