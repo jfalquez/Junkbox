@@ -23,21 +23,21 @@ bool AmFlying( Eigen::Vector3d /* P */ ) {
 	// Ramp info - static info (can be inferred by MoCap)
 	double dRampWidth = 1.0; 	// in meters
 	double dRampHeight = 1.0; 	// in meters
-	double dRampAngle = 40; 	// in deg
+	double dRampAngle = 30; 	// in deg
 
 	// Ramp position + orientation in world reference frame (given by MoCap)
 	Eigen::Matrix<double,6,1> Ramp1Pos,Ramp2Pos;
-	Ramp1Pos << 5.0, 0, sin(dRampAngle)*dRampHeight/2, 0, -dRampAngle*PI/180, 0;
+	Ramp1Pos << 5.0, 0, sin(dRampAngle*PI/180)*dRampHeight/2, 0, -dRampAngle*PI/180, 0;
 	Eigen::Matrix4d Twr1 = mvl::Cart2T(Ramp1Pos);
-   	Ramp1Pos << 10.0, 0, sin(dRampAngle)*dRampHeight/2, 0, -dRampAngle*PI/180, 0;
+   	Ramp2Pos << 10.0, 0, sin(dRampAngle*PI/180)*dRampHeight/2, 0, -dRampAngle*PI/180, 0;
    	Eigen::Matrix4d Twr2 = mvl::Cart2T(Ramp2Pos);
 
 	// Point we wish to analyze; position of car (given by MoCap)
 	Eigen::Vector3d P;
 	Eigen::Vector4d Pt;
-	P << 0.5, 0.5, 0.11;
+	P << 0.5, 0.5, 0.0;
 	Pt << P, 1;
-	Pt = Twr2 * Pt;
+	Pt = Twr1 * Pt;
 	P = Pt.block<3,1>(0,0);
 
 
