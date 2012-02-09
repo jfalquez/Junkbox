@@ -6,19 +6,19 @@ include( Common.cmake )
 
 find_package( ZeroMQ REQUIRED )
 find_package( Protobuf REQUIRED )
-find_package( RPG REQUIRED )
-find_package( CVARS REQUIRED )
 
-include_directories( ${CVARS_INCLUDE_DIR} )
-include_directories( ${RPG_INCLUDE_DIRS} )
 include_directories( ${ZeroMQ_INCLUDE_DIRS} )
 include_directories( ${PROTOBUF_INCLUDE_DIRS} )
 
-add_executable( Nodes main.cpp )
+add_executable( node1 node1.cpp )
+add_executable( node2 node2.cpp )
 
-target_link_libraries( Nodes 
-	${RPG_LIBRARIES}
-	${CVARS_LIBRARIES}
+target_link_libraries( node1 
+        ${ZeroMQ_LIBRARIES}
+        ${PROTOBUF_LIBRARIES}
+	)
+
+target_link_libraries( node2 
         ${ZeroMQ_LIBRARIES}
         ${PROTOBUF_LIBRARIES}
 	)
