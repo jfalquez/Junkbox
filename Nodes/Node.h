@@ -5,6 +5,7 @@
 #include <utility>
 #include <string>
 #include <sstream>
+#include <iostream> // not needed
 
 #include <zmq.hpp>
 
@@ -28,41 +29,91 @@ namespace rpg
             unsigned int                m_nPort;
             EndpointType                m_eType;
             zmq::socket_t*              m_pSocket;
-            google::protobuf::Message*  m_pProtobuf;
-            void						(*m_pFunc)(google::protobuf::Message*,google::protobuf::Message*);
-
+            std::string                 m_sPbTypeName;
+            void                        (*m_pFunc)(google::protobuf::Message&,google::protobuf::Message&);
         };
 
     public:
         
-        Node();
-        ~Node();
+        Node()
+        {
+            m_pContext = new zmq::context_t(1);
+        }
+
+
+        ~Node()
+        {
+            std::map < std::string, Endpoint* >::iterator it;
+
+            for( it = m_mEndpoints.begin(); it != m_mEndpoints.end(); it++ ) {
+                delete (*it).second->m_pSocket;
+                delete (*it).second;
+                m_mEndpoints.erase( it );
+            }
+        }
 
         bool Publish( unsigned int nPort,
                       google::protobuf::Message& Msg
                     )
         {
-            std::string sKey = _GenerateKey( EP_PUB, "", nPort );
+            std::string sKey = _GenerateKey( EP_PUB, nPort );
             Endpoint *pEP = _FindEndpoint( sKey );
             if( pEP == NULL ) {
-                pEP = new Endpoint;
-                pEP->m_eType = EP_PUB;
-                pEP->m_nPort = nPort;
-                pEP->m_pSocket = new zmq::socket_t( *m_pContext, ZMQ_PUB );
-                try {
-                    std::ostringstream address;
-                    address << "tcp://*:" << nPort;
-                    pEP->m_pSocket->bind(address.str().c_str());
+                // ok, no publisher is running on that port
+                
+                // lets check if there is already a publisher for that protobuf
+                std::map < std::string, Endpoint* >::iterator ep;
+                ep = m_mProtobufs.find( "PUB" + Msg.GetTypeName() );
+            
+                if( ep != m_mProtobufs.end() ) {
+                    // oops, someone is already publishing that protobuf.. no need to have another!
+                    return false;
+                } else {
+                    pEP = new Endpoint;
+                    pEP->m_eType = EP_PUB;
+                    pEP->m_sHost = "*";
+                    pEP->m_nPort = nPort;
+                    pEP->m_pSocket = new zmq::socket_t( *m_pContext, ZMQ_PUB );
+                    pEP->m_sPbTypeName = Msg.GetTypeName();
+                    try {
+                        std::ostringstream address;
+                        address << "tcp://*:" << nPort;
+                        std::cout << address.str() << std::endl;
+                        pEP->m_pSocket->bind(address.str().c_str());
+                    }
+                    catch( zmq::error_t error ) {
+                        // oops, an error occurred lets rollback
+                        delete pEP->m_pSocket;
+                        delete pEP;
+                        return false;
+                    }
+                    m_mEndpoints[sKey] = pEP;
+                    m_mProtobufs["PUB" + pEP->m_sPbTypeName] = pEP;
+                    return true;
                 }
-                catch( zmq::error_t error ) {
-                    delete pEP->m_pSocket;
-                    delete pEP;
+            } else {
+                // a publisher already exists on that port
+                return false;
+            }
+        }
+        
+        bool Write( google::protobuf::Message& Msg )
+        {
+            std::map < std::string, Endpoint* >::iterator ep;
+
+            ep = m_mProtobufs.find( "PUB" + Msg.GetTypeName() );
+            
+            if( ep == m_mProtobufs.end() ) {
+                // no endpoint found by that protobuf definition
+                return false;
+            } else {
+                Endpoint* pEP = (*ep).second;
+                zmq::message_t ZmqMsg( Msg.ByteSize() );
+                if( !Msg.SerializeToArray( ZmqMsg.data(), Msg.ByteSize() ) ) {
+                    // error serializing protobuf to ZMQ message
                     return false;
                 }
-                m_mEndpoints[sKey] = pEP;
-                return true;
-            } else {
-                return false;
+                return pEP->m_pSocket->send( ZmqMsg );
             }
         }
 
@@ -72,52 +123,196 @@ namespace rpg
                         google::protobuf::Message& Msg
                       )
         {
-            std::string sKey = _GenerateKey( EP_SUB, sHost, nPort );
+            std::string sKey = _GenerateKey( EP_SUB, nPort, sHost );
             Endpoint *pEP = _FindEndpoint( sKey );
             if( pEP == NULL ) {
+                // endpoint for that port+host does not exists... good!
                 pEP = new Endpoint;
                 pEP->m_eType = EP_SUB;
                 pEP->m_sHost = sHost;
                 pEP->m_nPort = nPort;
-                pEP->m_pSocket = new zmq::socket_t( *m_pContext, ZMQ_SUB );
+                pEP->m_sPbTypeName = Msg.GetTypeName();
+
+                // now lets check if there is a subscription with that same protobuf open
+                // if so, we can just share socket instead of creating another one
+                std::map < std::string, Endpoint* >::iterator ep;
+                ep = m_mProtobufs.find( "SUB" + Msg.GetTypeName() );
+            
+                if( ep == m_mProtobufs.end() ) {
+                    // no subscription found, so lets create a new socket for it
+                    pEP->m_pSocket = new zmq::socket_t( *m_pContext, ZMQ_SUB );
+                } else {
+                    // a subscription was found, so lets use same socket!
+                    pEP->m_pSocket = (*ep).second->m_pSocket;
+                }
+                // lets connect using the socket
                 try {
                     std::ostringstream address;
-                    address << "tcp://" << sHost << nPort;
+                    address << "tcp://" << sHost << ":" << nPort;
+                    std::cout << address.str().c_str() << std::endl;
+                    pEP->m_pSocket->setsockopt(ZMQ_SUBSCRIBE, NULL, 0);
                     pEP->m_pSocket->connect(address.str().c_str());
                 }
                 catch( zmq::error_t error ) {
+                    // oops, an error occurred lets rollback
+                    if( ep == m_mProtobufs.end() ) {
+                        delete pEP->m_pSocket;
+                    }
+                    delete pEP;
+                    return false;
+                }
+                m_mEndpoints[sKey] = pEP;
+                if( ep == m_mProtobufs.end() ) {
+                    m_mProtobufs["SUB" + pEP->m_sPbTypeName] = pEP;
+                }
+                return true;
+            } else {
+                // a subscription already exists for that port+host
+                return false;
+            }
+        }
+
+        
+        bool Read( google::protobuf::Message& Msg )
+        {
+            std::map < std::string, Endpoint* >::iterator ep;
+
+            ep = m_mProtobufs.find( "SUB" + Msg.GetTypeName() );
+            
+            if( ep == m_mProtobufs.end() ) {
+                return false;
+            } else {
+                Endpoint* pEP = (*ep).second;
+                zmq::message_t ZmqMsg;
+                if( !pEP->m_pSocket->recv( &ZmqMsg, ZMQ_NOBLOCK ) ) {
+                    return false;
+                }
+                if( !Msg.ParseFromArray( ZmqMsg.data(), ZmqMsg.size() ) ) {
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        
+        bool ProvideService( unsigned int nPort,
+                             void (*pFunc)(google::protobuf::Message&,google::protobuf::Message&),
+                             google::protobuf::Message& MsgReq,
+                             google::protobuf::Message& MsgRep
+                            )
+        {
+            std::string sKey = _GenerateKey( EP_REP, nPort );
+            Endpoint *pEP = _FindEndpoint( sKey );
+            // create socket if necessary
+            if( pEP == NULL ) {
+                pEP = new Endpoint;
+                pEP->m_eType = EP_REP;
+                pEP->m_sHost = "*";
+                pEP->m_nPort = nPort;
+                pEP->m_pSocket = new zmq::socket_t( *m_pContext, ZMQ_REP );
+                pEP->m_pFunc = pFunc;
+                pEP->m_sPbTypeName = MsgReq.GetTypeName();
+                try {
+                    std::ostringstream address;
+                    address << "tcp://*:" << nPort;
+                    std::cout << address.str() << std::endl;
+                    pEP->m_pSocket->bind(address.str().c_str());
+                }
+                catch( zmq::error_t error ) {
+                    // oops, an error occurred lets rollback
+                    delete pEP->m_pSocket;
+                    delete pEP;
+                    return false;
+                }
+                m_mEndpoints[sKey] = pEP;
+            }
+            // wait for request
+            zmq::message_t ZmqReq;
+            if( !pEP->m_pSocket->recv( &ZmqReq ) ) {
+                // error receiving
+                return false;
+            }
+            if( !MsgReq.ParseFromArray( ZmqReq.data(), ZmqReq.size() ) ) {
+                // bad protobuf format
+                return false;
+            }
+            // call function
+			(*(pEP->m_pFunc))(MsgReq, MsgRep);
+            // send reply
+            zmq::message_t ZmqRep( MsgRep.ByteSize() );
+            if( !MsgRep.SerializeToArray( ZmqRep.data(), MsgRep.ByteSize() ) ) {
+                // error serializing protobuf to ZMQ message
+                return false;
+            }
+            return pEP->m_pSocket->send( ZmqRep );
+        }
+
+        bool RequestService( const std::string& sHost,
+                             unsigned int nPort,
+                             google::protobuf::Message& MsgReq,
+                             google::protobuf::Message& MsgRep
+                           )
+        {
+            std::string sKey = _GenerateKey( EP_REQ, nPort, sHost );
+            Endpoint *pEP = _FindEndpoint( sKey );
+            // create socket if necessary
+            if( pEP == NULL ) {
+                pEP = new Endpoint;
+                pEP->m_eType = EP_REP;
+                pEP->m_sHost = sHost;
+                pEP->m_nPort = nPort;
+                pEP->m_pSocket = new zmq::socket_t( *m_pContext, ZMQ_REQ );
+                pEP->m_sPbTypeName = MsgReq.GetTypeName();
+                try {
+                    std::ostringstream address;
+                    address << "tcp://" << sHost << ":" << nPort;
+                    std::cout << address.str() << std::endl;
+                    pEP->m_pSocket->connect(address.str().c_str());
+                }
+                catch( zmq::error_t error ) {
+                    // oops, an error occurred lets rollback
                     delete pEP->m_pSocket;
                     delete pEP;
                     return false;
                 }
                 m_mEndpoints[sKey] = pEP;
                 return true;
-            } else {
+            }
+            // send request
+            zmq::message_t ZmqReq( MsgReq.ByteSize() );
+            if( !MsgReq.SerializeToArray( ZmqReq.data(), MsgReq.ByteSize() ) ) {
+                // error serializing protobuf to ZMQ message
                 return false;
             }
-        }
-
-        void ProvideService( unsigned int nPort )
-        {
-
-        }
-
-        void RequestService( const std::string& sHost,
-                             unsigned int nPort,
-                             google::protobuf::Message& Req,
-                             google::protobuf::Message& Rep
-                           )
-        {
-
+            if( !pEP->m_pSocket->send( ZmqReq ) ) {
+                // error sending request
+                return false;
+            }
+            zmq::message_t ZmqRep;
+            if( !pEP->m_pSocket->recv( &ZmqRep ) ) {
+                // error receiving
+                return false;
+            }
+            if( !MsgRep.ParseFromArray( ZmqRep.data(), ZmqRep.size() ) ) {
+                // bad protobuf format
+                return false;
+            }
+            return true;
         }
         
-        unsigned int Count() {
-            return m_mEndpoints.size();
-        }
+        unsigned int Count() { return m_mEndpoints.size(); }
+
+        // this is to test things
+        unsigned int Protobufs() { return m_mProtobufs.size(); }
+
         
     private:
         
-        std::string _GenerateKey( EndpointType eType, std::string sHost, unsigned int nPort ) {
+        std::string _GenerateKey( EndpointType eType,
+                                  unsigned int nPort,
+                                  std::string sHost = ""
+                                )
+        {
             std::ostringstream Key;
             Key << eType << nPort;
             if( sHost.empty() == false ) {
@@ -127,7 +322,8 @@ namespace rpg
         }
         
         
-        Endpoint* _FindEndpoint( std::string Key ) {
+        Endpoint* _FindEndpoint( std::string Key )
+        {
             std::map < std::string, Endpoint* >::iterator ep;
 
             ep = m_mEndpoints.find( Key );
@@ -138,8 +334,12 @@ namespace rpg
             }
         }
 
-        Endpoint* _FindEndpoint( EndpointType eType, std::string sHost, unsigned int nPort ) {
-            return _FindEndpoint( _GenerateKey( eType, sHost, nPort ) );
+        Endpoint* _FindEndpoint( EndpointType eType,
+                                 unsigned int nPort,
+                                 std::string sHost = ""
+                               )
+        {
+            return _FindEndpoint( _GenerateKey( eType, nPort, sHost ) );
         }
 
 /*		
@@ -174,35 +374,10 @@ namespace rpg
 
     private:
         
-        zmq::context_t*                         m_pContext;
-        std::map < std::string, Endpoint* >     m_mEndpoints;
-
+        zmq::context_t*                         m_pContext;     // global context
+        std::map < std::string, Endpoint* >     m_mEndpoints;   // map of endpoints by type+port+host
+        std::map < std::string, Endpoint* >     m_mProtobufs;   // map of endpoints by protobuf
     };
-
-Node::Node()
-{
-    m_pContext = new zmq::context_t(1);;
-}
-
-
-Node::~Node()
-{
-    std::map < std::string, Endpoint* >::iterator it;
-
-    for( it = m_mEndpoints.begin(); it != m_mEndpoints.end(); it++ ) {
-        delete (*it).second->m_pSocket;
-        delete (*it).second->m_pProtobuf;
-        delete (*it).second;
-        m_mEndpoints.erase( it );
-    }
-}
-
-
-
-
-
-
-
 
 }
 

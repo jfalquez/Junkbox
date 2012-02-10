@@ -10,8 +10,8 @@ find_package( Protobuf REQUIRED )
 include_directories( ${ZeroMQ_INCLUDE_DIRS} )
 include_directories( ${PROTOBUF_INCLUDE_DIRS} )
 
-add_executable( node1 node1.cpp )
-add_executable( node2 node2.cpp )
+add_executable( node1 node1.cpp Testmsgs.pb.cc )
+add_executable( node2 node2.cpp Testmsgs.pb.cc )
 
 target_link_libraries( node1 
         ${ZeroMQ_LIBRARIES}
