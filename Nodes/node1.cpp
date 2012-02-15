@@ -6,9 +6,11 @@
 
 
 //void TestFunc(Professor& X, Professor& Y) {
-void TestFunc(google::protobuf::Message& X, google::protobuf::Message& Y) {
-    printf("Professor %s owns Professor %s.\n", X.name().c_str(), Y.email().c_str());
-}
+//void TestFunc(google::protobuf::Message& X, google::protobuf::Message& Y) {
+//    Professor X;
+//    X.ParseFromArray();
+//    printf("Professor %s owns Professor %s.\n", X.name().c_str(), Y.email().c_str());
+//}
 
 
 int main() {
@@ -18,17 +20,14 @@ int main() {
     bool n;
     
     Staff SysAdmin;
+    SysAdmin.set_id(1);
     SysAdmin.set_name("Pedro");
     SysAdmin.set_email("pedro@failboat.com");
-    SysAdmin.set_id(1);
-    n = Test.Publish(1111, SysAdmin);
+    n = Test.Publish("LeftLeg", 1111);
     printf("1st publisher: %d\n",n);
     
-    Professor A,B;
-    n = Test.ProvideService( 2222, &TestFunc, A, B );
-    
     while(1) {
-        n = Test.Write(SysAdmin);
+        n = Test.Write("LeftLeg", SysAdmin);
         printf("Sending[%d] %s - %s.\n", n, SysAdmin.name().c_str(),SysAdmin.email().c_str());
         sleep(1);
     }
