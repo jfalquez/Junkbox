@@ -5,17 +5,19 @@
 #include <stdio.h>
 
 
-//void TestFunc(Professor& X, Professor& Y) {
-//void TestFunc(google::protobuf::Message& X, google::protobuf::Message& Y) {
-//    Professor X;
-//    X.ParseFromArray();
-//    printf("Professor %s owns Professor %s.\n", X.name().c_str(), Y.email().c_str());
-//}
+void TestFunc(std::string& X, std::string& Y) {
+    Professor MsgX, MsgY;
+    MsgX.ParseFromString(X);
+    printf("Professor %s owns!\n", MsgX.name().c_str());
+    MsgY.set_id(2);
+    MsgY.set_name("Pitufo");
+    MsgY.SerializeToString(&Y);
+}
 
 
 int main() {
 
-    rpg::Node Test;
+    rpg::Node Test(5001);
 
     bool n;
     
@@ -23,8 +25,10 @@ int main() {
     SysAdmin.set_id(1);
     SysAdmin.set_name("Pedro");
     SysAdmin.set_email("pedro@failboat.com");
-    n = Test.Publish("LeftLeg", 1111);
+    n = Test.Publish("LeftLeg", 5002);
     printf("1st publisher: %d\n",n);
+    
+    n = Test.RegisterService( "Owns", &TestFunc );
     
     while(1) {
         n = Test.Write("LeftLeg", SysAdmin);

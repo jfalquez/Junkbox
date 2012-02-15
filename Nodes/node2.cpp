@@ -5,16 +5,16 @@
 
 int main() {
 
-    rpg::Node Test;
+    rpg::Node Test(6001);
     
     bool n;
     
     Staff SysAdmin;
    
-    n = Test.Subscribe("LeftLeg", "tcp://localhost:1111");
+    n = Test.Subscribe("LeftLeg", "tcp://localhost:5002");
     printf("1st publisher: %d\n",n);
 
-    n = Test.Subscribe("LeftLeg", "tcp://localhost:1111");
+    n = Test.Subscribe("LeftLeg", "tcp://localhost:5002");
     printf("2nd publisher: %d\n",n);
 
     while(1) {
