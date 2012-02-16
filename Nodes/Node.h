@@ -18,16 +18,13 @@ namespace rpg
 {
 
     class Node
-    {        
-       
-        struct Endpoint {
-            std::string                 m_sHost;
-            zmq::socket_t*              m_pSocket;
-        };
+    {
 
     public:
-        
-        Node( int nPort )
+
+        Node(
+            int nPort       //< Input: RPC Port
+            )
         {
             // init context
             m_pContext = new zmq::context_t(1);
@@ -37,7 +34,8 @@ namespace rpg
             std::cout << "RPC Listener at " << address.str() << std::endl;
             m_pRpcSocket->bind( address.str().c_str() );
             m_mHosts[ address.str() ] = m_pRpcSocket;
-            // run listener in a different thread...            
+            // run listener in a different thread...
+            // how to handle data synch tho????????
         }
 
 
@@ -48,7 +46,7 @@ namespace rpg
 
         bool Publish(
                 std::string sTopic,             //< Input:
-                unsigned int nPort              //< Input: for now port, later it is randomly
+                unsigned int nPort              //< Input: for now port, later it is random
                 )
         {
             std::map < std::string, zmq::socket_t* >::iterator Sock;
@@ -60,7 +58,7 @@ namespace rpg
                 return false;
             } else {
                 // no socket open.. lets open a new one
-                
+
                 // check if port is already in use
                 std::ostringstream address;
                 address << "tcp://*:" << nPort;
@@ -69,7 +67,7 @@ namespace rpg
                     // port is in use, return false
                     return false;
                 }
-                
+
                 // create socket
                 zmq::socket_t* pSock = new zmq::socket_t( *m_pContext, ZMQ_PUB );
                 try {
@@ -87,7 +85,7 @@ namespace rpg
             }
         }
 
-        
+
         bool Write(
                 std::string sTopic,             //< Input:
                 google::protobuf::Message& Msg  //< Input:
@@ -137,7 +135,7 @@ namespace rpg
                 // lets connect using the socket
                 try {
                     pSock->setsockopt( ZMQ_SUBSCRIBE, NULL, 0 );
-                    pSock->connect( sHost.c_str() );
+                    pSock->connect( ("tcp://" + sHost).c_str() );
                 }
                 catch( zmq::error_t error ) {
                     // oops, an error occurred lets rollback
@@ -150,7 +148,7 @@ namespace rpg
             }
         }
 
-        
+
         bool Read(
                 std::string sTopic,             //< Input:
                 google::protobuf::Message& Msg  //< Input:
@@ -176,30 +174,10 @@ namespace rpg
             }
         }
 
-        /*
-        template <class A, class B>
-        bool ProvideService( 
-                const std::string& sFuncName,//< Input: name of function we will call
-                void (*pFunc)(A&,B&) //< Input: Pointer to funciton we will call
-                )
-        {
-            std::map < std::string, FuncPtr >::iterator Func;
 
-            // check if func is already registered
-            Func = m_mFuncTable.find( sFuncName );
-            if( Func != m_mFuncTable.end() ) {
-                return false;
-            } else {
-                m_mFuncTable[ sFuncName ] = pFunc;
-                return true;
-            }
-        }
-        */
-
-        
-        bool RegisterService( 
-                const std::string& sFuncName,   //< Input: name of function we will call
-                void (*pFunc)(std::string&,std::string&)      //< Input: Pointer to funciton we will call
+        bool RegisterService(
+                const std::string& sFuncName,                   //< Input: name of function we will call
+                void (*pFunc)(std::string&,std::string&)        //< Input: Pointer to function we will call
                 )
         {
             std::map < std::string, FuncPtr >::iterator Func;
@@ -214,7 +192,7 @@ namespace rpg
             }
         }
 
-        /*
+
         bool ProvideService( )
         {
             // wait for request
@@ -223,181 +201,94 @@ namespace rpg
                 // error receiving
                 return false;
             }
-            if( !MsgReq.ParseFromArray( ZmqReq.data(), ZmqReq.size() ) ) {
-                // bad protobuf format
-                return false;
-            }
-            // call function
-			(*(pEP->m_pFunc))(MsgReq, MsgRep);
-            // send reply
-            zmq::message_t ZmqRep( MsgRep.ByteSize() );
-            if( !MsgRep.SerializeToArray( ZmqRep.data(), MsgRep.ByteSize() ) ) {
-                // error serializing protobuf to ZMQ message
-                return false;
-            }
-            return pEP->m_pSocket->send( ZmqRep );
-        }
-        */
+            // obtain "header" which contains function name
+            unsigned char FuncNameSize;
+            memcpy( &FuncNameSize, ZmqReq.data(), sizeof(FuncNameSize) );
+            std::string FuncName( (char*)(ZmqReq.data()) + sizeof(FuncNameSize), FuncNameSize );
 
-        /*        
-        bool Call( 
+            // prepare reply message
+            unsigned int PbOffset = sizeof(FuncNameSize) + FuncNameSize;
+            unsigned int PbByteSize = ZmqReq.size() - PbOffset;
+
+            // prepare parameters for function call
+            std::string MsgReq( (char*)(ZmqReq.data()) + PbOffset, PbByteSize );
+            std::string MsgRep;
+
+            // look-up function
+            std::map < std::string, FuncPtr >::iterator Func;
+
+            Func = m_mFuncTable.find( FuncName );
+            if( Func != m_mFuncTable.end() ) {
+                // function exists... call it
+                (*(*Func).second)( MsgReq, MsgRep );
+            }
+
+            // prepare return message
+            zmq::message_t ZmqRep( MsgRep.size() );
+
+            memcpy( ZmqRep.data(), MsgRep.c_str(), MsgRep.size() );
+
+            // send reply
+            return m_pRpcSocket->send( ZmqRep );
+        }
+
+
+        bool Call(
                 const std::string& sHost,                   //< Input:
                 const std::string& sFuncName,               //< Input:
                 const google::protobuf::Message& MsgReq,    //< Input:
                 google::protobuf::Message& MsgRep           //< Output:
                 )
         {
-            std::string sKey = _GenerateKey( EP_REQ, nPort, sHost );
-            Endpoint *pEP = _FindEndpoint( sKey );
-            // create socket if necessary
-            if( pEP == NULL ) {
-                pEP = new Endpoint;
-                pEP->m_eType = EP_REP;
-                pEP->m_sHost = sHost;
-                pEP->m_nPort = nPort;
-                pEP->m_pSocket = new zmq::socket_t( *m_pContext, ZMQ_REQ );
-                pEP->m_sPbTypeName = MsgReq.GetTypeName();
-                try {
-                    std::ostringstream address;
-                    address << "tcp://" << sHost << ":" << nPort;
-                    std::cout << address.str() << std::endl;
-                    pEP->m_pSocket->connect(address.str().c_str());
-                }
-                catch( zmq::error_t error ) {
-                    // oops, an error occurred lets rollback
-                    delete pEP->m_pSocket;
-                    delete pEP;
-                    return false;
-                }
-                m_mEndpoints[sKey] = pEP;
-                return true;
-            }
-            // send request
-            zmq::message_t ZmqReq( MsgReq.ByteSize() );
-            if( !MsgReq.SerializeToArray( ZmqReq.data(), MsgReq.ByteSize() ) ) {
-                // error serializing protobuf to ZMQ message
-                return false;
-            }
-            if( !pEP->m_pSocket->send( ZmqReq ) ) {
-                // error sending request
-                return false;
-            }
-            zmq::message_t ZmqRep;
-            if( !pEP->m_pSocket->recv( &ZmqRep ) ) {
-                // error receiving
-                return false;
-            }
-            if( !MsgRep.ParseFromArray( ZmqRep.data(), ZmqRep.size() ) ) {
-                // bad protobuf format
-                return false;
-            }
-            return true;
-        }
-        */
-        
-        /*
-        template <class A, class B>
-        bool Call( 
-                const std::string& sHost,
-                unsigned int nPort,
-                const std::string& sFuncName, //< Input:
-                A& MsgReq,
-                B& MsgRep
-                )
-        {
-            std::string sKey = _GenerateKey( EP_REQ, nPort, sHost );
-            Endpoint *pEP = _FindEndpoint( sKey );
-            // create socket if necessary
-            if( pEP == NULL ) {
-                pEP = new Endpoint;
-                pEP->m_eType = EP_REP;
-                pEP->m_sHost = sHost;
-                pEP->m_nPort = nPort;
-                pEP->m_pSocket = new zmq::socket_t( *m_pContext, ZMQ_REQ );
-                pEP->m_sPbTypeName = MsgReq.GetTypeName();
-                try {
-                    std::ostringstream address;
-                    address << "tcp://" << sHost << ":" << nPort;
-                    std::cout << address.str() << std::endl;
-                    pEP->m_pSocket->connect(address.str().c_str());
-                }
-                catch( zmq::error_t error ) {
-                    // oops, an error occurred lets rollback
-                    delete pEP->m_pSocket;
-                    delete pEP;
-                    return false;
-                }
-                m_mEndpoints[sKey] = pEP;
-                return true;
-            }
-            // send request
-            zmq::message_t ZmqReq( MsgReq.ByteSize() );
-            if( !MsgReq.SerializeToArray( ZmqReq.data(), MsgReq.ByteSize() ) ) {
-                // error serializing protobuf to ZMQ message
-                return false;
-            }
-            if( !pEP->m_pSocket->send( ZmqReq ) ) {
-                // error sending request
-                return false;
-            }
-            zmq::message_t ZmqRep;
-            if( !pEP->m_pSocket->recv( &ZmqRep ) ) {
-                // error receiving
-                return false;
-            }
-            if( !MsgRep.ParseFromArray( ZmqRep.data(), ZmqRep.size() ) ) {
-                // bad protobuf format
-                return false;
-            }
-            return true;
-        }
-        */
- 
+            std::map < std::string, zmq::socket_t* >::iterator Sock;
+            zmq::socket_t* pSock;
 
-        /*
-        bool RequestService( const std::string& sHost,
-                             unsigned int nPort,
-                             google::protobuf::Message& MsgReq,
-                             google::protobuf::Message& MsgRep
-                           )
-        {
-            std::string sKey = _GenerateKey( EP_REQ, nPort, sHost );
-            Endpoint *pEP = _FindEndpoint( sKey );
-            // create socket if necessary
-            if( pEP == NULL ) {
-                pEP = new Endpoint;
-                pEP->m_eType = EP_REP;
-                pEP->m_sHost = sHost;
-                pEP->m_nPort = nPort;
-                pEP->m_pSocket = new zmq::socket_t( *m_pContext, ZMQ_REQ );
-                pEP->m_sPbTypeName = MsgReq.GetTypeName();
+
+            // check if socket is already open for this host
+            Sock = m_mHosts.find( sHost );
+            if( Sock != m_mHosts.end() ) {
+                // socket is already open, lets use it
+                pSock = (*Sock).second;
+            } else {
+                // socket is not open, lets open one
+                pSock = new zmq::socket_t( *m_pContext, ZMQ_REQ );
+
+                // lets connect using the socket
                 try {
-                    std::ostringstream address;
-                    address << "tcp://" << sHost << ":" << nPort;
-                    std::cout << address.str() << std::endl;
-                    pEP->m_pSocket->connect(address.str().c_str());
+                    pSock->connect( ("tcp://" + sHost).c_str() );
                 }
                 catch( zmq::error_t error ) {
                     // oops, an error occurred lets rollback
-                    delete pEP->m_pSocket;
-                    delete pEP;
+                    delete pSock;
                     return false;
                 }
-                m_mEndpoints[sKey] = pEP;
-                return true;
+                m_mHosts[ sHost ] = pSock;
             }
-            // send request
-            zmq::message_t ZmqReq( MsgReq.ByteSize() );
-            if( !MsgReq.SerializeToArray( ZmqReq.data(), MsgReq.ByteSize() ) ) {
+            // prepare to append function information
+            std::string FuncName = sFuncName;
+            if( sFuncName.size() > 254 ) {
+                FuncName.resize(254);
+            }
+            unsigned char FuncNameSize = FuncName.size();
+
+            // prepare message
+            zmq::message_t ZmqReq( sizeof(FuncNameSize) + FuncNameSize + MsgReq.ByteSize() );
+            std::memcpy( ZmqReq.data(), &FuncNameSize, sizeof(FuncNameSize) );
+            std::memcpy( (char*)ZmqReq.data() + sizeof(FuncNameSize), FuncName.c_str(), FuncNameSize );
+            if( !MsgReq.SerializeToArray( (char*)ZmqReq.data() + sizeof(FuncNameSize) + FuncNameSize, MsgReq.ByteSize() ) ) {
                 // error serializing protobuf to ZMQ message
                 return false;
             }
-            if( !pEP->m_pSocket->send( ZmqReq ) ) {
+
+            // send request
+            if( !pSock->send( ZmqReq ) ) {
                 // error sending request
                 return false;
             }
+
+            // wait reply
             zmq::message_t ZmqRep;
-            if( !pEP->m_pSocket->recv( &ZmqRep ) ) {
+            if( !pSock->recv( &ZmqRep ) ) {
                 // error receiving
                 return false;
             }
@@ -407,18 +298,17 @@ namespace rpg
             }
             return true;
         }
-        */
 
-        
+
     private:
-        
+
         zmq::context_t*                         m_pContext;     // global context
 
         std::map< std::string, zmq::socket_t* > m_mHosts;       // map of hosts + endpoints
 
         // Variables for Topics (PubSubs)
         std::map< std::string, zmq::socket_t* > m_mTopics;      // map of topics + endpoints
-        
+
         // Variables for Services
         zmq::socket_t*                          m_pRpcSocket;   // global RPC socket (port 1337)
         std::map< std::string, FuncPtr >        m_mFuncTable;   // map of topics + functions
