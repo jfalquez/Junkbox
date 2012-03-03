@@ -12,25 +12,24 @@
 #include <opencv2/highgui/highgui.hpp>
 
 #include <RPG/Devices/Camera/CameraDevice.h>
+#include <RPG/Robots/Robot.h>
 
 
 std::vector< cv::Mat >      Images;       // Image to show on screen
-CameraDevice                Cam;            // The camera handle
-
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // da main
 int main( int argc, char** argv )
 {
+	rpg::Robot Agnos;
+	Agnos.Init("rpg_config.xml");
+	// read URDF file
+
     // init driver
-    if( !Cam.InitDriver( "GwSim" ) ) {
-    	std::cout << "Invalid input device." << std::endl;
-    	return -1;
-    }
-    
+
     while(1) {
-        Cam.Capture(Images);
-        cv::imshow( "GwSim", Images[0] );
+//        Cam.Capture(Images);
+//        cv::imshow( "GwSim", Images[0] );
     }
     return 0;
 }
