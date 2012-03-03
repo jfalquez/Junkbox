@@ -2,12 +2,16 @@
 
 #define INTERNAL_SUPPRESS_PROTOBUF_FIELD_DEPRECATION
 #include "Testmsgs.pb.h"
+
+#include <algorithm>
+
 #include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/reflection_ops.h>
 #include <google/protobuf/wire_format.h>
+// @@protoc_insertion_point(includes)
 
 namespace {
 
@@ -145,31 +149,31 @@ struct StaticDescriptorInitializer_Testmsgs_2eproto {
 
 // ===================================================================
 
-const ::std::string Professor::_default_name_;
-const ::std::string Professor::_default_email_;
 #ifndef _MSC_VER
 const int Professor::kNameFieldNumber;
 const int Professor::kIdFieldNumber;
 const int Professor::kEmailFieldNumber;
 #endif  // !_MSC_VER
 
-Professor::Professor() {
+Professor::Professor()
+  : ::google::protobuf::Message() {
   SharedCtor();
 }
 
 void Professor::InitAsDefaultInstance() {
 }
 
-Professor::Professor(const Professor& from) {
+Professor::Professor(const Professor& from)
+  : ::google::protobuf::Message() {
   SharedCtor();
   MergeFrom(from);
 }
 
 void Professor::SharedCtor() {
   _cached_size_ = 0;
-  name_ = const_cast< ::std::string*>(&_default_name_);
+  name_ = const_cast< ::std::string*>(&::google::protobuf::internal::kEmptyString);
   id_ = 0;
-  email_ = const_cast< ::std::string*>(&_default_email_);
+  email_ = const_cast< ::std::string*>(&::google::protobuf::internal::kEmptyString);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -178,16 +182,21 @@ Professor::~Professor() {
 }
 
 void Professor::SharedDtor() {
-  if (name_ != &_default_name_) {
+  if (name_ != &::google::protobuf::internal::kEmptyString) {
     delete name_;
   }
-  if (email_ != &_default_email_) {
+  if (email_ != &::google::protobuf::internal::kEmptyString) {
     delete email_;
   }
   if (this != default_instance_) {
   }
 }
 
+void Professor::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
 const ::google::protobuf::Descriptor* Professor::descriptor() {
   protobuf_AssignDescriptorsOnce();
   return Professor_descriptor_;
@@ -205,14 +214,14 @@ Professor* Professor::New() const {
 
 void Professor::Clear() {
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (_has_bit(0)) {
-      if (name_ != &_default_name_) {
+    if (has_name()) {
+      if (name_ != &::google::protobuf::internal::kEmptyString) {
         name_->clear();
       }
     }
     id_ = 0;
-    if (_has_bit(2)) {
-      if (email_ != &_default_email_) {
+    if (has_email()) {
+      if (email_ != &::google::protobuf::internal::kEmptyString) {
         email_->clear();
       }
     }
@@ -229,45 +238,49 @@ bool Professor::MergePartialFromCodedStream(
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       // required string name = 1;
       case 1: {
-        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) !=
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
             ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_name()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8String(
+            this->name().data(), this->name().length(),
+            ::google::protobuf::internal::WireFormat::PARSE);
+        } else {
           goto handle_uninterpreted;
         }
-        DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-              input, this->mutable_name()));
-        ::google::protobuf::internal::WireFormat::VerifyUTF8String(
-          this->name().data(), this->name().length(),
-          ::google::protobuf::internal::WireFormat::PARSE);
         if (input->ExpectTag(16)) goto parse_id;
         break;
       }
       
       // required int32 id = 2;
       case 2: {
-        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) !=
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
             ::google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT) {
+         parse_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &id_)));
+          set_has_id();
+        } else {
           goto handle_uninterpreted;
         }
-       parse_id:
-        DO_(::google::protobuf::internal::WireFormatLite::ReadInt32(
-              input, &id_));
-        _set_bit(1);
         if (input->ExpectTag(26)) goto parse_email;
         break;
       }
       
       // optional string email = 3;
       case 3: {
-        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) !=
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
             ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
+         parse_email:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_email()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8String(
+            this->email().data(), this->email().length(),
+            ::google::protobuf::internal::WireFormat::PARSE);
+        } else {
           goto handle_uninterpreted;
         }
-       parse_email:
-        DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-              input, this->mutable_email()));
-        ::google::protobuf::internal::WireFormat::VerifyUTF8String(
-          this->email().data(), this->email().length(),
-          ::google::protobuf::internal::WireFormat::PARSE);
         if (input->ExpectAtEnd()) return true;
         break;
       }
@@ -290,14 +303,8 @@ bool Professor::MergePartialFromCodedStream(
 
 void Professor::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  ::google::protobuf::uint8* raw_buffer = output->GetDirectBufferForNBytesAndAdvance(_cached_size_);
-  if (raw_buffer != NULL) {
-    Professor::SerializeWithCachedSizesToArray(raw_buffer);
-    return;
-  }
-  
   // required string name = 1;
-  if (_has_bit(0)) {
+  if (has_name()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->name().data(), this->name().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -306,12 +313,12 @@ void Professor::SerializeWithCachedSizes(
   }
   
   // required int32 id = 2;
-  if (_has_bit(1)) {
+  if (has_id()) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->id(), output);
   }
   
   // optional string email = 3;
-  if (_has_bit(2)) {
+  if (has_email()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->email().data(), this->email().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -328,7 +335,7 @@ void Professor::SerializeWithCachedSizes(
 ::google::protobuf::uint8* Professor::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // required string name = 1;
-  if (_has_bit(0)) {
+  if (has_name()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->name().data(), this->name().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -338,12 +345,12 @@ void Professor::SerializeWithCachedSizes(
   }
   
   // required int32 id = 2;
-  if (_has_bit(1)) {
+  if (has_id()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(2, this->id(), target);
   }
   
   // optional string email = 3;
-  if (_has_bit(2)) {
+  if (has_email()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->email().data(), this->email().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -390,7 +397,9 @@ int Professor::ByteSize() const {
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
         unknown_fields());
   }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
 
@@ -409,13 +418,13 @@ void Professor::MergeFrom(const ::google::protobuf::Message& from) {
 void Professor::MergeFrom(const Professor& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from._has_bit(0)) {
+    if (from.has_name()) {
       set_name(from.name());
     }
-    if (from._has_bit(1)) {
+    if (from.has_id()) {
       set_id(from.id());
     }
-    if (from._has_bit(2)) {
+    if (from.has_email()) {
       set_email(from.email());
     }
   }
@@ -462,31 +471,31 @@ void Professor::Swap(Professor* other) {
 
 // ===================================================================
 
-const ::std::string Student::_default_name_;
-const ::std::string Student::_default_email_;
 #ifndef _MSC_VER
 const int Student::kNameFieldNumber;
 const int Student::kIdFieldNumber;
 const int Student::kEmailFieldNumber;
 #endif  // !_MSC_VER
 
-Student::Student() {
+Student::Student()
+  : ::google::protobuf::Message() {
   SharedCtor();
 }
 
 void Student::InitAsDefaultInstance() {
 }
 
-Student::Student(const Student& from) {
+Student::Student(const Student& from)
+  : ::google::protobuf::Message() {
   SharedCtor();
   MergeFrom(from);
 }
 
 void Student::SharedCtor() {
   _cached_size_ = 0;
-  name_ = const_cast< ::std::string*>(&_default_name_);
+  name_ = const_cast< ::std::string*>(&::google::protobuf::internal::kEmptyString);
   id_ = 0;
-  email_ = const_cast< ::std::string*>(&_default_email_);
+  email_ = const_cast< ::std::string*>(&::google::protobuf::internal::kEmptyString);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -495,16 +504,21 @@ Student::~Student() {
 }
 
 void Student::SharedDtor() {
-  if (name_ != &_default_name_) {
+  if (name_ != &::google::protobuf::internal::kEmptyString) {
     delete name_;
   }
-  if (email_ != &_default_email_) {
+  if (email_ != &::google::protobuf::internal::kEmptyString) {
     delete email_;
   }
   if (this != default_instance_) {
   }
 }
 
+void Student::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
 const ::google::protobuf::Descriptor* Student::descriptor() {
   protobuf_AssignDescriptorsOnce();
   return Student_descriptor_;
@@ -522,14 +536,14 @@ Student* Student::New() const {
 
 void Student::Clear() {
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (_has_bit(0)) {
-      if (name_ != &_default_name_) {
+    if (has_name()) {
+      if (name_ != &::google::protobuf::internal::kEmptyString) {
         name_->clear();
       }
     }
     id_ = 0;
-    if (_has_bit(2)) {
-      if (email_ != &_default_email_) {
+    if (has_email()) {
+      if (email_ != &::google::protobuf::internal::kEmptyString) {
         email_->clear();
       }
     }
@@ -546,45 +560,49 @@ bool Student::MergePartialFromCodedStream(
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       // required string name = 1;
       case 1: {
-        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) !=
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
             ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_name()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8String(
+            this->name().data(), this->name().length(),
+            ::google::protobuf::internal::WireFormat::PARSE);
+        } else {
           goto handle_uninterpreted;
         }
-        DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-              input, this->mutable_name()));
-        ::google::protobuf::internal::WireFormat::VerifyUTF8String(
-          this->name().data(), this->name().length(),
-          ::google::protobuf::internal::WireFormat::PARSE);
         if (input->ExpectTag(16)) goto parse_id;
         break;
       }
       
       // required int32 id = 2;
       case 2: {
-        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) !=
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
             ::google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT) {
+         parse_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &id_)));
+          set_has_id();
+        } else {
           goto handle_uninterpreted;
         }
-       parse_id:
-        DO_(::google::protobuf::internal::WireFormatLite::ReadInt32(
-              input, &id_));
-        _set_bit(1);
         if (input->ExpectTag(26)) goto parse_email;
         break;
       }
       
       // optional string email = 3;
       case 3: {
-        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) !=
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
             ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
+         parse_email:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_email()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8String(
+            this->email().data(), this->email().length(),
+            ::google::protobuf::internal::WireFormat::PARSE);
+        } else {
           goto handle_uninterpreted;
         }
-       parse_email:
-        DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-              input, this->mutable_email()));
-        ::google::protobuf::internal::WireFormat::VerifyUTF8String(
-          this->email().data(), this->email().length(),
-          ::google::protobuf::internal::WireFormat::PARSE);
         if (input->ExpectAtEnd()) return true;
         break;
       }
@@ -607,14 +625,8 @@ bool Student::MergePartialFromCodedStream(
 
 void Student::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  ::google::protobuf::uint8* raw_buffer = output->GetDirectBufferForNBytesAndAdvance(_cached_size_);
-  if (raw_buffer != NULL) {
-    Student::SerializeWithCachedSizesToArray(raw_buffer);
-    return;
-  }
-  
   // required string name = 1;
-  if (_has_bit(0)) {
+  if (has_name()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->name().data(), this->name().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -623,12 +635,12 @@ void Student::SerializeWithCachedSizes(
   }
   
   // required int32 id = 2;
-  if (_has_bit(1)) {
+  if (has_id()) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->id(), output);
   }
   
   // optional string email = 3;
-  if (_has_bit(2)) {
+  if (has_email()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->email().data(), this->email().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -645,7 +657,7 @@ void Student::SerializeWithCachedSizes(
 ::google::protobuf::uint8* Student::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // required string name = 1;
-  if (_has_bit(0)) {
+  if (has_name()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->name().data(), this->name().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -655,12 +667,12 @@ void Student::SerializeWithCachedSizes(
   }
   
   // required int32 id = 2;
-  if (_has_bit(1)) {
+  if (has_id()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(2, this->id(), target);
   }
   
   // optional string email = 3;
-  if (_has_bit(2)) {
+  if (has_email()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->email().data(), this->email().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -707,7 +719,9 @@ int Student::ByteSize() const {
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
         unknown_fields());
   }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
 
@@ -726,13 +740,13 @@ void Student::MergeFrom(const ::google::protobuf::Message& from) {
 void Student::MergeFrom(const Student& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from._has_bit(0)) {
+    if (from.has_name()) {
       set_name(from.name());
     }
-    if (from._has_bit(1)) {
+    if (from.has_id()) {
       set_id(from.id());
     }
-    if (from._has_bit(2)) {
+    if (from.has_email()) {
       set_email(from.email());
     }
   }
@@ -779,31 +793,31 @@ void Student::Swap(Student* other) {
 
 // ===================================================================
 
-const ::std::string Staff::_default_name_;
-const ::std::string Staff::_default_email_;
 #ifndef _MSC_VER
 const int Staff::kNameFieldNumber;
 const int Staff::kIdFieldNumber;
 const int Staff::kEmailFieldNumber;
 #endif  // !_MSC_VER
 
-Staff::Staff() {
+Staff::Staff()
+  : ::google::protobuf::Message() {
   SharedCtor();
 }
 
 void Staff::InitAsDefaultInstance() {
 }
 
-Staff::Staff(const Staff& from) {
+Staff::Staff(const Staff& from)
+  : ::google::protobuf::Message() {
   SharedCtor();
   MergeFrom(from);
 }
 
 void Staff::SharedCtor() {
   _cached_size_ = 0;
-  name_ = const_cast< ::std::string*>(&_default_name_);
+  name_ = const_cast< ::std::string*>(&::google::protobuf::internal::kEmptyString);
   id_ = 0;
-  email_ = const_cast< ::std::string*>(&_default_email_);
+  email_ = const_cast< ::std::string*>(&::google::protobuf::internal::kEmptyString);
   ::memset(_has_bits_, 0, sizeof(_has_bits_));
 }
 
@@ -812,16 +826,21 @@ Staff::~Staff() {
 }
 
 void Staff::SharedDtor() {
-  if (name_ != &_default_name_) {
+  if (name_ != &::google::protobuf::internal::kEmptyString) {
     delete name_;
   }
-  if (email_ != &_default_email_) {
+  if (email_ != &::google::protobuf::internal::kEmptyString) {
     delete email_;
   }
   if (this != default_instance_) {
   }
 }
 
+void Staff::SetCachedSize(int size) const {
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
+  _cached_size_ = size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+}
 const ::google::protobuf::Descriptor* Staff::descriptor() {
   protobuf_AssignDescriptorsOnce();
   return Staff_descriptor_;
@@ -839,14 +858,14 @@ Staff* Staff::New() const {
 
 void Staff::Clear() {
   if (_has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (_has_bit(0)) {
-      if (name_ != &_default_name_) {
+    if (has_name()) {
+      if (name_ != &::google::protobuf::internal::kEmptyString) {
         name_->clear();
       }
     }
     id_ = 0;
-    if (_has_bit(2)) {
-      if (email_ != &_default_email_) {
+    if (has_email()) {
+      if (email_ != &::google::protobuf::internal::kEmptyString) {
         email_->clear();
       }
     }
@@ -863,45 +882,49 @@ bool Staff::MergePartialFromCodedStream(
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
       // required string name = 1;
       case 1: {
-        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) !=
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
             ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_name()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8String(
+            this->name().data(), this->name().length(),
+            ::google::protobuf::internal::WireFormat::PARSE);
+        } else {
           goto handle_uninterpreted;
         }
-        DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-              input, this->mutable_name()));
-        ::google::protobuf::internal::WireFormat::VerifyUTF8String(
-          this->name().data(), this->name().length(),
-          ::google::protobuf::internal::WireFormat::PARSE);
         if (input->ExpectTag(16)) goto parse_id;
         break;
       }
       
       // required int32 id = 2;
       case 2: {
-        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) !=
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
             ::google::protobuf::internal::WireFormatLite::WIRETYPE_VARINT) {
+         parse_id:
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &id_)));
+          set_has_id();
+        } else {
           goto handle_uninterpreted;
         }
-       parse_id:
-        DO_(::google::protobuf::internal::WireFormatLite::ReadInt32(
-              input, &id_));
-        _set_bit(1);
         if (input->ExpectTag(26)) goto parse_email;
         break;
       }
       
       // optional string email = 3;
       case 3: {
-        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) !=
+        if (::google::protobuf::internal::WireFormatLite::GetTagWireType(tag) ==
             ::google::protobuf::internal::WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
+         parse_email:
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_email()));
+          ::google::protobuf::internal::WireFormat::VerifyUTF8String(
+            this->email().data(), this->email().length(),
+            ::google::protobuf::internal::WireFormat::PARSE);
+        } else {
           goto handle_uninterpreted;
         }
-       parse_email:
-        DO_(::google::protobuf::internal::WireFormatLite::ReadString(
-              input, this->mutable_email()));
-        ::google::protobuf::internal::WireFormat::VerifyUTF8String(
-          this->email().data(), this->email().length(),
-          ::google::protobuf::internal::WireFormat::PARSE);
         if (input->ExpectAtEnd()) return true;
         break;
       }
@@ -924,14 +947,8 @@ bool Staff::MergePartialFromCodedStream(
 
 void Staff::SerializeWithCachedSizes(
     ::google::protobuf::io::CodedOutputStream* output) const {
-  ::google::protobuf::uint8* raw_buffer = output->GetDirectBufferForNBytesAndAdvance(_cached_size_);
-  if (raw_buffer != NULL) {
-    Staff::SerializeWithCachedSizesToArray(raw_buffer);
-    return;
-  }
-  
   // required string name = 1;
-  if (_has_bit(0)) {
+  if (has_name()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->name().data(), this->name().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -940,12 +957,12 @@ void Staff::SerializeWithCachedSizes(
   }
   
   // required int32 id = 2;
-  if (_has_bit(1)) {
+  if (has_id()) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->id(), output);
   }
   
   // optional string email = 3;
-  if (_has_bit(2)) {
+  if (has_email()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->email().data(), this->email().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -962,7 +979,7 @@ void Staff::SerializeWithCachedSizes(
 ::google::protobuf::uint8* Staff::SerializeWithCachedSizesToArray(
     ::google::protobuf::uint8* target) const {
   // required string name = 1;
-  if (_has_bit(0)) {
+  if (has_name()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->name().data(), this->name().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -972,12 +989,12 @@ void Staff::SerializeWithCachedSizes(
   }
   
   // required int32 id = 2;
-  if (_has_bit(1)) {
+  if (has_id()) {
     target = ::google::protobuf::internal::WireFormatLite::WriteInt32ToArray(2, this->id(), target);
   }
   
   // optional string email = 3;
-  if (_has_bit(2)) {
+  if (has_email()) {
     ::google::protobuf::internal::WireFormat::VerifyUTF8String(
       this->email().data(), this->email().length(),
       ::google::protobuf::internal::WireFormat::SERIALIZE);
@@ -1024,7 +1041,9 @@ int Staff::ByteSize() const {
       ::google::protobuf::internal::WireFormat::ComputeUnknownFieldsSize(
         unknown_fields());
   }
+  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = total_size;
+  GOOGLE_SAFE_CONCURRENT_WRITES_END();
   return total_size;
 }
 
@@ -1043,13 +1062,13 @@ void Staff::MergeFrom(const ::google::protobuf::Message& from) {
 void Staff::MergeFrom(const Staff& from) {
   GOOGLE_CHECK_NE(&from, this);
   if (from._has_bits_[0 / 32] & (0xffu << (0 % 32))) {
-    if (from._has_bit(0)) {
+    if (from.has_name()) {
       set_name(from.name());
     }
-    if (from._has_bit(1)) {
+    if (from.has_id()) {
       set_id(from.id());
     }
-    if (from._has_bit(2)) {
+    if (from.has_email()) {
       set_email(from.email());
     }
   }
@@ -1093,3 +1112,7 @@ void Staff::Swap(Staff* other) {
   return metadata;
 }
 
+
+// @@protoc_insertion_point(namespace_scope)
+
+// @@protoc_insertion_point(global_scope)

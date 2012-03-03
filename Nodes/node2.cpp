@@ -5,13 +5,13 @@
 
 int main() {
 
-    rpg::Node Test(6001);
+    rpg::Node Test;
 
     bool n;
 
     Staff SysAdmin;
 
-    n = Test.Subscribe("LeftLeg", "localhost:5002");
+    n = Test.Subscribe( "LeftLeg", "localhost:5002" );
     printf("1st publisher: %d\n",n);
 
     Professor A,B;
@@ -29,3 +29,4 @@ int main() {
 
     return 0;
 }
+

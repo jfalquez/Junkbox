@@ -1,3 +1,12 @@
+/*
+   \file Node.h
+
+   Lovely minimal networking system with RPC and Pub-Sub support using google
+   protocal buffers and ZermMQ. 
+
+   $Id$
+ */
+
 #ifndef _NODE_H_
 #define _NODE_H_
 
@@ -6,16 +15,11 @@
 #include <sstream>
 #include <iostream>
 #include <boost/thread.hpp>
-
 #include <zmq.hpp>
-
 #include <google/protobuf/message.h>
-
-#define MASTER 127.0.0.1:1337
 
 namespace rpg
 {
-
     class Node
     {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -30,11 +34,11 @@ namespace rpg
         };
 
 
-    public:
+        public:
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         Node(
-            int nPort       //< Input: RPC Port.. randomized in the future
+                int nPort = 1337       //< Input: RPC Port.. randomized in the future
             )
         {
             // init context
@@ -110,25 +114,26 @@ namespace rpg
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         template <class Req, class Rep>
-        bool Register(
-		const std::string& sName,		//< Input: Function name
-		void(*pFunc)(Req&,Rep&)			//< Input: Function pointer
-		)
-        {
-            // check if function with that name is already registered
-            std::map < std::string, RPC* >::iterator it;
-            it = m_mRpcTable.find( sName );
-            if( it != m_mRpcTable.end() ) {
-                return false;
-            } else {
-                RPC* pRPC = new RPC;
-                pRPC->RpcFunc = (FuncPtr)pFunc;
-		pRPC->ReqMsg = new Req;
-		pRPC->RepMsg = new Rep;
-                m_mRpcTable[ sName ] = pRPC;
-                return true;
+            bool Register(
+                    const std::string& sName,		//< Input: Function name
+                    void(*pFunc)(Req&,Rep&)			//< Input: Function pointer
+                    )
+            {
+                // check if function with that name is already registered
+                std::map < std::string, RPC* >::iterator it;
+                it = m_mRpcTable.find( sName );
+                if( it != m_mRpcTable.end() ) {
+                    return false;
+                }
+                else {
+                    RPC* pRPC = new RPC;
+                    pRPC->RpcFunc = (FuncPtr)pFunc;
+                    pRPC->ReqMsg = new Req;
+                    pRPC->RepMsg = new Rep;
+                    m_mRpcTable[ sName ] = pRPC;
+                    return true;
+                }
             }
-        }
 
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -201,7 +206,7 @@ namespace rpg
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         bool Publish(
                 const std::string& sTopic,      	//< Input: Topic name
-                unsigned int nPort              	//< Input: for now port to publish, later it is random
+                unsigned int nPort              	//< Input: 
                 )
         {
             std::map < std::string, zmq::socket_t* >::iterator it;
@@ -254,7 +259,8 @@ namespace rpg
             if( it == m_mTopics.end() ) {
                 // no socket found
                 return false;
-            } else {
+            }
+            else {
                 zmq::socket_t* pSock = it->second;
                 zmq::message_t ZmqMsg( Msg.ByteSize() );
                 if( !Msg.SerializeToArray( ZmqMsg.data(), Msg.ByteSize() ) ) {
@@ -279,7 +285,8 @@ namespace rpg
             if( it != m_mTopics.end() ) {
                 // subscription for that topic already exists
                 return false;
-            } else {
+            }
+            else {
                 // check if host+port is already in use
                 it = m_mHosts.find( sHost );
                 if( it != m_mHosts.end() ) {
@@ -319,7 +326,8 @@ namespace rpg
             if( it == m_mTopics.end() ) {
                 // no socket found
                 return false;
-            } else {
+            }
+            else {
                 zmq::socket_t* pSock = it->second;
                 zmq::message_t ZmqMsg;
                 if( !pSock->recv( &ZmqMsg, ZMQ_NOBLOCK ) ) {
@@ -333,7 +341,7 @@ namespace rpg
         }
 
 
-    private:
+        private:
 
         zmq::context_t*                         m_pContext;     // global context
 
