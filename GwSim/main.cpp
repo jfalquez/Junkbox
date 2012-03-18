@@ -22,7 +22,7 @@ std::vector< cv::Mat >      Images;       // Image to show on screen
 int main( int argc, char** argv )
 {
 	rpg::Robot Agnos;
-	Agnos.Init("rpg_config.xml");
+	Agnos.Init("../../RPG/dev/jmf/GwSim/rpg_config.xml");
 	// read URDF file
 
     // init driver
