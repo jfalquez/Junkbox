@@ -1,6 +1,6 @@
 <robot name="Agnos">
     <sensors>
-		<camera name="Stereo" dev="SimCam" type="sim">
+		<camera name="Stereo" dev="NodeCam">
             <NumCams> 2 </NumCams>
             <CamModFile> simcmod.*xml </CamModFile>
 		</camera>
