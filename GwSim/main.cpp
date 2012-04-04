@@ -25,13 +25,14 @@ int main( int argc, char** argv )
 
     // init driver
 	CameraDevice Cam;
+	Cam.SetProperty("Host", "localhost:6666");
 	Cam.InitDriver("NodeCam");
 	std::vector< cv::Mat >   Images;       // Image to show on screen
 
     while(1) {
         if( Cam.Capture(Images) ) {
 			cv::imshow( "SimL", Images[0] );
-			cv::imshow( "SimR", Images[1] );
+//			cv::imshow( "SimR", Images[1] );
 		}
 		char c;
 		c = cv::waitKey(2);
