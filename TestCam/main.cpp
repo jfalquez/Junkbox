@@ -25,6 +25,7 @@ int main( int argc, char** argv )
 		return -1;
 	}
 
+	std::cout << "Success." << std::endl;
 	exit(0);
 
 	// container for images
