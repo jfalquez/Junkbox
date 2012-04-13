@@ -8,7 +8,11 @@
 #ifndef CAPTUREDELEGATE_H
 #define	CAPTUREDELEGATE_H
 
+#include <pthread.h>
+#include <zmq.hpp>
+
 #include "DeckLinkAPI.h"
+
 
 class CaptureDelegate :  public IDeckLinkInputCallback {
 public:
@@ -22,8 +26,14 @@ public:
 	virtual HRESULT STDMETHODCALLTYPE VideoInputFrameArrived(IDeckLinkVideoInputFrame*, IDeckLinkAudioInputPacket*);
 
 private:
-	ULONG				m_refCount;
-	pthread_mutex_t		m_mutex;
+	zmq::context_t*				m_pContext;
+	zmq::socket_t*				m_pSocket;
+
+	unsigned long				m_frameCount;
+	int							m_maxFrames;
+	BMDTimecodeFormat			m_timecodeFormat;
+	ULONG						m_refCount;
+	pthread_mutex_t				m_mutex;
 
 } ;
 
