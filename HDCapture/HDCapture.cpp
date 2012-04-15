@@ -18,6 +18,7 @@ int main(int argc, char *argv[])
 	HRESULT						result;
 
 	IDeckLinkIterator*			pDeckLinkIterator;
+	IDeckLinkConfiguration*		pDeckLinkConfig;
 	IDeckLink*					pDeckLink;
 	IDeckLinkInput*				pDeckLinkInput;
 	BMDVideoInputFlags			inputFlags = 0;

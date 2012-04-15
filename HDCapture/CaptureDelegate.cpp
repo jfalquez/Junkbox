@@ -10,6 +10,44 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <sys/time.h>
+#include <math.h>
+
+// Aux Time Functions
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////
+inline double Tic()
+{
+    struct timeval tv;
+    gettimeofday(&tv, 0);
+    return tv.tv_sec + 1e-6 * (tv.tv_usec);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////
+inline double RealTime()
+{
+    return Tic();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////
+inline double Toc( double  dTic )
+{
+    return Tic() - dTic;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+inline double TocMS( double  dTic )
+{
+    return ( Tic() - dTic )*1000.;
+}
+
+double ttime = 0;
+long unsigned int count = 0;
+
+
+
 extern pthread_cond_t sleepCond;
 
 
@@ -50,6 +88,15 @@ ULONG CaptureDelegate::Release(void)
 	return (ULONG)m_refCount;
 }
 
+void Clamp( short& T ) {
+	if( T > 255 ) {
+		T = 255;
+	}
+	if( T < 0 ) {
+		T = 0;
+	}
+}
+
 HRESULT CaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame* videoFrame, IDeckLinkAudioInputPacket* /* audioFrame */)
 {
 	void*					frameBytes;
@@ -57,11 +104,14 @@ HRESULT CaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame* videoF
 	// Handle Video Frame
 	if(videoFrame)
 	{
-
 		if (videoFrame->GetFlags() & bmdFrameHasNoInputSource) {
 			fprintf(stderr, "Frame received (#%lu) - No input signal detected\n", m_frameCount);
 		}
 		else {
+
+			double t = Tic();
+
+
 			const char *timecodeString = NULL;
 			if( m_timecodeFormat != 0 ) {
 				IDeckLinkTimecode *timecode;
@@ -71,7 +121,7 @@ HRESULT CaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame* videoF
 				}
 			}
 
-			/**/
+			/*
 			fprintf(stderr, "Frame received (#%lu) [%s] - Valid Frame - Height: %li - Size: %li bytes\n",
 				m_frameCount,
 				timecodeString != NULL ? timecodeString : "No timecode",
@@ -83,88 +133,104 @@ HRESULT CaptureDelegate::VideoInputFrameArrived(IDeckLinkVideoInputFrame* videoF
 				free((void*)timecodeString);
 			}
 
-			// publish
-			zmq::message_t ZmqMsg(4 + 12 + videoFrame->GetRowBytes() * videoFrame->GetHeight());
-			// push number of images in message
-			int NUM_IMAGES = 1;
-			int WIDTH = 1280;
-			int HEIGHT = 720;
-			int RGB_CHAN = 1;
-			int IMG_TYPE = 0; // Or 24?
-			char* MsgPtr = (char*)ZmqMsg.data();
-			memcpy( MsgPtr, &NUM_IMAGES, sizeof(NUM_IMAGES) );
-			MsgPtr += sizeof(NUM_IMAGES);
-			memcpy( MsgPtr, &WIDTH, sizeof(WIDTH) );
-			MsgPtr += sizeof(WIDTH);
-			memcpy( MsgPtr, &HEIGHT, sizeof(HEIGHT) );
-			MsgPtr += sizeof(HEIGHT);
-			memcpy( MsgPtr, &IMG_TYPE, sizeof(IMG_TYPE) );
-			MsgPtr += sizeof(IMG_TYPE);
-
-			videoFrame->GetBytes(&frameBytes);
-		    memcpy( MsgPtr, frameBytes, videoFrame->GetRowBytes() * videoFrame->GetHeight() );
-			m_pSocket->send( ZmqMsg );
-			if( 0/* m_pSocket */ ) {
+			if( m_pSocket ) {
 				// this is hardcoded for now
 				int NUM_IMAGES = 1;
+//				int IMG_WIDTH = 640;
+				int IMG_WIDTH = 1280;
+//				int IMG_HEIGHT = 480;
+				int IMG_HEIGHT = 720;
+				int IMG_TYPE = 0; // equal to CV_8UC1
 
-				int WIDTH = 640;
-				int HEIGHT = 480;
-				int RGB_CHAN = 1;
-				int IMG_TYPE = 0; // Or 24?
+				// calculate image size
+				int IMG_SIZE = IMG_WIDTH * IMG_HEIGHT * 1 /* # channels */;
 
-				int IMG_SIZE = WIDTH * HEIGHT * RGB_CHAN;
+				// calculate total number of bytes
+				unsigned long int NumBytes = IMG_WIDTH * IMG_HEIGHT * 2;
 
-				zmq::message_t ZmqMsg(4 + (NUM_IMAGES * (12 + WIDTH * HEIGHT * RGB_CHAN)));
+				// images need to be sent in the following format:
+				// NumImages|Img1Width|Img1Height|Img1Format|Img1Data|Img2Width|...
+				zmq::message_t ZmqMsg(4 + (NUM_IMAGES * (12 + IMG_SIZE)));
 				char* MsgPtr = (char*)ZmqMsg.data();
 
 				// push number of images in message
 				memcpy( MsgPtr, &NUM_IMAGES, sizeof(NUM_IMAGES) );
 				MsgPtr += sizeof(NUM_IMAGES);
 
-
-				// get bytes
-//				frameBytes = (void*)MsgPtr;
+				// get frame pointer
 				videoFrame->GetBytes(&frameBytes);
+				unsigned char* fb = (unsigned char*)frameBytes;
+
+				// increment pointer to start on Y0
+				fb++;
+
+				// YUV scale conversion
+				float fscale = 255.0/219.0;
+
+				for( int nn = 0; nn < NUM_IMAGES; nn ++ ) {
+					// push width, height and image type
+					memcpy( MsgPtr, &IMG_WIDTH, sizeof(IMG_WIDTH) );
+					MsgPtr += sizeof(IMG_WIDTH);
+					memcpy( MsgPtr, &IMG_HEIGHT, sizeof(IMG_HEIGHT) );
+					MsgPtr += sizeof(IMG_HEIGHT);
+					memcpy( MsgPtr, &IMG_TYPE, sizeof(IMG_TYPE) );
+					MsgPtr += sizeof(IMG_TYPE);
 
 
-				// push first image
-				memcpy( MsgPtr, &WIDTH, sizeof(WIDTH) );
-				MsgPtr += sizeof(WIDTH);
-				memcpy( MsgPtr, &HEIGHT, sizeof(HEIGHT) );
-				MsgPtr += sizeof(HEIGHT);
-				memcpy( MsgPtr, &IMG_TYPE, sizeof(IMG_TYPE) );
-				MsgPtr += sizeof(IMG_TYPE);
-				char* FbPtr = (char*)frameBytes;
-				int padding = videoFrame->GetRowBytes() - 1280;
-				for( int jj = 0; jj < HEIGHT; jj++ ) {
-					for( int ii = 0; ii < WIDTH; ii++ ) {
-						*MsgPtr = *(FbPtr);
-						MsgPtr++;
-						FbPtr += 2;
-					}
-					FbPtr += padding;
-				}
-//				memcpy( MsgPtr, frameBytes, IMG_SIZE );
-//				MsgPtr += IMG_SIZE;
-
-				// push second image
-//				memcpy( MsgPtr, &WIDTH, sizeof(WIDTH) );
-//				MsgPtr += sizeof(WIDTH);
-//				memcpy( MsgPtr, &HEIGHT, sizeof(HEIGHT) );
-//				MsgPtr += sizeof(HEIGHT);
-//				memcpy( MsgPtr, &IMG_TYPE, sizeof(IMG_TYPE) );
-//				MsgPtr += sizeof(IMG_TYPE);
-//				for( int ii = 0; ii < IMG_SIZE; ii++ ) {
-//					*(MsgPtr++) = *((char*)frameBytes+IMG_SIZE+ii);
+//				for(int ii = 0; ii < 256; ii++ ) {
+					printf("first: %d -- ", *fb);
+					unsigned char low = round((*fb-16.0)*fscale/16.0);
+					fb += 2;
+					printf("second: %d --", *fb);
+					unsigned char high = round((*fb-16)*fscale/16.0);
+					high = high << 4;
+					unsigned char byte = high|low;
+					printf("lo: %d -- hi: %d -- val: %d = %c\n", low, high, byte, byte);
+					fb += 2;
 //				}
-//				memcpy( MsgPtr, frameBytes, IMG_SIZE );
+
+					*MsgPtr = byte; MsgPtr++;
+
+
+
+					/* IF WE EVER WANTED COLOR
+					for( unsigned long int ii = 0; ii < NumBytes; ii += 4 ) {
+						unsigned char Cb = *fb;	fb++;
+						unsigned char Y0 = *fb;	fb++;
+						unsigned char Cr = *fb;	fb++;
+						unsigned char Y1 = *fb;	fb++;
+
+						short R1 = 1.164*(Y0 - 16) + 1.793*(Cr - 128); Clamp(R1);
+						short G1 = 1.164*(Y0 - 16) - 0.534*(Cr - 128) - 0.213*(Cb - 128); Clamp(G1);
+						short B1 = 1.164*(Y0 - 16) + 2.115*(Cb - 128); Clamp(B1);
+						short R2 = 1.164*(Y1 - 16) + 1.793*(Cr - 128); Clamp(R2);
+						short G2 = 1.164*(Y1 - 16) - 0.534*(Cr - 128) - 0.213*(Cb - 128); Clamp(G2);
+						short B2 = 1.164*(Y1 - 16) + 2.115*(Cb - 128); Clamp(B2);
+
+						*MsgPtr = B1; MsgPtr++;
+						*MsgPtr = G1; MsgPtr++;
+						*MsgPtr = R1; MsgPtr++;
+						*MsgPtr = B2; MsgPtr++;
+						*MsgPtr = G2; MsgPtr++;
+						*MsgPtr = R2; MsgPtr++;
+					 */
+					}
+				}
+
 
 				m_pSocket->send( ZmqMsg );
+			}
+			ttime += Toc(t);
+			count++;
+
+			if(count > 300) {
+				fprintf(stderr, "Frame rate is %.2f\n",count/ttime);
+				exit(0);
 			}
 		}
 
 		m_frameCount++;
+
 
 		if (m_maxFrames > 0 && m_frameCount >= m_maxFrames)
 		{
