@@ -14,26 +14,25 @@ int main( int argc, char** argv )
 
 	CameraDevice Cam;
 
-	// set properties
-	Cam.SetProperty("NumImages", 2);
-	Cam.SetProperty("ImageWidth", 640);
-	Cam.SetProperty("ImageHeight", 480);
+	// set properties.. if any
+	//Cam.SetProperty("NumImages", 2);
+	//Cam.SetProperty("ImageWidth", 640);
+	//Cam.SetProperty("ImageHeight", 480);
 
 	// init driver
-	if( !Cam.InitDriver( "HDMI" ) ) {
+	if( !Cam.InitDriver( "Webcam" ) ) {
 		std::cout << "Invalid input device." << std::endl;
 		return -1;
 	}
 
 	std::cout << "Success." << std::endl;
-	exit(0);
 
 	// container for images
-	std::vector< cv::Mat > vImages;
+	std::vector< rpg::ImageWrapper > vImages;
 
 	// create GUI windows
 	cv::namedWindow( "Image 1", CV_WINDOW_AUTOSIZE );
-	cv::namedWindow( "Image 2", CV_WINDOW_AUTOSIZE );
+	//cv::namedWindow( "Image 2", CV_WINDOW_AUTOSIZE );
 
 
 	while(1) {
@@ -41,8 +40,8 @@ int main( int argc, char** argv )
 			std::cout << "Error getting images." << std::endl;
 		}
 
-		cv::imshow("Image 1", vImages[0]);
-		cv::imshow("Image 2", vImages[1]);
+		cv::imshow("Image 1", vImages[0].Image);
+		//cv::imshow("Image 2", vImages[1]);
 
 		char c;
 		c = cv::waitKey(2);
