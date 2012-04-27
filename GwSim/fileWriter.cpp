@@ -3,6 +3,7 @@
 #include <vector>
 
 #include <RPG/Devices/Camera/CameraDevice.h>
+#include <RPG/Utils/ImageWrapper.h>
 #include <RPG/Robots/Robot.h>
 
 #include "Node.h"
@@ -10,8 +11,8 @@
 
 
 void PackImages(
-		std::vector< cv::Mat >& vImages,	//< Input:
-		zmq::message_t& Msg					//< Output:
+		std::vector< rpg::ImageWrapper >& vImages,	//< Input:
+		zmq::message_t& Msg                         //< Output:
 		)
 	{
 	int NumImages = vImages.size();
@@ -19,7 +20,7 @@ void PackImages(
 	// calculate total message size to allocate
 	int MsgSize = 4;
 	for(int ii = 0; ii < NumImages; ii++ ) {
-		int ImgSize = vImages[ii].rows * vImages[ii].cols * vImages[ii].elemSize();
+		int ImgSize = vImages[ii].Image.rows * vImages[ii].Image.cols * vImages[ii].Image.elemSize();
 		MsgSize += 12 + ImgSize;	// 12 bytes = (4)Width, (4)Height and (4)ImgType
 	}
 	Msg.rebuild( MsgSize );
@@ -33,10 +34,10 @@ void PackImages(
 
 	// push images in width, height, type, data format
 	for(int ii = 0; ii < NumImages; ii++ ) {
-		int ImgWidth = vImages[ii].cols;
-		int ImgHeight = vImages[ii].rows;
-		int ImgType = vImages[ii].type();
-		int ImgSize = ImgWidth * ImgHeight * vImages[ii].elemSize();
+		int ImgWidth = vImages[ii].Image.cols;
+		int ImgHeight = vImages[ii].Image.rows;
+		int ImgType = vImages[ii].Image.type();
+		int ImgSize = ImgWidth * ImgHeight * vImages[ii].Image.elemSize();
 
 		memcpy( MsgPtr, &ImgWidth, sizeof(ImgWidth) );
 		MsgPtr += sizeof(ImgWidth);
@@ -45,7 +46,7 @@ void PackImages(
 		memcpy( MsgPtr, &ImgType, sizeof(ImgType) );
 		MsgPtr += sizeof(ImgType);
 
-		memcpy( MsgPtr, vImages[ii].data, ImgSize );
+		memcpy( MsgPtr, vImages[ii].Image.data, ImgSize );
 		MsgPtr += ImgSize;
 	}
 
@@ -62,13 +63,13 @@ int main( int argc, char** argv )
 
     // init driver
 	CameraDevice Cam;
-	Cam.SetProperty("DataSourceDir", "/home/jmf/Workspace/datasets/CityBlock-Noisy" );
+	Cam.SetProperty("DataSourceDir", "/home/jmf/Workspace/Datasets/CityBlock-Noisy" );
 	Cam.SetProperty("Channel-0",     "left_rect.*" );
 	Cam.SetProperty("Channel-1",     "right_rect.*" );
 	Cam.SetProperty("NumChannels",   2 );
 	Cam.InitDriver("FileReader");
 
-	std::vector< cv::Mat >   Images;       // Image to show on screen
+	std::vector< rpg::ImageWrapper >   Images;       // Image to show on screen
 
 	rpg::Node Sender(7777);
 	Sender.Publish( "CamFeed", 5556 );

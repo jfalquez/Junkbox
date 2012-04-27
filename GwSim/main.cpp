@@ -13,6 +13,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include <RPG/Utils/ImageWrapper.h>
 #include <RPG/Devices/Camera/CameraDevice.h>
 //#include <RPG/Robots/Robot.h>
 
@@ -60,9 +61,9 @@ int main( int argc, char** argv )
 
     // init driver
 	CameraDevice Cam;
-	Cam.SetProperty("Host", "localhost:6666");
+	Cam.SetProperty("Host", "localhost:5556");
 	Cam.InitDriver("NodeCam");
-	std::vector< cv::Mat >   Images;       // Image to show on screen
+	std::vector< rpg::ImageWrapper >   Images;       // Image to show on screen
 
 
 	long unsigned int count = 0;
@@ -70,7 +71,7 @@ int main( int argc, char** argv )
 
     while(1) {
         if( Cam.Capture(Images) ) {
-			cv::imshow( "SimL", Images[0] );
+			cv::imshow( "SimL", Images[0].Image );
 //			cv::imshow( "SimR", Images[1] );
 		}
 
