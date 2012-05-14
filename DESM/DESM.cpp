@@ -131,7 +131,7 @@ void EstimateCameraPose( GLWindow*, void* )
     Cam.CaptureDepth( vDepth.data() );
     EstCam.CaptureDepth( vEstDepth.data() );
 
-    /*
+    /* */
     // sanity check... this shows the depth cam is fucked!
     std::cout << "Size: " << vDepth.size( ) << std::endl;
     for( int ii = 0; ii < g_nImgHeight; ii++ ) {
@@ -247,9 +247,9 @@ void ShowCameraAndTextures( GLWindow*, void* )
     // calculate difference
     vEstRGB = vEstRGB - vRGB;
 
-    glImgDiff.SetImage( vEstRGB.data(), g_nImgWidth, g_nImgHeight, GL_RGB, GL_UNSIGNED_BYTE );
-    glImgDiff.SetSizeAsPercentageOfWindow( 0.66, 0.66, 1, 1);
-    DrawBorderAsWindowPercentage( 0.66, 0.66, 1, 1 );
+    //glImgDiff.SetImage( vEstRGB.data(), g_nImgWidth, g_nImgHeight, GL_RGB, GL_UNSIGNED_BYTE );
+    //glImgDiff.SetSizeAsPercentageOfWindow( 0.66, 0.66, 1, 1);
+    //DrawBorderAsWindowPercentage( 0.66, 0.66, 1, 1 );
 }
 
 
@@ -285,15 +285,15 @@ int main( int argc, char** argv )
     // register objects
     pWin->AddChildToRoot( &glHM );
     pWin->AddChildToRoot( &glGrid );
-    pWin->AddChildToRoot( &glImgDiff );
+    //pWin->AddChildToRoot( &glImgDiff );
 
     Eigen::Matrix3d dK; // computer vision K matrix
     dK <<   g_nImgWidth,    0,              g_nImgWidth / 2,
             0,              g_nImgHeight,   g_nImgHeight / 2,
             0,              0,              1;
 
-    Cam.Init( &pWin->SceneGraph( ), g_dPose, dK, g_nImgWidth, g_nImgHeight, eSimCamRGB | eSimCamDepth );
-    EstCam.Init( &pWin->SceneGraph( ), g_dPose, dK, g_nImgWidth, g_nImgHeight, eSimCamRGB | eSimCamDepth );
+    Cam.Init( &pWin->SceneGraph( ), g_dPose, dK, g_nImgWidth, g_nImgHeight, eSimCamDepth | eSimCamRGB );
+    EstCam.Init( &pWin->SceneGraph( ), g_dPose, dK, g_nImgWidth, g_nImgHeight, eSimCamDepth | eSimCamRGB );
 
     glEnable( GL_LIGHT0 ); // activate light0
     glEnable( GL_LIGHTING ); // enable lighting
