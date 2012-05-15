@@ -4,28 +4,33 @@
 
 #include <Mvlpp/SE3.h>
 
+#include <opencv/cv.h>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+
 #include "GLHeightMap.h"
 #include "PeaksHeightMap.h"
 
 
 // Global Vars
-GLImage     glImgDiff;
-int         g_nImgWidth = 128;
-int         g_nImgHeight = 128;
-bool        g_DoESM = false;
+GLImage				glImgDiff;
+int					g_nImgWidth = 128;
+int					g_nImgHeight = 128;
+bool				g_DoESM = false;
 
 // Global CVars
 bool& g_bShowFrustum = CVarUtils::CreateCVar( "ShowFrustum", true, "Show camera viewing frustum." );
 
 // Camera
 GLSimCam Cam;
-Eigen::Matrix4d g_dPose = GLCart2T( -40, 0, -5, 0, 0, 0 ); // initial camera pose
+Eigen::Matrix4d		g_dPose = GLCart2T( -40, 0, -5, 0, 0, 0 ); // initial camera pose
 //Eigen::Matrix4d g_dPose = GLCart2T( 0, 0, -40, 0, -M_PI / 2, 0 ); // initial camera pose
-float g_fTurnrate = 0;
-float g_fSpeed = 0;
+float				g_fTurnrate = 0;
+float				g_fSpeed = 0;
 
 // Reference Camera -- this is only used to show on screen estimated camera pose
-GLSimCam EstCam;
+GLSimCam			VirtCam;
+Eigen::Matrix4d		g_dVirtPose = g_dPose;
 
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -46,13 +51,13 @@ public:
                     g_fTurnrate -= 0.01;
                     break;
                 case 's': case 'S':
-                    g_fSpeed -= 0.2;
+                    g_fSpeed -= 0.1;
                     break;
                 case 'd': case 'D':
                     g_fTurnrate += 0.01;
                     break;
                 case 'w': case 'W':
-                    g_fSpeed += 0.2;
+                    g_fSpeed += 0.1;
                     break;
                 case ' ':
                     g_fSpeed = 0;
@@ -78,6 +83,20 @@ void UpdateCameraPose( GLWindow*, void* )
     glClearColor( 0.0, 0.0, 0.0, 1 );
 
     Cam.RenderToTexture( ); // will render to texture, then copy texture to CPU memory
+	VirtCam.RenderToTexture( );
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+Eigen::Vector2d _Project( const Eigen::Vector4d& P ) {
+
+	// temporal working point
+    Eigen::Vector3d T = P.block<3,1>(0,0);
+
+	// get camera intrinsics
+    Eigen::Matrix3d K = Cam.GetKMatrix();
+	T = K * T;
+
+    return T.block<2,1>(0,0);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -95,6 +114,45 @@ Eigen::Vector3d _BackProject( int X, int Y, double Depth ) {
     P(2) = Depth;
 
     return P;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+float _Interpolate(
+                float x,						//< Input: X coordinate
+                float y,						//< Input: Y coordinate
+                const Eigen::VectorXf Image,	//< Input: Image
+                int ImageWidth = g_nImgWidth,	//< Input: Image width
+                int ImageHeight = g_nImgHeight	//< Input: Image height
+                )
+{
+    int xt = (int) x;  /* top-left corner */
+    int yt = (int) y;
+    float ax = x - xt;
+    float ay = y - yt;
+    unsigned int idx = (ImageWidth*yt) + xt;
+
+    if (xt >= 0 && yt >= 0 && xt <= ImageWidth - 2 && yt <= ImageHeight - 2) {
+	    return ( (1-ax) * (1-ay) * Image[idx] +
+                        ( ax ) * (1-ay) * Image[idx+1] +
+                        (1-ax) * ( ay ) * Image[idx+ImageWidth] +
+                        ( ax ) * ( ay ) * Image[idx+ImageWidth+1] );
+	}
+	return 0;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+void _RGB2Gray(
+                const std::vector < unsigned char >& RGB,		//< Input: RGB image
+                Eigen::VectorXf& Gray							//< Output: Grayscale image
+                )
+{
+	unsigned int Idx;
+	for( int ii = 0; ii < g_nImgHeight; ii++ ) {
+		for ( int jj = 0; jj < g_nImgWidth; jj++ ) {
+			Idx = (g_nImgHeight-ii)*g_nImgWidth + jj*3;
+			Gray[ ii*g_nImgWidth + jj ] = float(RGB[Idx] + RGB[Idx+1] + RGB[Idx+2]) / 3.0;
+		}
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -119,91 +177,117 @@ void _WarpDepthMap( Eigen::VectorXf& vDM, Eigen::Vector6d Trf ) {
 void EstimateCameraPose( GLWindow*, void* )
 {
     if( g_DoESM ) {
-    Eigen::VectorXf vDepth;
-    Eigen::VectorXf vEstDepth;
+	std::vector < unsigned char>  vRGB;		// original RGB image
+    Eigen::VectorXf vImg;					// grayscale image
+    Eigen::VectorXf vVirtImg;				// grayscale image
+    Eigen::VectorXf vVirtDepth;
 
     // resize vectors
-    vDepth.resize( g_nImgWidth * g_nImgHeight );
-    vEstDepth.resize( g_nImgWidth * g_nImgHeight );
+    vRGB.resize( g_nImgWidth * g_nImgHeight * 3 );
+    vImg.resize( g_nImgWidth * g_nImgHeight );
+    vVirtImg.resize( g_nImgWidth * g_nImgHeight );
+    vVirtDepth.resize( g_nImgWidth * g_nImgHeight );
 
-    // populate vectors
-    // assuming depth is not normalized
-    Cam.CaptureDepth( vDepth.data() );
-    EstCam.CaptureDepth( vEstDepth.data() );
+    // populate vectors & convert to grayscale
+	Cam.CaptureRGB( vRGB );
+	_RGB2Gray( vRGB, vImg );
+    VirtCam.CaptureRGB( vRGB );
+	_RGB2Gray( vRGB, vVirtImg );
 
-    /* */
-    // sanity check... this shows the depth cam is fucked!
-    std::cout << "Size: " << vDepth.size( ) << std::endl;
+	cv::Mat Tmp1( g_nImgHeight, g_nImgWidth, CV_8UC3, vRGB.data() );
+	cv::imshow( "Img1", Tmp1 );
+	cv::Mat Tmp2( g_nImgHeight, g_nImgWidth, CV_32FC1, vImg.data() );
+	cv::imshow( "Img2", Tmp2 );
+	cv::waitKey(100);
+
+	// assuming depth is not normalized
+    VirtCam.CaptureDepth( vVirtDepth.data() );
+
+    /*
+    // check to see if the depth cam works...
+    std::cout << "Size: " << vVirtDepth.size( ) << std::endl;
     for( int ii = 0; ii < g_nImgHeight; ii++ ) {
         for( int jj = 0; jj < g_nImgWidth; jj++ ) {
-         printf( "%.2f ", vDepth[ii*g_nImgWidth+jj] );
+         printf( "%.2f ", vVirtDepth[ii*g_nImgWidth+jj] );
         }
+		printf("\n");
     }
     /**/
 
-    // estimated pose
+    // initial estimated pose is the last pose
     Eigen::Vector6d dPose = Eigen::Vector6d::Zero();
 
-    Eigen::VectorXf error;
-    error = vEstDepth - vDepth;
+    Eigen::VectorXf ImgError;
+    ImgError = vVirtImg - vImg;
 
-    while( error.norm() > 1.0 ) {
+	int nCount = 0;
+    while( ImgError.norm() > 1.0  && nCount < 10 ) {
+		nCount++;
 
         // LHS = Hessian = Jt * J
-        Eigen::Matrix<double,6,6> LHS = Eigen::Matrix<double,6,6>::Zero();
+//        Eigen::Matrix<double,1,6> LHS = Eigen::Matrix<double,1,6>::Zero();
 
         // RHS = Jt * e
-        Eigen::Vector6d RHS = Eigen::Vector6d::Zero();
+//        Eigen::Vector6d RHS = Eigen::Vector6d::Zero();
 
         for( int ii = 0; ii < g_nImgHeight; ii++ ) {
             for( int jj = 0; jj < g_nImgWidth; jj++ ) {
-                Eigen::Vector3d P, Pe;
-                P = _BackProject( jj, ii, vDepth[ii*g_nImgWidth + jj] );
-                Pe = _BackProject( jj, ii, vEstDepth[ii*g_nImgWidth + jj] );
 
-                // build Jacobian
-                Eigen::Matrix3d R, Pr;
-                Pr << P(0), 0,    0,
-                      0,    P(1), 0,
-                      0,    0,    P(2);
-                R = mvl::Cart2R( dPose.block<3,1>(0,0) );
-                R = R * Pr;
-                Eigen::Matrix<double,3,6> J;
-                J << 0, 0, 0, 1, 0, 0,
-                     0, 0, 0, 0, 1, 0,
-                     0, 0, 0, 0, 0, 1;
-                J.block<3,3>(0,0) = R;
+				// "virtual" points
+				Eigen::Vector4d vP4;
+                Eigen::Vector3d vP3;
+				Eigen::Vector2d vP2;
+
+				// evaluate 'a'
+                vP3 = _BackProject( jj, ii, vVirtDepth[ii*g_nImgWidth + jj] );
+				vP4 << vP3, 1; // homogeneous coordinate
+				vP4 = mvl::Cart2T( dPose ) * vP4;
+				vP2 = _Project( vP4 );
+
+				// finite differences
+				float TopPix = _Interpolate( vP2(0), vP2(1)-1, vVirtImg );
+				float BotPix = _Interpolate( vP2(0), vP2(1)+1, vVirtImg );
+				float LeftPix = _Interpolate( vP2(0)-1, vP2(1), vVirtImg );
+				float RightPix = _Interpolate( vP2(0)+2, vP2(1), vVirtImg );
+
+				// first term
+				Eigen::Vector2d Term1;
+				Term1[0] = (RightPix - LeftPix) / 2;
+				Term1[1] = (TopPix - BotPix) / 2;
+
 
                 // estimate LHS (Hessian)
-                LHS += J.transpose() * J;
+//                LHS += J.transpose() * J;
 
                 // estimate RHS (error)
-                RHS += J.transpose() * (Pe - P);
+//                RHS += J.transpose() * (Pe - P);
             }
         }
 
         // calculate deltaPose as Hinv * Jt * error
         Eigen::Vector6d deltaPose;
 //        deltaPose = LHS.inverse() * RHS;
-        deltaPose = LHS.ldlt().solve(RHS);
+//        deltaPose = LHS.ldlt().solve(RHS);
 
 
         // update dPose += deltaPose
         dPose += deltaPose;
 
         // warp
-        _WarpDepthMap( vEstDepth, deltaPose );
+//        _WarpDepthMap( vVirtImg, deltaPose );
 
         // move camera to new pose and re-render
-        EstCam.SetPose( mvl::Cart2T(dPose) );
-        EstCam.RenderToTexture( );
+		g_dVirtPose = g_dVirtPose * mvl::Cart2T( dPose );
+        VirtCam.SetPose( g_dVirtPose );
+        VirtCam.RenderToTexture( );
 
         // calculate new error
-        error = vEstDepth - vDepth;
-        std::cout << "Error is: " << error.norm() << std::endl;
+        ImgError = vVirtImg - vImg;
+        std::cout << "Error is: " << ImgError.norm() << std::endl;
     }
 
-    std::cout << "Estimated Pose is: " << dPose.transpose() << std::endl;
+    std::cout << "Real Pose: " << mvl::T2Cart(g_dPose).transpose() << std::endl;
+    std::cout << "Estimated Pose: " << mvl::T2Cart(g_dVirtPose).transpose() << std::endl;
     g_DoESM = false;
 
     }
@@ -216,7 +300,7 @@ void ShowCameraAndTextures( GLWindow*, void* )
     if( g_bShowFrustum ) {
         // show the camera
         Cam.DrawCamera( );
-        EstCam.DrawCamera( );
+        VirtCam.DrawCamera( );
     }
 
     /// show textures
@@ -226,30 +310,30 @@ void ShowCameraAndTextures( GLWindow*, void* )
         DrawBorderAsWindowPercentage( 0, 0.66, 0.33, 1 );
     }
 
-    if( EstCam.HasRGB( ) ) {
-        DrawTextureAsWindowPercentage( EstCam.RGBTexture( ), EstCam.ImageWidth( ),
-                EstCam.ImageHeight( ), 0.33, 0.66, 0.66, 1 );
+    if( VirtCam.HasRGB( ) ) {
+        DrawTextureAsWindowPercentage( VirtCam.RGBTexture( ), VirtCam.ImageWidth( ),
+                VirtCam.ImageHeight( ), 0.33, 0.66, 0.66, 1 );
         DrawBorderAsWindowPercentage( 0.33, 0.66, 0.66, 1 );
     }
 
     // draw difference image
-    Eigen::Matrix<unsigned char, Eigen::Dynamic, 1> vRGB;
-    Eigen::Matrix<unsigned char, Eigen::Dynamic, 1> vEstRGB;
+    Eigen::Matrix<unsigned char, Eigen::Dynamic, 1> vImg;
+    Eigen::Matrix<unsigned char, Eigen::Dynamic, 1> vVirtImg;
 
     // resize vectors
-    vRGB.resize( g_nImgWidth * g_nImgHeight * 3 );
-    vEstRGB.resize( g_nImgWidth * g_nImgHeight * 3 );
+    vImg.resize( g_nImgWidth * g_nImgHeight * 3 );
+    vVirtImg.resize( g_nImgWidth * g_nImgHeight * 3 );
 
     // populate vectors
-    Cam.CaptureRGB( vRGB.data() );
-    EstCam.CaptureRGB( vEstRGB.data() );
+    Cam.CaptureRGB( vImg.data() );
+    VirtCam.CaptureRGB( vVirtImg.data() );
 
     // calculate difference
-    vEstRGB = vEstRGB - vRGB;
+    vVirtImg = vVirtImg - vImg;
 
-    //glImgDiff.SetImage( vEstRGB.data(), g_nImgWidth, g_nImgHeight, GL_RGB, GL_UNSIGNED_BYTE );
-    //glImgDiff.SetSizeAsPercentageOfWindow( 0.66, 0.66, 1, 1);
-    //DrawBorderAsWindowPercentage( 0.66, 0.66, 1, 1 );
+    glImgDiff.SetImage( vVirtImg.data(), g_nImgWidth, g_nImgHeight, GL_RGB, GL_UNSIGNED_BYTE );
+    glImgDiff.SetSizeAsPercentageOfWindow( 0.66, 0.66, 1, 1);
+    DrawBorderAsWindowPercentage( 0.66, 0.66, 1, 1 );
 }
 
 
@@ -280,20 +364,21 @@ int main( int argc, char** argv )
     GLHeightMap glHM( &glPHM );
 
     glImgDiff.InitReset();
+	glImgDiff.SetVisible();
     glImgDiff.SetPerceptable( false );
 
     // register objects
     pWin->AddChildToRoot( &glHM );
     pWin->AddChildToRoot( &glGrid );
-    //pWin->AddChildToRoot( &glImgDiff );
+    pWin->AddChildToRoot( &glImgDiff );
 
-    Eigen::Matrix3d dK; // computer vision K matrix
+	Eigen::Matrix3d	dK; // computer vision K matrix
     dK <<   g_nImgWidth,    0,              g_nImgWidth / 2,
             0,              g_nImgHeight,   g_nImgHeight / 2,
             0,              0,              1;
 
-    Cam.Init( &pWin->SceneGraph( ), g_dPose, dK, g_nImgWidth, g_nImgHeight, eSimCamDepth | eSimCamRGB );
-    EstCam.Init( &pWin->SceneGraph( ), g_dPose, dK, g_nImgWidth, g_nImgHeight, eSimCamDepth | eSimCamRGB );
+    Cam.Init( &pWin->SceneGraph( ), g_dPose, dK, g_nImgWidth, g_nImgHeight, eSimCamRGB );
+    VirtCam.Init( &pWin->SceneGraph( ), g_dVirtPose, dK, g_nImgWidth, g_nImgHeight, eSimCamDepth | eSimCamRGB );
 
     glEnable( GL_LIGHT0 ); // activate light0
     glEnable( GL_LIGHTING ); // enable lighting
