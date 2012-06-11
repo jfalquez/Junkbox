@@ -149,7 +149,7 @@ void _RGB2Gray(
 	unsigned int Idx;
 	for( int ii = 0; ii < g_nImgHeight; ii++ ) {
 		for ( int jj = 0; jj < g_nImgWidth; jj++ ) {
-			Idx = (g_nImgHeight-ii)*g_nImgWidth + jj*3;
+			Idx = (g_nImgHeight-ii-1)*g_nImgWidth*3 + jj*3;
 			Gray[ ii*g_nImgWidth + jj ] = float(RGB[Idx] + RGB[Idx+1] + RGB[Idx+2]) / 3.0;
 		}
 	}
@@ -194,14 +194,17 @@ void EstimateCameraPose( GLWindow*, void* )
     VirtCam.CaptureRGB( vRGB );
 	_RGB2Gray( vRGB, vVirtImg );
 
+    /*
 	cv::Mat Tmp1( g_nImgHeight, g_nImgWidth, CV_8UC3, vRGB.data() );
 	cv::imshow( "Img1", Tmp1 );
 	cv::Mat Tmp2( g_nImgHeight, g_nImgWidth, CV_32FC1, vImg.data() );
 	cv::imshow( "Img2", Tmp2 );
 	cv::waitKey(100);
+    /**/
 
 	// assuming depth is not normalized
-    VirtCam.CaptureDepth( vVirtDepth.data() );
+//    VirtCam.CaptureDepth( vVirtDepth.data() );
+    VirtCam.CaptureUnnormalizedDepth( vVirtDepth.data() );
 
     /*
     // check to see if the depth cam works...
@@ -224,21 +227,28 @@ void EstimateCameraPose( GLWindow*, void* )
     while( ImgError.norm() > 1.0  && nCount < 10 ) {
 		nCount++;
 
-        // LHS = Hessian = Jt * J
-//        Eigen::Matrix<double,1,6> LHS = Eigen::Matrix<double,1,6>::Zero();
+        // Jacobian
+        Eigen::Matrix<double,1,6> J;
 
-        // RHS = Jt * e
-//        Eigen::Vector6d RHS = Eigen::Vector6d::Zero();
+        // LHS
+        Eigen::Matrix<double,6,6> LHS;
+        LHS = Eigen::Matrix<double,6,6>::Zero();
+
+        // RHS
+        Eigen::Matrix<double,6,1> RHS;
+        RHS = Eigen::Matrix<double,6,1>::Zero();
 
         for( int ii = 0; ii < g_nImgHeight; ii++ ) {
             for( int jj = 0; jj < g_nImgWidth; jj++ ) {
 
-				// "virtual" points
+				// "virtual" points in
 				Eigen::Vector4d vP4;
                 Eigen::Vector3d vP3;
 				Eigen::Vector2d vP2;
 
-				// evaluate 'a'
+				//--------------------- first term 1x2
+
+                // evaluate 'a' = L[ Tprev * Linv( u ) ]
                 vP3 = _BackProject( jj, ii, vVirtDepth[ii*g_nImgWidth + jj] );
 				vP4 << vP3, 1; // homogeneous coordinate
 				vP4 = mvl::Cart2T( dPose ) * vP4;
@@ -250,16 +260,101 @@ void EstimateCameraPose( GLWindow*, void* )
 				float LeftPix = _Interpolate( vP2(0)-1, vP2(1), vVirtImg );
 				float RightPix = _Interpolate( vP2(0)+2, vP2(1), vVirtImg );
 
-				// first term
-				Eigen::Vector2d Term1;
-				Term1[0] = (RightPix - LeftPix) / 2;
-				Term1[1] = (TopPix - BotPix) / 2;
+				Eigen::Matrix<double, 1, 2> Term1;
+				Term1(0) = (RightPix - LeftPix) / 2;
+				Term1(1) = (TopPix - BotPix) / 2;
 
+				//--------------------- second term 2x3
+
+                // evaluate 'b' = Tprev * Linv( u )
+                // already stored in vP4
+                //vP3 = _BackProject( jj, ii, vVirtDepth[ii*g_nImgWidth + jj] );
+				//vP4 << vP3, 1; // homogeneous coordinate
+				//vP4 = mvl::Cart2T( dPose ) * vP4;
+
+                // fill matrix
+                // 1/c      0       -a/c^2
+                //  0       1/c     -b/c^2
+                Eigen::Matrix< double, 2, 3 > Term2;
+                Term2( 0, 0 ) = 1 / vP4(2);
+                Term2( 0, 1 ) = 0;
+                Term2( 0, 2 ) = - vP4(0) / vP4(2) * vP4(2);
+                Term2( 1, 0 ) = 0;
+                Term2( 1, 1 ) = 1 / vP4(2);
+                Term2( 1, 2 ) = - vP4(1) / vP4(2) * vP4(2);
+
+
+				//--------------------- third term 3x1
+                Eigen::Vector4d Term3i;
+                // last row of Term3 is truncated since it is always 1
+                Eigen::Vector3d Term3;
+
+                //vP3 = _BackProject( jj, ii, vVirtDepth[ii*g_nImgWidth + jj] );
+				vP4 << vP3, 1; // homogeneous coordinate
+
+                Eigen::Matrix4d Gen;
+                // fill Jacobian with T generators
+
+                // 1st generator
+                Gen << 0, 0, 0, 1,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0;
+                Term3i = mvl::Cart2T( dPose ) * Gen * vP4;
+                Term3 = Term3i.block<3,1>(0,0);
+                J( 0, 0 ) = Term1 * Term2 * Term3;
+
+                // 2nd generator
+                Gen << 0, 0, 0, 0,
+                       0, 0, 0, 1,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0;
+                Term3i = mvl::Cart2T( dPose ) * Gen * vP4;
+                Term3 = Term3i.block<3,1>(0,0);
+                J( 0, 1 ) = Term1 * Term2 * Term3;
+
+                // 3rd generator
+                Gen << 0, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 1,
+                       0, 0, 0, 0;
+                Term3i = mvl::Cart2T( dPose ) * Gen * vP4;
+                Term3 = Term3i.block<3,1>(0,0);
+                J( 0, 2 ) = Term1 * Term2 * Term3;
+
+                // 4th generator
+                Gen << 0, 0, 0, 0,
+                       0, 0, 1, 0,
+                       0, -1, 0, 0,
+                       0, 0, 0, 0;
+                Term3i = mvl::Cart2T( dPose ) * Gen * vP4;
+                Term3 = Term3i.block<3,1>(0,0);
+                J( 0, 3 ) = Term1 * Term2 * Term3;
+
+                // 5th generator
+                Gen << 0, 0, -1, 0,
+                       0, 0, 0, 0,
+                       1, 0, 0, 0,
+                       0, 0, 0, 0;
+                Term3i = mvl::Cart2T( dPose ) * Gen * vP4;
+                Term3 = Term3i.block<3,1>(0,0);
+                J( 0, 4 ) = Term1 * Term2 * Term3;
+
+                // 6th generator
+                Gen << 0, 1, 0, 0,
+                       -1, 0, 0, 0,
+                       0, 0, 0, 0,
+                       0, 0, 0, 0;
+                Term3i = mvl::Cart2T( dPose ) * Gen * vP4;
+                Term3 = Term3i.block<3,1>(0,0);
+                J( 0, 5 ) = Term1 * Term2 * Term3;
 
                 // estimate LHS (Hessian)
-//                LHS += J.transpose() * J;
+                // LHS = Hessian = Jt * J
+                LHS += J.transpose() * J;
 
                 // estimate RHS (error)
+                // RHS = Jt * e
 //                RHS += J.transpose() * (Pe - P);
             }
         }
@@ -317,21 +412,30 @@ void ShowCameraAndTextures( GLWindow*, void* )
     }
 
     // draw difference image
-    Eigen::Matrix<unsigned char, Eigen::Dynamic, 1> vImg;
-    Eigen::Matrix<unsigned char, Eigen::Dynamic, 1> vVirtImg;
+//    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> vImg;
+//    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> vVirtImg;
+	std::vector < unsigned char>  vRGB;		// original RGB image
+    Eigen::VectorXf vImg;				// grayscale image
+    Eigen::VectorXf vVirtImg;				// grayscale image
+    Eigen::VectorXf vErrorImg;				// grayscale image
+//    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> vErrorImg;
 
     // resize vectors
-    vImg.resize( g_nImgWidth * g_nImgHeight * 3 );
-    vVirtImg.resize( g_nImgWidth * g_nImgHeight * 3 );
+    vImg.resize( g_nImgWidth * g_nImgHeight );
+    vVirtImg.resize( g_nImgWidth * g_nImgHeight );
 
     // populate vectors
-    Cam.CaptureRGB( vImg.data() );
-    VirtCam.CaptureRGB( vVirtImg.data() );
+//    Cam.CaptureRGB( vImg.data() );
+//    VirtCam.CaptureRGB( vVirtImg.data() );
+	Cam.CaptureRGB( vRGB );
+	_RGB2Gray( vRGB, vImg );
+    VirtCam.CaptureRGB( vRGB );
+	_RGB2Gray( vRGB, vVirtImg );
 
     // calculate difference
-    vVirtImg = vVirtImg - vImg;
+    vErrorImg = vVirtImg - vImg;
 
-    glImgDiff.SetImage( vVirtImg.data(), g_nImgWidth, g_nImgHeight, GL_RGB, GL_UNSIGNED_BYTE );
+//    glImgDiff.SetImage( vErrorImg.data(), g_nImgWidth, g_nImgHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE );
     glImgDiff.SetSizeAsPercentageOfWindow( 0.66, 0.66, 1, 1);
     DrawBorderAsWindowPercentage( 0.66, 0.66, 1, 1 );
 }
