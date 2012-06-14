@@ -204,7 +204,7 @@ void EstimateCameraPose( GLWindow*, void* )
 
 	// assuming depth is not normalized
 //    VirtCam.CaptureDepth( vVirtDepth.data() );
-    VirtCam.CaptureUnnormalizedDepth( vVirtDepth.data() );
+    VirtCam.CaptureDepth( vVirtDepth.data() );
 
     /*
     // check to see if the depth cam works...
