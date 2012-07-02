@@ -95,6 +95,7 @@ Eigen::Vector2d _Project( const Eigen::Vector4d& P ) {
 	// get camera intrinsics
     Eigen::Matrix3d K = Cam.GetKMatrix();
 	T = K * T;
+	T = T / T(2);
 
     return T.block<2,1>(0,0);
 }
@@ -194,16 +195,15 @@ void EstimateCameraPose( GLWindow*, void* )
     VirtCam.CaptureRGB( vRGB );
 	_RGB2Gray( vRGB, vVirtImg );
 
-    /*
-	cv::Mat Tmp1( g_nImgHeight, g_nImgWidth, CV_8UC3, vRGB.data() );
+    /**/
+	cv::Mat Tmp1( g_nImgHeight, g_nImgWidth, CV_32FC1, vImg.data() );
 	cv::imshow( "Img1", Tmp1 );
-	cv::Mat Tmp2( g_nImgHeight, g_nImgWidth, CV_32FC1, vImg.data() );
+	cv::Mat Tmp2( g_nImgHeight, g_nImgWidth, CV_32FC1, vVirtImg.data() );
 	cv::imshow( "Img2", Tmp2 );
 	cv::waitKey(100);
     /**/
 
 	// assuming depth is not normalized
-//    VirtCam.CaptureDepth( vVirtDepth.data() );
     VirtCam.CaptureDepth( vVirtDepth.data() );
 
     /*
@@ -355,18 +355,22 @@ void EstimateCameraPose( GLWindow*, void* )
 
                 // estimate RHS (error)
                 // RHS = Jt * e
-//                RHS += J.transpose() * (Pe - P);
+                RHS += J.transpose() * (vVirtImg[ii*g_nImgWidth + jj] - vImg[ii*g_nImgWidth + jj]);
             }
         }
+		std::cout << "LHS is: " << LHS.transpose() << std::endl;
+		std::cout << "RHS is: " << RHS.transpose() << std::endl;
 
         // calculate deltaPose as Hinv * Jt * error
         Eigen::Vector6d deltaPose;
 //        deltaPose = LHS.inverse() * RHS;
-//        deltaPose = LHS.ldlt().solve(RHS);
+        deltaPose = LHS.ldlt().solve(RHS);
 
 
         // update dPose += deltaPose
         dPose += deltaPose;
+		std::cout << "Delta pose is: " << deltaPose.transpose() << std::endl;
+		std::cout << "New pose is: " << dPose.transpose() << std::endl;
 
         // warp
 //        _WarpDepthMap( vVirtImg, deltaPose );
@@ -412,21 +416,16 @@ void ShowCameraAndTextures( GLWindow*, void* )
     }
 
     // draw difference image
-//    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> vImg;
-//    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> vVirtImg;
-	std::vector < unsigned char>  vRGB;		// original RGB image
-    Eigen::VectorXf vImg;				// grayscale image
+	std::vector < unsigned char>  vRGB;		// original RGB images
+    Eigen::VectorXf vImg;					// grayscale image
     Eigen::VectorXf vVirtImg;				// grayscale image
     Eigen::VectorXf vErrorImg;				// grayscale image
-//    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> vErrorImg;
 
     // resize vectors
     vImg.resize( g_nImgWidth * g_nImgHeight );
     vVirtImg.resize( g_nImgWidth * g_nImgHeight );
 
     // populate vectors
-//    Cam.CaptureRGB( vImg.data() );
-//    VirtCam.CaptureRGB( vVirtImg.data() );
 	Cam.CaptureRGB( vRGB );
 	_RGB2Gray( vRGB, vImg );
     VirtCam.CaptureRGB( vRGB );
@@ -435,7 +434,7 @@ void ShowCameraAndTextures( GLWindow*, void* )
     // calculate difference
     vErrorImg = vVirtImg - vImg;
 
-//    glImgDiff.SetImage( vErrorImg.data(), g_nImgWidth, g_nImgHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE );
+    glImgDiff.SetImage( (unsigned char*)vErrorImg.data(), g_nImgWidth, g_nImgHeight, GL_LUMINANCE, GL_FLOAT );
     glImgDiff.SetSizeAsPercentageOfWindow( 0.66, 0.66, 1, 1);
     DrawBorderAsWindowPercentage( 0.66, 0.66, 1, 1 );
 }
