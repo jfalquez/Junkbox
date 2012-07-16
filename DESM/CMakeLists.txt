@@ -12,7 +12,7 @@ include_directories( ${MVL_INCLUDE_DIRS} )
 include_directories( ${CVARS_INCLUDE_DIR} )
 include_directories( ${OpenCV2_INCLUDE_DIRS} )
 
-add_executable( DESM DESM.cpp )
+add_executable( DESM DESM.cpp se3.cpp so3.cpp )
 
 target_link_libraries( DESM
                         ${SimpleGui_LIBRARIES}
