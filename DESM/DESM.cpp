@@ -13,6 +13,9 @@
 #include "GLHeightMap.h"
 #include "PeaksHeightMap.h"
 
+// Global CVars
+bool& g_bShowFrustum = CVarUtils::CreateCVar( "ShowFrustum", true, "Show camera viewing frustum." );
+
 
 // Global Vars
 GLImage glImgDiff;
@@ -21,12 +24,17 @@ int g_nImgHeight = 128;
 bool g_DoESM = false;
 bool g_Mutex;
 
-// Global CVars
-bool& g_bShowFrustum = CVarUtils::CreateCVar( "ShowFrustum", true, "Show camera viewing frustum." );
 
 // Camera
-GLSimCam Cam;
-Eigen::Matrix4d g_dPose = GLCart2T( -30, -3, -1, 0, 0, 0 ); // initial camera pose
+GLSimCam RefCam; // reference camera we move
+GLSimCam VirtCam; // virtual camera which calculates transformation
+
+// Camera Poses
+Eigen::Matrix4d g_dRefPose = GLCart2T( -30, -3, -1, 0, 0, 0 ); // initial camera pose
+Eigen::Matrix4d g_dVirtPose = g_dRefPose;
+
+
+// Reference Camera Controls
 float g_fRoll = 0;
 float g_fPitch = 0;
 float g_fYaw = 0;
@@ -34,9 +42,6 @@ float g_fForward = 0;
 float g_fRight = 0;
 float g_fDown = 0;
 
-// Reference Camera -- this is only used to show on screen estimated camera pose
-GLSimCam VirtCam;
-Eigen::Matrix4d g_dVirtPose = g_dPose;
 
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -108,7 +113,7 @@ public:
 				break;
 			case 'r': case 'R':
 				g_DoESM = false;
-				g_dVirtPose = g_dPose;
+				g_dVirtPose = g_dRefPose;
 				VirtCam.SetPose( g_dVirtPose );
 				break;
 			}
@@ -127,11 +132,13 @@ Eigen::Vector2d _Project( const Eigen::Vector4d& P )
 	Eigen::Vector3d T = P.block < 3, 1 > ( 0, 0 );
 
 	// get camera intrinsics
-	Eigen::Matrix3d K = Cam.GetKMatrix( );
+	Eigen::Matrix3d K = RefCam.GetKMatrix( );
 	T = K * T;
 	if( T( 2 ) == 0 ) {
 		std::cout << "CRAP! " << T.transpose( ) << std::endl;
 	}
+
+	// de-homogenize
 	T = T / T( 2 );
 
 	return T.block < 2, 1 > ( 0, 0 );
@@ -143,7 +150,7 @@ Eigen::Vector2d _Project( const Eigen::Vector4d& P )
 Eigen::Vector3d _BackProject( int X, int Y, double Depth )
 {
 	// get camera intrinsics
-	Eigen::Matrix3d K = Cam.GetKMatrix( );
+	Eigen::Matrix3d K = RefCam.GetKMatrix( );
 	double cx = K( 0, 2 );
 	double cy = K( 1, 2 );
 	double fx = K( 0, 0 );
@@ -209,20 +216,18 @@ void _RGB2Gray(
 
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void _WarpDepthMap( Eigen::VectorXf& vDM, Eigen::Vector6d Trf )
+void _FlipDepth(
+		Eigen::VectorXf& vDepth //< Input/Output: Depth buffer
+		)
 {
-	// get rotation matrix and translation vector
-	Eigen::Matrix3d R = mvl::Cart2R( Trf.block < 3, 1 > ( 0, 0 ) );
-	Eigen::Vector3d T = Trf.block < 3, 1 > ( 3, 0 );
+	Eigen::VectorXf tmp;
+	tmp = vDepth;
 
-
-	Eigen::Vector3d P;
+	unsigned int Idx;
 	for( int ii = 0; ii < g_nImgHeight; ii++ ) {
 		for( int jj = 0; jj < g_nImgWidth; jj++ ) {
-			P = _BackProject( jj, ii, vDM[ii * g_nImgWidth + jj] );
-			P = R * P;
-			P = P + T;
-			vDM[ii * g_nImgWidth + jj] = P( 2 );
+			Idx = ( g_nImgHeight - ii - 1 ) * g_nImgWidth + jj;
+			vDepth[ ii * g_nImgWidth + jj ] = tmp[ Idx ];
 		}
 	}
 }
@@ -232,14 +237,14 @@ void _WarpDepthMap( Eigen::VectorXf& vDM, Eigen::Vector6d Trf )
 
 void UpdateCameraPose( GLWindow*, void* )
 {
-	g_dPose = g_dPose * GLCart2T( g_fForward, g_fRight, g_fDown, g_fRoll, g_fPitch, g_fYaw );
-	Cam.SetPose( g_dPose );
+	g_dRefPose = g_dRefPose * GLCart2T( g_fForward, g_fRight, g_fDown, g_fRoll, g_fPitch, g_fYaw );
+	RefCam.SetPose( g_dRefPose );
 
 	glEnable( GL_LIGHTING );
 	glEnable( GL_LIGHT0 );
 	glClearColor( 0.0, 0.0, 0.0, 1 );
 
-	Cam.RenderToTexture( ); // will render to texture, then copy texture to CPU memory
+	RefCam.RenderToTexture( ); // will render to texture, then copy texture to CPU memory
 	VirtCam.RenderToTexture( );
 
 	g_Mutex = false;
@@ -252,14 +257,14 @@ void ShowCameraAndTextures( GLWindow*, void* )
 {
 	if( g_bShowFrustum ) {
 		// show the camera
-		Cam.DrawCamera( );
+		RefCam.DrawCamera( );
 		VirtCam.DrawCamera( );
 	}
 
 	/// show textures
-	if( Cam.HasRGB( ) ) {
-		DrawTextureAsWindowPercentage( Cam.RGBTexture( ), Cam.ImageWidth( ),
-				Cam.ImageHeight( ), 0, 0.66, 0.33, 1 );
+	if( RefCam.HasRGB( ) ) {
+		DrawTextureAsWindowPercentage( RefCam.RGBTexture( ), RefCam.ImageWidth( ),
+				RefCam.ImageHeight( ), 0, 0.66, 0.33, 1 );
 		DrawBorderAsWindowPercentage( 0, 0.66, 0.33, 1 );
 	}
 
@@ -271,17 +276,17 @@ void ShowCameraAndTextures( GLWindow*, void* )
 
 	// draw difference image
 	std::vector < unsigned char> vRGB; // original RGB images
-	Eigen::VectorXf vImg; // grayscale image
+	Eigen::VectorXf vRefImg; // grayscale image
 	Eigen::VectorXf vVirtImg; // grayscale image
 	Eigen::VectorXf vErrorImg; // grayscale image
 
 	// resize vectors
-	vImg.resize( g_nImgWidth * g_nImgHeight );
+	vRefImg.resize( g_nImgWidth * g_nImgHeight );
 	vVirtImg.resize( g_nImgWidth * g_nImgHeight );
 
 	// populate vectors
-	Cam.CaptureRGB( vRGB );
-	_RGB2Gray( vRGB, vImg );
+	RefCam.CaptureRGB( vRGB );
+	_RGB2Gray( vRGB, vRefImg );
 	VirtCam.CaptureRGB( vRGB );
 	_RGB2Gray( vRGB, vVirtImg );
 
@@ -303,7 +308,7 @@ void ShowCameraAndTextures( GLWindow*, void* )
 	/**/
 
 	// calculate difference & normalize
-	vErrorImg = ( vVirtImg - vImg ) / 255;
+	vErrorImg = ( vRefImg - vVirtImg ) / 255;
 
 	glImgDiff.SetImage( (unsigned char*) vErrorImg.data( ), g_nImgWidth, g_nImgHeight, GL_LUMINANCE, GL_FLOAT );
 	glImgDiff.SetSizeAsPercentageOfWindow( 0.66, 0.66, 1, 1 );
@@ -312,143 +317,205 @@ void ShowCameraAndTextures( GLWindow*, void* )
 	//fflush( stdout );
 }
 
-Eigen::Matrix4d convertToVisionFrame( Eigen::Matrix4d m )
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+Eigen::Matrix4d _ConvertToVisionFrame( Eigen::Matrix4d M )
 {
-	Eigen::Vector6d dVirtPose = mvl::T2Cart( m );
+	Eigen::Vector6d Pose = mvl::T2Cart( M );
 	double Temp;
-	Temp = dVirtPose( 0 );
-	dVirtPose( 0 ) = dVirtPose( 2 );
-	dVirtPose( 2 ) = dVirtPose( 1 );
-	dVirtPose( 1 ) = Temp;
-	Temp = dVirtPose( 3 );
-	dVirtPose( 3 ) = dVirtPose( 5 );
-	dVirtPose( 5 ) = dVirtPose( 4 );
-	dVirtPose( 4 ) = Temp;
+	Temp = Pose( 0 );
+	Pose( 0 ) = Pose( 2 );
+	Pose( 2 ) = Pose( 1 );
+	Pose( 1 ) = Temp;
+	Temp = Pose( 3 );
+	Pose( 3 ) = Pose( 5 );
+	Pose( 5 ) = Pose( 4 );
+	Pose( 4 ) = Temp;
 
-
-	return mvl::Cart2T( dVirtPose );
+	return mvl::Cart2T( Pose );
 }
 
-Eigen::Matrix4d convertToRoboticsFrame( Eigen::Vector6d dVirtPose )
-{
-	//	Eigen::Vector6d dVirtPose = mvl::T2Cart( m );
-	double Temp;
-	Temp = dVirtPose( 0 );
-	dVirtPose( 0 ) = dVirtPose( 1 );
-	dVirtPose( 1 ) = dVirtPose( 2 );
-	dVirtPose( 2 ) = Temp;
-	Temp = dVirtPose( 3 );
-	dVirtPose( 3 ) = dVirtPose( 4 );
-	dVirtPose( 4 ) = dVirtPose( 5 );
-	dVirtPose( 5 ) = Temp;
 
-	return mvl::Cart2T( dVirtPose );
+/////////////////////////////////////////////////////////////////////////////////////////
+
+Eigen::Matrix4d _ConvertToRoboticsFrame( Eigen::Vector6d Pose )
+{
+	double Temp;
+	Temp = Pose( 0 );
+	Pose( 0 ) = Pose( 1 );
+	Pose( 1 ) = Pose( 2 );
+	Pose( 2 ) = Temp;
+	Temp = Pose( 3 );
+	Pose( 3 ) = Pose( 4 );
+	Pose( 4 ) = Pose( 5 );
+	Pose( 5 ) = Temp;
+
+	return mvl::Cart2T( Pose );
 }
+
+
+/////////////////////////////////////////////////////////////////////////////////////////
+
+Eigen::Matrix4d _ConvertToRoboticsFrame( Eigen::Matrix4d M )
+{
+	Eigen::Vector6d Pose = mvl::T2Cart( M );
+	return _ConvertToRoboticsFrame(Pose);
+}
+
+
 /////////////////////////////////////////////////////////////////////////////////////////
 
 void ESM( )
 {
-	Eigen::Vector6d dVirtPose = mvl::T2Cart( g_dVirtPose );
+	// Generators
+	std::vector < Eigen::Matrix4d > Gen;
+	Gen.resize( 6 );
+
+	// 1st generator
+	Gen[0] << 0, 0, 0, 1,
+			0, 0, 0, 0,
+			0, 0, 0, 0,
+			0, 0, 0, 0;
+
+	// 2nd generator
+	Gen[1] << 0, 0, 0, 0,
+			0, 0, 0, 1,
+			0, 0, 0, 0,
+			0, 0, 0, 0;
+
+	// 3rd generator
+	Gen[2] << 0, 0, 0, 0,
+			0, 0, 0, 0,
+			0, 0, 0, 1,
+			0, 0, 0, 0;
+
+	// 4th generator
+	Gen[3] << 0, 0, 0, 0,
+			0, 0, -1, 0,
+			0, 1, 0, 0,
+			0, 0, 0, 0;
+
+	// 5th generator
+	Gen[4] << 0, 0, 1, 0,
+			0, 0, 0, 0,
+			-1, 0, 0, 0,
+			0, 0, 0, 0;
+
+	// 6th generator
+	Gen[5] << 0, -1, 0, 0,
+			1, 0, 0, 0,
+			0, 0, 0, 0,
+			0, 0, 0, 0;
 
 	while( 1 ) {
 		if( g_DoESM ) {
+
+			// this is the variable we update and at the end
+			// will hold the final transformation between the two cameras
+			// initially it is set to the identity
+			Eigen::Matrix4d dTrv = Eigen::Matrix4d::Identity( );
+
+			// image holders
 			std::vector < unsigned char> vRGB; // original RGB image
-			Eigen::VectorXf vImg; // grayscale image
+			Eigen::VectorXf vRefImg; // grayscale image
 			Eigen::VectorXf vVirtImg; // grayscale image
-			Eigen::VectorXf vVirtDepth;
+			Eigen::VectorXf vVirtDepth; // depth image
 
 			// resize vectors
 			vRGB.resize( g_nImgWidth * g_nImgHeight * 3 );
-			vImg.resize( g_nImgWidth * g_nImgHeight );
+			vRefImg.resize( g_nImgWidth * g_nImgHeight );
 			vVirtImg.resize( g_nImgWidth * g_nImgHeight );
 			vVirtDepth.resize( g_nImgWidth * g_nImgHeight );
 
 			// populate vectors & convert to grayscale
-			Cam.CaptureRGB( vRGB );
-			_RGB2Gray( vRGB, vImg );
+			RefCam.CaptureRGB( vRGB );
+			_RGB2Gray( vRGB, vRefImg );
 			VirtCam.CaptureRGB( vRGB );
 			_RGB2Gray( vRGB, vVirtImg );
 			VirtCam.CaptureDepth( vVirtDepth.data( ) );
+			_FlipDepth( vVirtDepth );
 
-			// initial estimated pose is the last pose
-			Eigen::Matrix4d dPrevPose = Eigen::Matrix4d::Identity( );
-			Eigen::Vector6d dDeltaPose;
-
+			// image error
 			Eigen::VectorXf ImgError;
-			ImgError = vVirtImg - vImg;
+			ImgError = vRefImg - vVirtImg;
 
-			int nCount = 0;
+			// print initial poses
+			std::cout << "Reference Pose: " << mvl::T2Cart( g_dRefPose ).transpose( ) << std::endl;
+			std::cout << "Initial Virtual Pose: " << mvl::T2Cart( g_dVirtPose ).transpose( ) << std::endl;
 
-			std::cout << "Real Pose: " << mvl::T2Cart( g_dPose ).transpose( ) << std::endl;
-			std::cout << "Current Virtual Pose: " << mvl::T2Cart( g_dVirtPose ).transpose( ) << std::endl;
+			// hard limit of iterations so we don't loop forever
+			int nMaxIters = 0;
 
-			while( /* ImgError.norm( ) */ 200 > 100.0 && nCount < 10 && g_DoESM ) {
+			while( /* ImgError.norm( ) */ 200 > 100.0 && nMaxIters < 10 && g_DoESM ) {
 
-				nCount++;
+				// increment counter
+				nMaxIters++;
 
 				// Jacobian
 				Eigen::Matrix<double, 1, 6 > J;
-				J = Eigen::Matrix<double, 1, 6 > ::Zero( );
+				J = Eigen::Matrix< double, 1, 6 > ::Zero( );
 
 				// LHS
 				Eigen::Matrix<double, 6, 6 > LHS;
-				LHS = Eigen::Matrix<double, 6, 6 > ::Zero( );
+				LHS = Eigen::Matrix< double, 6, 6 > ::Zero( );
 
 				// RHS
 				Eigen::Matrix<double, 6, 1 > RHS;
-				RHS = Eigen::Matrix<double, 6, 1 > ::Zero( );
+				RHS = Eigen::Matrix< double, 6, 1 > ::Zero( );
 
-				std::vector < Eigen::Matrix4d > Gen;
-				Gen.resize( 6 );
 
 				for( int ii = 0; ii < g_nImgHeight; ii++ ) {
 					for( int jj = 0; jj < g_nImgWidth; jj++ ) {
 
-						// "virtual" points in
-						Eigen::Vector4d vP4; // homogeneous
-						Eigen::Vector3d vP3; // 3d
-						Eigen::Vector2d vP2; // 2d
+						// variables
+						Eigen::Vector2d Ur; // pixel position
+						Eigen::Vector3d P; // 3d point
+						Eigen::Vector4d Ph; // homogenized point
 
-						// check if point is contained in our model (i.e. has depth)
+						// check if pixel is contained in our model (i.e. has depth)
 						if( vVirtDepth[ii * g_nImgWidth + jj] == 0 ) {
 							continue;
 						}
 
+
 						//--------------------- first term 1x2
 
-						// evaluate 'a' = L[ Tprev * Linv( u ) ]
-						// back project from virtual camera's reference frame
-						vP3 = _BackProject( jj, ii, vVirtDepth[ii * g_nImgWidth + jj] );
+						// evaluate 'a' = L[ Trv * Linv( Uv ) ]
+						// back project to virtual camera's reference frame
+						P = _BackProject( jj, ii, vVirtDepth[ii * g_nImgWidth + jj] );
 
 						// convert to homogeneous coordinate
-						vP4 << vP3, 1;
+						Ph << P, 1;
 
 						// transform point to real camera's reference frame
-						// inv(Twr) * Twv * P
-						vP4 = dPrevPose * vP4;
+						// Trv * P
+						Ph = dTrv * Ph;
+						P = Ph.head(3);
 
-						// project into real camera's reference frame
-						vP2 = _Project( vP4 );
+						// project into reference camera's frame
+						Ur = _Project( Ph );
 
 						// check if point falls in camera's field of view
-						if( vP2( 0 ) < 0 || vP2( 0 ) >= g_nImgWidth || vP2( 1 ) < 0 || vP2( 1 ) >= g_nImgHeight ) {
+						if( Ur( 0 ) < 0 || Ur( 0 ) >= g_nImgWidth || Ur( 1 ) < 0 || Ur( 1 ) >= g_nImgHeight ) {
 							continue;
 						}
 
 						// finite differences
-						float TopPix = _Interpolate( vP2( 0 ), vP2( 1 ) - 1, vImg );
-						float BotPix = _Interpolate( vP2( 0 ), vP2( 1 ) + 1, vImg );
-						float LeftPix = _Interpolate( vP2( 0 ) - 1, vP2( 1 ), vImg );
-						float RightPix = _Interpolate( vP2( 0 ) + 1, vP2( 1 ), vImg );
+						float TopPix = _Interpolate( Ur( 0 ), Ur( 1 ) - 1, vRefImg );
+						float BotPix = _Interpolate( Ur( 0 ), Ur( 1 ) + 1, vRefImg );
+						float LeftPix = _Interpolate( Ur( 0 ) - 1, Ur( 1 ), vRefImg );
+						float RightPix = _Interpolate( Ur( 0 ) + 1, Ur( 1 ), vRefImg );
 
 						Eigen::Matrix<double, 1, 2 > Term1;
-						Term1( 0 ) = ( RightPix - LeftPix ) / 2;
+						Term1( 0 ) = ( LeftPix - RightPix ) / 2;
 						Term1( 1 ) = ( TopPix - BotPix ) / 2;
+
 
 						//--------------------- second term 2x3
 
-						// evaluate 'b' = Tprev * Linv( u )
-						// point already stored in vP4
+						// evaluate 'b' = Trv * Linv( Uv )
+						// this was already calculated for Term1
 
 						// fill matrix
 						// 1/c      0       -a/c^2
@@ -457,113 +524,77 @@ void ESM( )
 						// the projection function already de-homogenizes therefore c = 1
 						Term2( 0, 0 ) = 1;
 						Term2( 0, 1 ) = 0;
-						Term2( 0, 2 ) = -vP2( 0 );
+						Term2( 0, 2 ) = -Ur( 0 );
 						Term2( 1, 0 ) = 0;
 						Term2( 1, 1 ) = 1;
-						Term2( 1, 2 ) = -vP2( 1 );
+						Term2( 1, 2 ) = -Ur( 1 );
 
 
 						//--------------------- third term 3x1
 						Eigen::Vector4d Term3i;
-						// last row of Term3 is truncated since it is always 1
+						// last row of Term3 is truncated since it is always 0
 						Eigen::Vector3d Term3;
 
 						// fill Jacobian with T generators
 
-						// 1st generator
-						Gen[0] << 0, 0, 0, 1,
-								0, 0, 0, 0,
-								0, 0, 0, 0,
-								0, 0, 0, 0;
-						Term3i = mvl::TInv( dPrevPose ) * Gen[0] * vP4;
-						Term3 = Term3i.block < 3, 1 > ( 0, 0 );
+						Term3i = dTrv * Gen[0] * Ph;
+						Term3 = Term3i.head( 3 );
 						J( 0, 0 ) = Term1 * Term2 * Term3;
-//						J( 0, 0 ) = Term3;
 
-						// 2nd generator
-						Gen[1] << 0, 0, 0, 0,
-								0, 0, 0, 1,
-								0, 0, 0, 0,
-								0, 0, 0, 0;
-						Term3i = mvl::TInv( dPrevPose ) * Gen[1] * vP4;
-						Term3 = Term3i.block < 3, 1 > ( 0, 0 );
+						Term3i = dTrv * Gen[1] * Ph;
+						Term3 = Term3i.head( 3 );
 						J( 0, 1 ) = Term1 * Term2 * Term3;
-//						J( 0, 1 ) = Term3;
 
-						// 3rd generator
-						Gen[2] << 0, 0, 0, 0,
-								0, 0, 0, 0,
-								0, 0, 0, 1,
-								0, 0, 0, 0;
-						Term3i = mvl::TInv( dPrevPose ) * Gen[2] * vP4;
-						Term3 = Term3i.block < 3, 1 > ( 0, 0 );
+						Term3i = dTrv * Gen[2] * Ph;
+						Term3 = Term3i.head( 3 );
 						J( 0, 2 ) = Term1 * Term2 * Term3;
-//						J( 0, 2 ) = Term3;
 
-						// 4th generator
-						Gen[3] << 0, 0, 0, 0,
-								0, 0, -1, 0,
-								0, 1, 0, 0,
-								0, 0, 0, 0;
-						Term3i = mvl::TInv( dPrevPose ) * Gen[3] * vP4;
-						Term3 = Term3i.block < 3, 1 > ( 0, 0 );
+						Term3i = dTrv * Gen[3] * Ph;
+						Term3 = Term3i.head( 3 );
 						J( 0, 3 ) = Term1 * Term2 * Term3;
-//						J( 0, 3 ) = Term3;
 
-						// 5th generator
-						Gen[4] << 0, 0, 1, 0,
-								0, 0, 0, 0,
-								-1, 0, 0, 0,
-								0, 0, 0, 0;
-						Term3i = mvl::TInv( dPrevPose ) * Gen[4] * vP4;
-						Term3 = Term3i.block < 3, 1 > ( 0, 0 );
+						Term3i = dTrv * Gen[4] * Ph;
+						Term3 = Term3i.head( 3 );
 						J( 0, 4 ) = Term1 * Term2 * Term3;
-//						J( 0, 4 ) = Term3;
 
-						// 6th generator
-						Gen[5] << 0, -1, 0, 0,
-								1, 0, 0, 0,
-								0, 0, 0, 0,
-								0, 0, 0, 0;
-						Term3i = mvl::TInv( dPrevPose ) * Gen[5] * vP4;
-						Term3 = Term3i.block < 3, 1 > ( 0, 0 );
+						Term3i = dTrv * Gen[5] * Ph;
+						Term3 = Term3i.head( 3 );
 						J( 0, 5 ) = Term1 * Term2 * Term3;
-//						J( 0, 5 ) = Term3;
-
-//						Eigen::Matrix4d mFD;
-//						mFD = ((dPrevPose * mvl::Cart2T(g_Delta)) - (dPrevPose * mvl::Cart2T(-v6A))) / 2;
-//						std::cout << mFD << std::endl;
-
 
 
 						// estimate LHS (Hessian)
 						// LHS = Hessian = Jt * J
 						LHS += J.transpose( ) * J;
-						//						std::cout << "J is: " << std::endl << J << std::endl;
+						//std::cout << "J is: " << std::endl << J << std::endl;
 
 						// estimate RHS (error)
 						// RHS = Jt * e
-						RHS += J.transpose( ) * ( vVirtImg[ii * g_nImgWidth + jj] - vImg[ii * g_nImgWidth + jj] );
+						RHS += J.transpose( ) * ( vRefImg[ii * g_nImgWidth + jj] - vVirtImg[ii * g_nImgWidth + jj] );
 					}
 				}
-				std::cout << "LHS is: " << std::endl << LHS.transpose( ) << std::endl;
+				std::cout << "LHS is: " << std::endl << LHS << std::endl;
 				std::cout << "RHS is: " << RHS.transpose( ) << std::endl;
 
 				// calculate deltaPose as Hinv * Jt * error
 				//deltaPose = LHS.inverse() * RHS;
-				dDeltaPose = LHS.ldlt( ).solve( RHS );
+				Eigen::Vector6d Delta;
+				Delta = LHS.ldlt( ).solve( RHS );
 
-				// convert deltaPose from "Lie" to "Cartesian" =(
-				Sophus::SE3 deltaPoseT;
-				deltaPoseT = Sophus::SE3::exp( dDeltaPose );
+				// convert Delta from Lie
+				Sophus::SE3 DeltaPose;
+				DeltaPose = Sophus::SE3::exp( Delta );
 
-				std::cout << "Delta pose is: " << dDeltaPose.transpose( ) << std::endl;
+				std::cout << "Delta Pose is: " << mvl::T2Cart( DeltaPose.matrix( ) ).transpose( ) << std::endl;
 
-				dPrevPose = dPrevPose * mvl::Cart2T(-dDeltaPose);
+				// update Trv
+				dTrv = dTrv * DeltaPose.matrix();
 
-				//VirtCam.SetPose( g_dVirtPose * convertToRoboticsFrame( deltaPose ) );
-				VirtCam.SetPose( g_dVirtPose * convertToRoboticsFrame( dDeltaPose ) );
-				std::cout << "New Virtual Pose is: " << mvl::T2Cart( g_dVirtPose * convertToRoboticsFrame( -dDeltaPose ) ).transpose() << std::endl;
+				// update virtual camera position
+				// Tr = Tv * Tvr = Tv * I * Delta1 * Delta2 * etc
+				// REMEMBER to convert from vision frame to robotics frame
+				g_dVirtPose = g_dVirtPose * _ConvertToRoboticsFrame( DeltaPose.matrix() );
+				VirtCam.SetPose( g_dVirtPose );
+				std::cout << "New Virtual Pose is: " << mvl::T2Cart( g_dVirtPose ).transpose( ) << std::endl;
 
 				// we cannot RenderToTexture() here since it is a different thread
 				// we need to synchronize with the GUI so that the Virtual Camera is
@@ -573,18 +604,19 @@ void ESM( )
 				while( g_Mutex ) {
 				}
 
+				// at this point the FB has filled with the new camera's position
 				VirtCam.CaptureRGB( vRGB );
 				_RGB2Gray( vRGB, vVirtImg );
 				VirtCam.CaptureDepth( vVirtDepth.data( ) );
-
+				_FlipDepth( vVirtDepth );
 
 				// calculate new error
-				ImgError = vVirtImg - vImg;
+				ImgError = vRefImg - vVirtImg;
 				std::cout << "Error is: " << ImgError.norm( ) << std::endl;
 			}
 
-			std::cout << "Real Pose: " << mvl::T2Cart( g_dPose ).transpose( ) << std::endl;
-			std::cout << "Estimated Pose: " << (mvl::T2Cart( g_dVirtPose ) + dDeltaPose).transpose( ) << std::endl;
+			std::cout << "Reference Pose: " << mvl::T2Cart( g_dRefPose ).transpose( ) << std::endl;
+			std::cout << "Final Estimated Pose: " << mvl::T2Cart( g_dVirtPose ).transpose( ) << std::endl;
 			g_DoESM = false;
 		}
 	}
@@ -643,7 +675,7 @@ int main( int argc, char** argv )
 			0, g_nImgHeight, g_nImgHeight / 2,
 			0, 0, 1;
 
-	Cam.Init( &pWin->SceneGraph( ), g_dPose, dK, g_nImgWidth, g_nImgHeight, eSimCamRGB );
+	RefCam.Init( &pWin->SceneGraph( ), g_dRefPose, dK, g_nImgWidth, g_nImgHeight, eSimCamRGB );
 	VirtCam.Init( &pWin->SceneGraph( ), g_dVirtPose, dK, g_nImgWidth, g_nImgHeight, eSimCamDepth | eSimCamRGB );
 
 	glEnable( GL_LIGHT0 ); // activate light0
