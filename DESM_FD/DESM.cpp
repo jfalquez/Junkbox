@@ -6,9 +6,6 @@
 
 #include <opencv2/highgui/highgui.hpp>
 
-#include "se3.h"
-#include "so3.h"
-
 #include "GLMosaic.h"
 #include "GLHeightMap.h"
 #include "PeaksHeightMap.h"
@@ -682,8 +679,8 @@ void ESM( )
 				Delta = LHS.ldlt( ).solve( RHS );
 
 				// convert Delta from Lie
-				Sophus::SE3 DeltaPose;
-				DeltaPose = Sophus::SE3::exp( Delta );
+				//Sophus::SE3 DeltaPose;
+				//DeltaPose = Sophus::SE3::exp( Delta );
 
 				std::cout << "Delta Pose is: " << mvl::T2Cart( DeltaPose.matrix( ) ).transpose( ) << std::endl;
 
