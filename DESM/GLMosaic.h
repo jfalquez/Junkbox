@@ -39,20 +39,22 @@ public:
 		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 		glShadeModel( GL_SMOOTH );
 
-		/* Debugging Point
+		/*
+		// Debugging Point
 		glPointSize(1.0);
 		glBegin( GL_POINTS );
 		glColor3f( 1.0, 0.0, 0.0 );
 		glVertex3f( 0, 0, 0 );
 		glEnd();
-		*/
+		/* */
 
 		/* */
 		glBegin( GL_QUADS );
 
 		m_nColorId = 0;
-		for( float y = 0; y <= m_nHeight; y += 4 ) {
-			for( float x = 0; x <= m_nWidth; x += 4 ) {
+		unsigned int Delta = 20;
+		for( float y = 0; y <= m_nHeight; y += Delta ) {
+			for( float x = 0; x <= m_nWidth; x += Delta ) {
 				glColor3f( r[m_nColorId], g[m_nColorId], b[m_nColorId] );
 				m_nColorId++;
 				if( m_nColorId >= 10000 ) {
@@ -65,21 +67,21 @@ public:
 				if( m_nColorId >= 10000 ) {
 					m_nColorId = 0;
 				}
-				glVertex3f( 0, x, y + 4 );
+				glVertex3f( 0, x, y + Delta );
 
 				glColor3f( r[m_nColorId], g[m_nColorId], b[m_nColorId] );
 				m_nColorId++;
 				if( m_nColorId >= 10000 ) {
 					m_nColorId = 0;
 				}
-				glVertex3f( 0, x + 4, y + 4 );
+				glVertex3f( 0, x + Delta, y + Delta );
 
 				glColor3f( r[m_nColorId], g[m_nColorId], b[m_nColorId] );
 				m_nColorId++;
 				if( m_nColorId >= 10000 ) {
 					m_nColorId = 0;
 				}
-				glVertex3f( 0, x + 4, y );
+				glVertex3f( 0, x + Delta, y );
 			}
 		}
 		glEnd( );
