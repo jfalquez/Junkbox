@@ -12,6 +12,7 @@
  * VARIABLES
  *
  **************************************************************************************************/
+
 #define IMG_HEIGHT 512
 #define IMG_WIDTH  512
 
@@ -21,7 +22,7 @@ GLImgPlane glImgPlane;
 
 // Global CVars
 bool&            g_bShowFrustum   = CVarUtils::CreateCVar( "Cam.ShowFrustum", true, "Show cameras viewing frustum." );
-unsigned int&    g_nMaxIterations = CVarUtils::CreateCVar( "ESM.MaxIterations", 200u, "Max number of iterations." );
+unsigned int&    g_nMaxIterations = CVarUtils::CreateCVar( "ESM.MaxIterations", 500u, "Max number of iterations." );
 Eigen::Vector6d& g_dRefPose       = CVarUtils::CreateCVar( "Cam.Pose.Ref", Eigen::Vector6d( Eigen::Vector6d::Zero() ),
                                   "Reference camera's pose." );
 Eigen::Vector6d& g_dVirtPose = CVarUtils::CreateCVar( "Cam.Pose.Virt", Eigen::Vector6d( Eigen::Vector6d::Zero() ),
@@ -168,6 +169,27 @@ void _RGB2Gray(
     }
 }
 
+// //////////////////////////////////////////////////////////////////////////////
+void _FlipImg(
+        Eigen::Matrix< unsigned char, 1, Eigen::Dynamic >& vImg    // < Input/Output: Img buffer
+        )
+ {
+    Eigen::Matrix< unsigned char, 1, Eigen::Dynamic > tmp;
+
+    tmp = vImg;
+
+    unsigned int nImgHeight = RefCam.ImageHeight();
+    unsigned int nImgWidth  = RefCam.ImageWidth();
+    unsigned int Idx;
+
+    for( int ii = 0; ii < nImgHeight; ii++ ) {
+        for( int jj = 0; jj < nImgWidth; jj++ ) {
+            Idx                           = (nImgHeight - ii - 1) * nImgWidth + jj;
+            vImg[ii * nImgWidth + jj] = tmp[Idx];
+        }
+    }
+}
+
 // ///////////////////////////////////////////////////////////////////////////////////////
 void UpdateCameraPose(
         GLWindow*,
@@ -210,10 +232,9 @@ void ShowCameraAndTextures(
     }
 
     // draw difference image
-    std::vector<unsigned char> vRGB;         // original RGB images
-    Eigen::VectorXf            vRefImg;      // grayscale image
-    Eigen::VectorXf            vVirtImg;     // grayscale image
-    Eigen::VectorXf            vErrorImg;    // grayscale image
+    Eigen::Matrix< unsigned char, 1, Eigen::Dynamic > vRefImg;
+    Eigen::Matrix< unsigned char, 1, Eigen::Dynamic > vVirtImg;
+    Eigen::Matrix< unsigned char, 1, Eigen::Dynamic > vErrorImg;
     unsigned int               nImgWidth  = RefCam.ImageWidth();
     unsigned int               nImgHeight = RefCam.ImageHeight();
 
@@ -222,22 +243,14 @@ void ShowCameraAndTextures(
     vVirtImg.resize( nImgWidth * nImgHeight );
 
     // populate vectors
-    RefCam.CaptureRGB( vRGB );
-    _RGB2Gray( vRGB, vRefImg );
-    VirtCam.CaptureRGB( vRGB );
-    _RGB2Gray( vRGB, vVirtImg );
+	RefCam.CaptureGrey( vRefImg.data() );
+	VirtCam.CaptureGrey( vVirtImg.data() );
 
     // calculate error
     vErrorImg = vRefImg - vVirtImg;
+	_FlipImg(vErrorImg);
 
-    // normalize error
-    vErrorImg = vErrorImg.array().abs();
-
-    if( vErrorImg.maxCoeff() != 0 ) {
-        vErrorImg = vErrorImg / vErrorImg.maxCoeff();
-    }
-
-    glImgDiff.SetImage( (unsigned char*)vErrorImg.data(), nImgWidth, nImgHeight, GL_LUMINANCE, GL_FLOAT );
+    glImgDiff.SetImage( (unsigned char*)vErrorImg.data(), nImgWidth, nImgHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE );
     glImgDiff.SetSizeAsPercentageOfWindow( 0.66, 0.66, 1, 1 );
     DrawBorderAsWindowPercentage( 0.66, 0.66, 1, 1 );
 }
@@ -264,12 +277,15 @@ void ESM()
             // this variable holds the estimated transform
             Eigen::Matrix4d dTrv = Eigen::Matrix4d::Identity();
 
-            // this variable holds the delta update soliution
+            // this variable holds the delta update solution
             Eigen::Matrix4d dTdelta;
 
             // keep track of errors
 			double NewError;
             double PrevError = ESM.Error();
+
+			// keep track of time
+			double dTs = mvl::Tic();
 
             while( (nMaxIters < g_nMaxIterations) && g_DoESM ) {
                 std::cout << "////////////////////////////////////////////////////////////////////////////////"
@@ -306,10 +322,12 @@ void ESM()
 
 				PrevError = NewError;
             }
+			dTs = mvl::TocMS(dTs);
 
             std::cout << std::endl << "Reference Pose: " << g_dRefPose.transpose() << std::endl;
             std::cout << "Final Estimated Pose: " << g_dVirtPose.transpose() << std::endl;
 			std::cout << "Pose Difference: " << (g_dRefPose - g_dVirtPose).transpose() << std::endl;
+			std::cout << "Time: " << dTs << " ms." << std::endl;
 
             g_DoESM = false;
         }
@@ -348,6 +366,17 @@ int main(
     glImgDiff.SetVisible();
     glImgDiff.SetPerceptable( false );
 
+
+	// try mesh
+	/*
+	GLMesh glMesh;
+	glMesh.Init("CityBlock.blend");
+	glMesh.SetVisible();
+	glMesh.SetPerceptable(true);
+	glMesh.SetPose( 0, 0, 0, 180, 0, 0 );
+	pWin->AddChildToRoot( &glMesh );
+	*/
+
     // register objects
     pWin->AddChildToRoot( &glImgPlane );
     pWin->AddChildToRoot( &glImgDiff );
@@ -358,9 +387,9 @@ int main(
     dK << IMG_WIDTH, 0, IMG_WIDTH / 2, 0, IMG_HEIGHT, IMG_HEIGHT / 2, 0, 0, 1;
 
     // initialize cameras
-    RefCam.Init( &pWin->SceneGraph(), mvl::Cart2T( g_dRefPose ), dK, IMG_WIDTH, IMG_HEIGHT, eSimCamRGB );
+    RefCam.Init( &pWin->SceneGraph(), mvl::Cart2T( g_dRefPose ), dK, IMG_WIDTH, IMG_HEIGHT, eSimCamRGB | eSimCamLuminance );
     VirtCam.Init( &pWin->SceneGraph(), mvl::Cart2T( g_dVirtPose ), dK, IMG_WIDTH, IMG_HEIGHT,
-                  eSimCamDepth | eSimCamRGB );
+                  eSimCamDepth | eSimCamRGB | eSimCamLuminance );
 
     // set up lighting
     glEnable( GL_LIGHT0 );    // activate light0
