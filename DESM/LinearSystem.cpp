@@ -9,6 +9,8 @@
 #include "se3.h"
 #include "so3.h"
 #include <Mvlpp/Mvl.h>
+#include <opencv/cv.h>
+
 
 LinearSystem::LinearSystem()
  {
@@ -39,13 +41,18 @@ LinearSystem::~LinearSystem() {}
 
 // //////////////////////////////////////////////////////////////////////////////
 void LinearSystem::Init(
-        GLSimCam* RefCam,
-        GLSimCam* VirtCam
+        const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& RefImg,	// < Input: Reference image
+        GLSimCam* VirtCam,												// < Input: Virtual camera handle
+        bool Decimate													// < Input: True if decimate
         )
  {
+	// this is such a crappy hack given how FBO works as a singleton
+	// we cannot create SimCams with different sizes
+
+	if( Decimate == false ) {
     // store parameters
-    m_nImgWidth  = RefCam->ImageWidth();
-    m_nImgHeight = RefCam->ImageHeight();
+    m_nImgWidth  = VirtCam->ImageWidth();
+    m_nImgHeight = VirtCam->ImageHeight();
 
     // store K matrix in robotics frame
     // permutation matrix
@@ -53,17 +60,17 @@ void LinearSystem::Init(
 
     M << 0, 1, 0, 0, 0, 1, 1, 0, 0;
 
-    m_Kv = RefCam->GetKMatrix();
+    m_Kv = VirtCam->GetKMatrix();
     m_Kr = m_Kv * M;
 
     // resize vectors
-    m_vRefImg.resize( m_nImgWidth * m_nImgHeight );
     m_vVirtImg.resize( m_nImgWidth * m_nImgHeight );
     m_vVirtDepth.resize( m_nImgWidth * m_nImgHeight );
 
-    // populate vectors & convert to greyscale
-    RefCam->CaptureGrey( m_vRefImg.data() );
-    _FlipImg( m_vRefImg );
+	// RefImg is assumed to have top-left origin
+	m_vRefImg = RefImg;
+
+	// populate vectors
     VirtCam->CaptureGrey( m_vVirtImg.data() );
     _FlipImg( m_vVirtImg );
     VirtCam->CaptureDepth( m_vVirtDepth.data() );
@@ -82,6 +89,68 @@ void LinearSystem::Init(
     m_dError    = ImgError.lpNorm<1>();
 
     std::cout << "Error is: " << Error() << std::endl;
+	} else {
+    // store parameters
+    m_nImgWidth  = VirtCam->ImageWidth();
+    m_nImgHeight = VirtCam->ImageHeight();
+
+    // store K matrix in robotics frame
+    // permutation matrix
+    Eigen::Matrix3d M;
+
+    M << 0, 1, 0, 0, 0, 1, 1, 0, 0;
+
+    m_Kv = VirtCam->GetKMatrix();
+    m_Kr = m_Kv * M;
+	m_Kr = m_Kr / 4;
+
+    // populate vectors with decimated data
+	Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> Img;
+	Img.resize( m_nImgWidth * m_nImgHeight );
+	Eigen::VectorXf Depth;
+	Depth.resize( m_nImgWidth * m_nImgHeight );
+
+    VirtCam->CaptureGrey( Img.data() );
+    _FlipImg( Img );
+    VirtCam->CaptureDepth( Depth.data() );
+    _FlipDepth( Depth );
+
+	// decimate image
+	m_vVirtImg.resize( (m_nImgHeight/4) * (m_nImgWidth/4) );
+	cv::Mat In( m_nImgHeight, m_nImgWidth, CV_8UC1, Img.data() );
+	cv::Mat Out;
+	cv::resize( In, Out, cv::Size(0,0), 0.25, 0.25 );
+	memcpy( m_vVirtImg.data(), Out.data, (m_nImgHeight/4) * (m_nImgWidth/4) );
+
+	// decimate depth
+	m_vVirtDepth.resize( (m_nImgHeight/4) * (m_nImgWidth/4) );
+	In = cv::Mat( m_nImgHeight, m_nImgWidth, CV_32FC1, Depth.data() );
+	cv::resize( In, Out, cv::Size(0,0), 0.25, 0.25 );
+	memcpy( m_vVirtDepth.data(), Out.data, (m_nImgHeight/4) * (m_nImgWidth/4) * 4 );
+
+	// RefImg is assumed to have top-left origin
+	m_vRefImg = RefImg;
+
+	// populate vectors
+
+    // print initial error
+    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> ImgError;
+
+    ImgError = m_vRefImg - m_vVirtImg;
+
+    // initialize estimate
+    m_dTrv = Eigen::Matrix4d::Identity();
+
+	// re-adjust image height and width
+	m_nImgHeight = m_nImgHeight / 4;
+	m_nImgWidth = m_nImgWidth / 4;
+
+    // print initial error
+    m_nErrorPts = m_nImgHeight * m_nImgWidth;
+    m_dError    = ImgError.lpNorm<1>();
+
+    std::cout << "Error is: " << Error() << std::endl;
+	}
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -99,7 +168,7 @@ Eigen::Matrix4d LinearSystem::Solve()
 
     // _BuildSystem( this, 0, m_nImgWidth, 0, m_nImgHeight );
 
-    /*  */
+    /*
 
     // 4 ways
     pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 0, m_nImgHeight / 4 );
@@ -117,7 +186,7 @@ Eigen::Matrix4d LinearSystem::Solve()
 
     /*  */
 
-    /*
+    /* */
     // 8 ways
     pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 0, m_nImgHeight/8 );
     m_ThreadGrp.add_thread(pT);
@@ -131,17 +200,13 @@ Eigen::Matrix4d LinearSystem::Solve()
     m_ThreadGrp.add_thread(pT);
     pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 5*m_nImgHeight/8, 3*m_nImgHeight/4 );
     m_ThreadGrp.add_thread(pT);
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 3*m_nImgHeight/4, 7*m_nImgHeight/8 );
-    m_ThreadGrp.add_thread(pT);
-    _BuildSystem( this, 0, m_nImgWidth, 7*m_nImgHeight/8, m_nImgHeight );
-    */
+//    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 3*m_nImgHeight/4, 7*m_nImgHeight/8 );
+//    m_ThreadGrp.add_thread(pT);
+    _BuildSystem( this, 0, m_nImgWidth, 3*m_nImgHeight/4, m_nImgHeight );
+    /* */
 
     // wait for all threads to finish
-    double t = mvl::Tic();
-
     m_ThreadGrp.join_all();
-
-    std::cout << "------------- Wait: " << mvl::Toc( t ) << std::endl;
 
     // calculate deltaPose as Hinv * Jt * error
     // deltaPose = LHS.inverse() * RHS;

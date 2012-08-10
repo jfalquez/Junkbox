@@ -17,10 +17,11 @@ class LinearSystem
 
         virtual ~LinearSystem();
 
-        void Init(
-                GLSimCam* RefCam,
-                GLSimCam* VirtCam
-                );
+		void Init(
+				const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& RefImg,	// < Input: Reference image
+				GLSimCam* VirtCam,												// < Input: Virtual camera handle
+				bool Decimate = false											// < Input: True if decimate
+				);
         Eigen::Matrix4d Solve();
         void ApplyUpdate();
         double Error();

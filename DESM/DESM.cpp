@@ -2,6 +2,7 @@
 #include <SimpleGui/Gui.h>
 #include <boost/thread.hpp>
 #include <Mvlpp/Mvl.h>
+#include <opencv/cv.h>
 #include <opencv2/highgui/highgui.hpp>
 #include "GLImgPlane.h"
 #include "CVarHelpers.h"
@@ -29,11 +30,12 @@ Eigen::Vector6d& g_dVirtPose = CVarUtils::CreateCVar( "Cam.Pose.Virt", Eigen::Ve
                                    "Virtual camera's pose." );
 
 // Global Vars
-volatile bool g_DoESM = false;
+volatile bool g_bLocalize = false;
+volatile bool g_bRendered = false;
 
 // Cameras
-GLSimCam RefCam;     // reference camera we move
-GLSimCam VirtCam;    // virtual camera which calculates transformation
+GLSimCam RefCam;     // reference camera
+GLSimCam VirtCam;    // virtual camera from which calculates transformation
 
 // Reference Camera Controls
 Eigen::Vector6d g_dRefVel = Eigen::Vector6d::Zero();
@@ -129,11 +131,11 @@ class GuiWindow:
                         break;
                     case 't':
                     case 'T':
-                        g_DoESM = true;
+                        g_bLocalize = true;
                         break;
                     case 'r':
                     case 'R':
-                        g_DoESM     = false;
+                        g_bLocalize     = false;
                         g_dVirtPose = g_dRefPose;
 
                         VirtCam.SetPose( mvl::Cart2T( g_dVirtPose ) );
@@ -144,30 +146,6 @@ class GuiWindow:
             return SimpleDefaultEventHandler( e );
         }
 };
-
-
-// ///////////////////////////////////////////////////////////////////////////////////////
-void _RGB2Gray(
-        const std::vector<unsigned char>& RGB,    // < Input: RGB image
-        Eigen::VectorXf&                  Gray    // < Output: Grayscale image
-        )
- {
-    unsigned int nImgHeight = RefCam.ImageHeight();
-    unsigned int nImgWidth  = RefCam.ImageWidth();
-    unsigned int Idx;
-
-    for( int ii = 0; ii < nImgHeight; ii++ ) {
-        for( int jj = 0; jj < nImgWidth; jj++ ) {
-            // with flipping
-            Idx                       = (nImgHeight - ii - 1) * nImgWidth * 3 + jj * 3;
-            Gray[ii * nImgWidth + jj] = float(RGB[Idx] + RGB[Idx + 1] + RGB[Idx + 2]) / 3.0;
-
-            // without flipping
-            // Idx = ii * g_nImgWidth * 3 + jj * 3;
-            // Gray[ii * g_nImgWidth + jj] = float(RGB[Idx] + RGB[Idx + 1] + RGB[Idx + 2] ) / 3.0;
-        }
-    }
-}
 
 // //////////////////////////////////////////////////////////////////////////////
 void _FlipImg(
@@ -204,6 +182,7 @@ void UpdateCameraPose(
     glClearColor( 0.0, 0.0, 0.0, 1 );
     RefCam.RenderToTexture();    // will render to texture, then copy texture to CPU memory
     VirtCam.RenderToTexture();
+	g_bRendered = true;
 }
 
 // ///////////////////////////////////////////////////////////////////////////////////////
@@ -219,14 +198,14 @@ void ShowCameraAndTextures(
     }
 
     // / show textures
-    if( RefCam.HasRGB() ) {
-        DrawTextureAsWindowPercentage( RefCam.RGBTexture(), RefCam.ImageWidth(), RefCam.ImageHeight(), 0, 0.66, 0.33,
+    if( RefCam.HasGrey() ) {
+        DrawTextureAsWindowPercentage( RefCam.GreyTexture(), RefCam.ImageWidth(), RefCam.ImageHeight(), 0, 0.66, 0.33,
                                        1 );
         DrawBorderAsWindowPercentage( 0, 0.66, 0.33, 1 );
     }
 
-    if( VirtCam.HasRGB() ) {
-        DrawTextureAsWindowPercentage( VirtCam.RGBTexture(), VirtCam.ImageWidth(), VirtCam.ImageHeight(), 0.33, 0.66,
+    if( VirtCam.HasGrey() ) {
+        DrawTextureAsWindowPercentage( VirtCam.GreyTexture(), VirtCam.ImageWidth(), VirtCam.ImageHeight(), 0.33, 0.66,
                                        0.66, 1 );
         DrawBorderAsWindowPercentage( 0.33, 0.66, 0.66, 1 );
     }
@@ -256,20 +235,36 @@ void ShowCameraAndTextures(
 }
 
 // ///////////////////////////////////////////////////////////////////////////////////////
-void ESM()
+void Localizer()
  {
     LinearSystem ESM;
 
     while( 1 ) {
-        if( g_DoESM ) {
+        if( g_bLocalize ) {
             Eigen::Vector6d dInitialVirtPose = g_dVirtPose;
 
             // print initial poses
             std::cout << "Reference Pose: " << g_dRefPose.transpose() << std::endl;
             std::cout << "Initial Virtual Pose: " << g_dVirtPose.transpose() << std::endl;
 
+			//
+			//------------------------------------- Coarse Localization
+			//
+
+			// capture reference image
+			Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> RefImg;
+			Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> RefImgD;
+			RefImg.resize( IMG_HEIGHT * IMG_WIDTH );
+		    RefCam.CaptureGrey( RefImg.data() );
+			_FlipImg( RefImg );
+			RefImgD.resize( IMG_HEIGHT/4 * IMG_WIDTH/4 );
+			cv::Mat In( IMG_HEIGHT, IMG_WIDTH, CV_8UC1, RefImg.data() );
+			cv::Mat Out;
+			cv::resize( In, Out, cv::Size(0,0), 0.25, 0.25 );
+			memcpy( RefImgD.data(), Out.data, IMG_HEIGHT/4 * IMG_WIDTH/4 );
+
             // initialize system of equations
-            ESM.Init( &RefCam, &VirtCam );
+            ESM.Init( RefImgD, &VirtCam, true );
 
             // hard limit of iterations so we don't loop forever
             int nMaxIters = 0;
@@ -287,7 +282,7 @@ void ESM()
 			// keep track of time
 			double dTs = mvl::Tic();
 
-            while( (nMaxIters < g_nMaxIterations) && g_DoESM ) {
+            while( (nMaxIters < g_nMaxIterations) && g_bLocalize ) {
                 std::cout << "////////////////////////////////////////////////////////////////////////////////"
                           << std::endl;
 
@@ -295,7 +290,9 @@ void ESM()
                 nMaxIters++;
 
                 // solve system
+				double dTi = mvl::Tic();
                 dTdelta = ESM.Solve();
+				std::cout << "Solving took: " << mvl::Toc(dTi) << std::endl;
 
                 // show solution
                 std::cout << "Delta Pose is: " << mvl::T2Cart( dTdelta ).transpose() << std::endl;
@@ -316,7 +313,81 @@ void ESM()
                 std::cout << "Error is: " << NewError << std::endl;
 
                 // if error change is too small, break
-                if( fabs( PrevError - NewError ) < 1e-8 ) {
+                if( fabs( PrevError - NewError ) < 1e-4 ) {
+                    break;
+                }
+
+				PrevError = NewError;
+            }
+
+            std::cout << std::endl << "Reference Pose: " << g_dRefPose.transpose() << std::endl;
+            std::cout << "Final Estimated Pose: " << g_dVirtPose.transpose() << std::endl;
+			std::cout << "Pose Difference: " << (g_dRefPose - g_dVirtPose).transpose() << std::endl;
+			while(1) {}
+
+			//
+			//------------------------------------- Refine Localization
+			//
+
+			std::cout << std::endl;
+			std::cout << "======================== REFINING ========================" << std::endl;
+			std::cout << std::endl;
+
+			// wait for GUI loop to render in new position
+			g_bRendered = false;
+			while( g_bRendered == false ) { }
+
+			// capture reference image
+		    RefCam.CaptureGrey( RefImg.data() );
+			_FlipImg( RefImg );
+
+            // initialize system of equations
+            ESM.Init( RefImg, &VirtCam );
+
+            // hard limit of iterations so we don't loop forever
+            nMaxIters = 0;
+
+            // this variable holds the estimated transform
+            dTrv = Eigen::Matrix4d::Identity();
+
+            // keep track of errors
+            PrevError = ESM.Error();
+
+			// reset initial pose
+			dInitialVirtPose = g_dVirtPose;
+
+            while( (nMaxIters < g_nMaxIterations) && g_bLocalize ) {
+                std::cout << "////////////////////////////////////////////////////////////////////////////////"
+                          << std::endl;
+
+                // increment counter
+                nMaxIters++;
+
+                // solve system
+				double dTi = mvl::Tic();
+                dTdelta = ESM.Solve();
+				std::cout << "Solving took: " << mvl::Toc(dTi) << std::endl;
+
+                // show solution
+                std::cout << "Delta Pose is: " << mvl::T2Cart( dTdelta ).transpose() << std::endl;
+
+                // update Trv
+                ESM.ApplyUpdate();
+
+                dTrv = dTrv * mvl::TInv( dTdelta );
+
+                // update camera position
+                g_dVirtPose = dInitialVirtPose - mvl::T2Cart( dTrv );
+                VirtCam.SetPose( mvl::Cart2T( g_dVirtPose ) );
+
+				// get error
+				NewError = ESM.Error();
+
+                std::cout << "New Virtual Pose is: " << g_dVirtPose.transpose() << std::endl;
+                std::cout << "Error is: " << NewError << std::endl;
+
+                // if error change is too small, break
+                if( fabs( PrevError - NewError ) < 1e-2 ) {
                     break;
                 }
 
@@ -324,12 +395,13 @@ void ESM()
             }
 			dTs = mvl::TocMS(dTs);
 
+
             std::cout << std::endl << "Reference Pose: " << g_dRefPose.transpose() << std::endl;
             std::cout << "Final Estimated Pose: " << g_dVirtPose.transpose() << std::endl;
 			std::cout << "Pose Difference: " << (g_dRefPose - g_dVirtPose).transpose() << std::endl;
 			std::cout << "Time: " << dTs << " ms." << std::endl;
 
-            g_DoESM = false;
+            g_bLocalize = false;
         }
     }
 }
@@ -368,17 +440,26 @@ int main(
 
 
 	// try mesh
-	/*
+    // set up mesh
+    std::string sMesh = cl.follow( "CityBlock.blend", 1, "-mesh" );
+	/* 
+    try
+    {
 	GLMesh glMesh;
-	glMesh.Init("CityBlock.blend");
+	glMesh.Init( sMesh );
 	glMesh.SetVisible();
 	glMesh.SetPerceptable(true);
 	glMesh.SetPose( 0, 0, 0, 180, 0, 0 );
 	pWin->AddChildToRoot( &glMesh );
-	*/
+    }
+    catch( std::exception e )
+    {
+        std::cerr << "Cannot load mesh. Check file exists." << std::endl;
+    }
+	/* */
 
     // register objects
-    pWin->AddChildToRoot( &glImgPlane );
+    //pWin->AddChildToRoot( &glImgPlane );
     pWin->AddChildToRoot( &glImgDiff );
 
     // prepare K matrix
@@ -387,9 +468,9 @@ int main(
     dK << IMG_WIDTH, 0, IMG_WIDTH / 2, 0, IMG_HEIGHT, IMG_HEIGHT / 2, 0, 0, 1;
 
     // initialize cameras
-    RefCam.Init( &pWin->SceneGraph(), mvl::Cart2T( g_dRefPose ), dK, IMG_WIDTH, IMG_HEIGHT, eSimCamRGB | eSimCamLuminance );
+    RefCam.Init( &pWin->SceneGraph(), mvl::Cart2T( g_dRefPose ), dK, IMG_WIDTH, IMG_HEIGHT, eSimCamLuminance );
     VirtCam.Init( &pWin->SceneGraph(), mvl::Cart2T( g_dVirtPose ), dK, IMG_WIDTH, IMG_HEIGHT,
-                  eSimCamDepth | eSimCamRGB | eSimCamLuminance );
+                  eSimCamDepth | eSimCamLuminance );
 
     // set up lighting
     glEnable( GL_LIGHT0 );    // activate light0
@@ -403,7 +484,7 @@ int main(
     pWin->AddPostRenderCallback( ShowCameraAndTextures, NULL );
 
     // launch ESM thread
-    boost::thread ESM_Thread( ESM );
+    boost::thread Lclzr_Thread( Localizer );
 
     return(pWin->Run());
 }
