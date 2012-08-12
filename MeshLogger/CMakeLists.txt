@@ -16,7 +16,7 @@ include_directories( ${OpenCV2_INCLUDE_DIRS} )
 
 link_directories( ${Pangolin_LIBRARY_DIRS} )
 
-add_executable( MeshLogger MeshLogger.cpp )
+add_executable( MeshLogger MeshLogger.cpp ImageExporter.cpp )
 
 target_link_libraries( MeshLogger
                         ${Pangolin_LIBRARIES}
