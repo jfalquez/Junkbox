@@ -29,6 +29,25 @@ using namespace std;
 namespace sg =SceneGraph;
 namespace pango =pangolin;
 
+/////////////////////////////////////////////////////////////////////////////
+const char USAGE[] =
+"Usage:     pedebug -idev <input> <options>\n"
+"\n"
+"where input device can be: FileReader Bumblebee2 etc\n"
+"\n"
+"Input Specific Options:\n"
+"   FileReader:      -lfile <regular expression for left image channel>\n"
+"                    -rfile <regular expression for right image channel>\n"
+"                    -sdir  <directory where source images are located [default '.']>\n"
+"                    -sf    <start frame [default 0]>\n"
+"\n"
+"General Options:    -lcmod <left camera model xml file>\n"
+"                    -rcmod <right camera model xml file>\n"
+"					 -gt <ground truth file> [not required]\n"
+"\n"
+"Example:\n"
+"gslam  -idev FileReader  -lcmod lcmod.xml  -rcmod rcmod.xml  -lfile \"left.*pgm\"  -rfile \"right.*pgm\"\n\n";
+
 
 // //////////////////////////////////////////////////////////////////////////////
 
@@ -37,7 +56,7 @@ unsigned int             g_nImgHeight = 480;
 unsigned int             g_nImgSize = 2;
 
 CameraDevice             g_Cam;
-DiskLogger               g_Logger( &g_Cam,"/Users/jmf/Code/Builds/StereoLogger/images", "l" ,"r",".ppm" );
+DiskLogger               g_Logger( &g_Cam,"/Volumes/RPG/Run1", "l" ,"r",".ppm" );
 
 const unsigned int DiskLogger::g_nPaddingImageNumber = 6;
 const unsigned int DiskLogger::g_nPaddingCameraNumber = 2;
@@ -63,14 +82,40 @@ int main( int argc, char** argv )
 	string sSourceDir        = cl.follow( ".", 1, "-sdir"  );
 
 
-	// ideally pass this by command line
-	// for now, hardcode it
-	g_Cam.SetProperty<int>("NumImages", 2);
+	if( sDeviceDriver == "Bumblebee2" ) {
+		if( sLeftCameraModel.empty() || sRightCameraModel.empty() ) {
+			cout << "One or more camera model files is missing!\n" << endl;
+			cout << USAGE;
+			exit (0);
+		}
+		g_Cam->SetProperty("DataSourceDir", sSourceDir);
+		g_Cam->SetProperty("CamModel-L",    sLeftCameraModel );
+		g_Cam->SetProperty("CamModel-R",    sRightCameraModel );
+	}
+
+	if( sDeviceDriver == "FileReader" ) {
+		if( sLeftCameraModel.empty() || sRightCameraModel.empty() ) {
+			cout << "One or more camera model files is missing!\n" << endl;
+			cout << USAGE;
+			exit (0);
+		}
+		if( sLeftFileRegex.empty() || sRightFileRegex.empty() ) {
+			cout << "One or more file names is missing!\n" << endl;
+			cout << USAGE;
+			exit(0);
+		}
+		g_Cam->SetProperty("DataSourceDir", sSourceDir );
+		g_Cam->SetProperty("Channel-0",     sLeftFileRegex );
+		g_Cam->SetProperty("Channel-1",     sRightFileRegex );
+		g_Cam->SetProperty("NumChannels",   2 );
+
+	}
+
     g_Cam.SetProperty<int>("ImageWidth", g_nImgWidth);
     g_Cam.SetProperty<int>("ImageHeight", g_nImgHeight);
 
     // init driver
-    if( !g_Cam.InitDriver( "Webcam" ) ) {
+    if( !g_Cam.InitDriver( sDeviceDriver ) ) {
             cout << "Invalid input device." << endl;
             return -1;
     }

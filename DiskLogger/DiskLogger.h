@@ -1,9 +1,9 @@
 /*
-* File:   DiskLogger.h
-* Author: guest
-*
-* Created on April 18, 2012, 4:47 PM
-*/
+ * File:   DiskLogger.h
+ * Author: guest
+ *
+ * Created on April 18, 2012, 4:47 PM
+ */
 
 #ifndef DISKLOGGER_H
 #define DISKLOGGER_H
