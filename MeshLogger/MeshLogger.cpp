@@ -439,3 +439,6 @@ int main(
 
     return 0;
 }
+
+// TODO: Add support in ImageExporter for depth map (float images).
+// TODO: Make sure video export is working properly.

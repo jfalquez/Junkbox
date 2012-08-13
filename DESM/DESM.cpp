@@ -177,9 +177,9 @@ void UpdateCameraPose(
     g_dRefPose = g_dRefPose + g_dRefVel;
 
     RefCam.SetPose( mvl::Cart2T( g_dRefPose ) );
-    glEnable( GL_LIGHTING );
-    glEnable( GL_LIGHT0 );
-    glClearColor( 0.0, 0.0, 0.0, 1 );
+//    glEnable( GL_LIGHTING );
+//    glEnable( GL_LIGHT0 );
+//    glClearColor( 0.0, 0.0, 0.0, 1 );
     RefCam.RenderToTexture();    // will render to texture, then copy texture to CPU memory
     VirtCam.RenderToTexture();
 	g_bRendered = true;
@@ -442,7 +442,7 @@ int main(
 	// try mesh
     // set up mesh
     std::string sMesh = cl.follow( "CityBlock.blend", 1, "-mesh" );
-	/* 
+	/*
     try
     {
 	GLMesh glMesh;
@@ -459,7 +459,7 @@ int main(
 	/* */
 
     // register objects
-    //pWin->AddChildToRoot( &glImgPlane );
+    pWin->AddChildToRoot( &glImgPlane );
     pWin->AddChildToRoot( &glImgDiff );
 
     // prepare K matrix
