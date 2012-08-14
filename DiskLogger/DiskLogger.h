@@ -60,8 +60,8 @@ class DiskLogger
     private:
 
         // Shared values
-        typedef std::tuple<rpg::ImageWrapper, std::string> ImageAndName;    // for the RGB image
-        typedef std::tuple<ImageAndName, ImageAndName>     ImagePair;
+        typedef std::tuple<rpg::ImageWrapper, std::string> ImageAndName;    // image data and name
+        typedef std::tuple<ImageAndName, ImageAndName>     ImagePair;		// image 1 and image 2
         long unsigned int                                  m_nPrevTimeStampDepth;
         double                                             m_dPrevTimeStampWrite;
         double                                             m_dSumTimeWrite;

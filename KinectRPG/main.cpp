@@ -1,6 +1,6 @@
 #include <vector>
 
-#include <cv.h>
+#include <opencv/cv.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
@@ -21,7 +21,7 @@ int main( int argc, char** argv )
 	}
 
 	// container for Kinect images
-	std::vector< cv::Mat > vImages;
+   	std::vector<rpg::ImageWrapper> vImages;
 
 	// create GUI windows
 	cv::namedWindow( "RGB Image", CV_WINDOW_AUTOSIZE );
@@ -31,11 +31,12 @@ int main( int argc, char** argv )
 			std::cout << "Error getting images." << std::endl;
 		}
 
-		cv::imshow("RGB Image", vImages[0]);
+		cv::imshow("RGB Image", vImages[0].Image);
+		cv::imshow("Depth Image", vImages[1].Image);
 
-		const unsigned short* depth_map = (unsigned short*)vImages[1].data;
-		int width = vImages[1].cols;
-		int height = vImages[1].rows;
+		const unsigned short* depth_map = (unsigned short*)vImages[1].Image.data;
+		int width = vImages[1].Image.cols;
+		int height = vImages[1].Image.rows;
 		float center_x = width/2;
 		float center_y = height/2;
 		float focal_length_x = Cam.GetProperty<float>("DepthFocalLength", 580);
@@ -45,7 +46,7 @@ int main( int argc, char** argv )
         // clear Pt cloud
 		for( int ii = 0; ii <  height; ii ++ ) {
 			for( int jj = 0; jj <  width; jj ++ ) {
-				float depth = vImages[1].at<unsigned short>(ii,jj);
+				float depth = vImages[1].Image.at<unsigned short>(ii,jj);
 				float y = -depth * ((center_x - ii) / focal_length_x);
 				float x = depth * ((center_y - jj) / focal_length_x);
 				float z = depth;

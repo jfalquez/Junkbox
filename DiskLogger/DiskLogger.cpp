@@ -1,7 +1,16 @@
 
 #include "DiskLogger.h"
+#include <pangolin/pangolin.h>
+#include <SceneGraph/SceneGraph.h>
 
 using namespace std;
+namespace sg =SceneGraph;
+
+
+extern sg::ImageView glLeftImg;
+extern sg::ImageView glRightImg;
+extern unsigned int g_nImgWidth;
+extern unsigned int g_nImgHeight;
 
 // //////////////////////////////////////////////////////////////////////////////
 DiskLogger::DiskLogger(
@@ -135,10 +144,12 @@ bool DiskLogger::Start(
 {
     if( m_bRun ) {
         Stop();
+		return false;
     }
 
     // only initialize camera if we have to
     if( m_pCamera == NULL ) {
+		cout << "Initializing camera!" << endl;
         m_pCamera = new CameraDevice();
 
         if( (m_pCamera == NULL) ||!m_pCamera->InitDriver( m_sCameraType ) ) {
@@ -205,8 +216,7 @@ void DiskLogger::_GetImageAndQueue()
         if( m_qImages.size() > m_nMaxBufferSize ) {
             m_nDroppedFrames++;
 
-            // std::cout << "Dropping frame (num. dropped: " << m_nDroppedFrames << ")." << std::endl;
-            std::cout << ".";
+            std::cout << "Dropping frame (num. dropped: " << m_nDroppedFrames << ")." << std::endl;
             {    // Lock when popping from dequeue
                 std::lock_guard<std::mutex> mutex( m_Mutex );
 
@@ -227,6 +237,12 @@ void DiskLogger::_GetImageAndQueue()
                 cerr << "ERROR: empty image buffer returned from camera." << endl;
                 continue;
             }
+
+			// show left image
+			glLeftImg.SetImage( vImages[0].Image.data, g_nImgWidth, g_nImgHeight, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE );
+
+		    // show right image
+			glRightImg.SetImage( vImages[1].Image.data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_SHORT );
 
             m_nCount++;
 
@@ -298,6 +314,8 @@ void DiskLogger::_GetImageAndQueue()
     }
 
     m_Condition.notify_one();
+	cout << "Enqueing thread died!!!!!" << endl;
+
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -310,13 +328,13 @@ void DiskLogger::_DequeueAndSaveImage()
     std::unique_lock<std::mutex> cond( m_ConditionMutex );
 
     while( m_bRun ) {
-        while( m_qImages.empty() ) {
-            // std::cout << "Empty" << std::endl;
+        if( m_qImages.empty() ) {
+//            std::cout << "Empty" << std::endl;
             // Wait for signal
             m_Condition.wait( cond );
         }
 
-        // std::cout << "Not empty" << std::endl;
+//        std::cout << "Not empty" << std::endl;
         while( !m_qImages.empty() ) {
             ImagePair ImagePair;
 
@@ -383,4 +401,5 @@ void DiskLogger::_DequeueAndSaveImage()
 
         }
     }
+	cout << "Dequeing thread died!!!!!" << endl;
 }

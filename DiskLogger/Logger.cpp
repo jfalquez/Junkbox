@@ -51,12 +51,16 @@ const char USAGE[] =
 
 // //////////////////////////////////////////////////////////////////////////////
 
+
+CameraDevice             g_Cam;
+sg::ImageView			 glLeftImg;
+sg::ImageView			 glRightImg;
+DiskLogger               g_Logger( &g_Cam,"/Users/jmf/Code/Builds/DiskLogger/images", "l" ,"r",".ppm", false, 5 );
+
 unsigned int             g_nImgWidth = 640;
 unsigned int             g_nImgHeight = 480;
 unsigned int             g_nImgSize = 2;
-
-CameraDevice             g_Cam;
-DiskLogger               g_Logger( &g_Cam,"/Volumes/RPG/Run1", "l" ,"r",".ppm" );
+bool					 g_bCapture = false;
 
 const unsigned int DiskLogger::g_nPaddingImageNumber = 6;
 const unsigned int DiskLogger::g_nPaddingCameraNumber = 2;
@@ -65,6 +69,7 @@ const unsigned int DiskLogger::g_nPaddingCameraNumber = 2;
 void _Capture()
 {
 	g_Logger.Start(0);
+	g_bCapture = true;
 }
 
 
@@ -74,7 +79,7 @@ int main( int argc, char** argv )
     GetPot cl( argc, argv );
 
 	// for file reader
-	string sDeviceDriver     = cl.follow( "FileReader", 1, "-idev" );
+	string sDeviceDriver     = cl.follow( "Kinect", 1, "-idev" );
 	string sLeftCameraModel  = cl.follow( "lcmod.xml", 1, "-lcmod" );
 	string sRightCameraModel = cl.follow( "rcmod.xml", 1, "-rcmod" );
 	string sLeftFileRegex    = cl.follow( "left.*pgm", 1, "-lfile" );
@@ -88,9 +93,9 @@ int main( int argc, char** argv )
 			cout << USAGE;
 			exit (0);
 		}
-		g_Cam->SetProperty("DataSourceDir", sSourceDir);
-		g_Cam->SetProperty("CamModel-L",    sLeftCameraModel );
-		g_Cam->SetProperty("CamModel-R",    sRightCameraModel );
+		g_Cam.SetProperty("DataSourceDir", sSourceDir);
+		g_Cam.SetProperty("CamModel-L",    sLeftCameraModel );
+		g_Cam.SetProperty("CamModel-R",    sRightCameraModel );
 	}
 
 	if( sDeviceDriver == "FileReader" ) {
@@ -104,10 +109,10 @@ int main( int argc, char** argv )
 			cout << USAGE;
 			exit(0);
 		}
-		g_Cam->SetProperty("DataSourceDir", sSourceDir );
-		g_Cam->SetProperty("Channel-0",     sLeftFileRegex );
-		g_Cam->SetProperty("Channel-1",     sRightFileRegex );
-		g_Cam->SetProperty("NumChannels",   2 );
+		g_Cam.SetProperty("DataSourceDir", sSourceDir );
+		g_Cam.SetProperty("Channel-0",     sLeftFileRegex );
+		g_Cam.SetProperty("Channel-1",     sRightFileRegex );
+		g_Cam.SetProperty("NumChannels",   2 );
 
 	}
 
@@ -136,13 +141,9 @@ int main( int argc, char** argv )
     pango::View& glBaseView = pango::DisplayBase();
 
     // display images
-    sg::ImageView glLeftImg( false, true );
-
     glLeftImg.SetBounds( 0.0, 1.0, 0.0, 0.5, (double)g_nImgWidth / g_nImgHeight );
-
-    sg::ImageView glRightImg( false, true );
-
     glRightImg.SetBounds( 0.0, 1.0, 0.5, 1.0, (double)g_nImgWidth / g_nImgHeight );
+
 
     // Add our views as children to the base container.
     glBaseView.AddDisplay( glLeftImg );
@@ -154,6 +155,12 @@ int main( int argc, char** argv )
 	// vector of images
     std::vector<rpg::ImageWrapper> vImages;
 
+	// capture an initial image to store size
+	g_Cam.Capture(vImages);
+	g_nImgHeight = vImages[0].Image.rows;
+	g_nImgWidth = vImages[0].Image.cols;
+
+
 	// variable to calculate frame rate
     double t = Tic();
     unsigned int nFrames = 0;
@@ -161,19 +168,19 @@ int main( int argc, char** argv )
     // Default hooks for exiting (Esc) and fullscreen (tab).
     while( !pango::ShouldQuit() ) {
 
-		// capture images
-        g_Cam.Capture(vImages);
-		g_nImgHeight = vImages[0].Image.rows;
-		g_nImgWidth = vImages[0].Image.cols;
-
 		// clear whole screen
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
-        // show left image
-		glLeftImg.SetImage( vImages[0].Image.data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_BYTE );
+		// capture an images if not logging
+		if( g_bCapture == false ) {
+			g_Cam.Capture(vImages);
 
-        // show right image
-		glRightImg.SetImage( vImages[1].Image.data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_BYTE );
+			// show left image
+			glLeftImg.SetImage( vImages[0].Image.data, g_nImgWidth, g_nImgHeight, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE );
+
+		    // show right image
+			glRightImg.SetImage( vImages[1].Image.data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_SHORT );
+		}
 
         // swap frames and Process Events
         pango::FinishGlutFrame();
@@ -181,7 +188,7 @@ int main( int argc, char** argv )
         nFrames++;
         double dTimeLapse = Toc(t);
         if( dTimeLapse > 1.0 ){
-            printf( "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\bFramerate %.2f", nFrames/dTimeLapse );
+            printf( "Framerate: %.2f\r", nFrames/dTimeLapse );
             fflush(stdout);
             nFrames  = 0;
             t = Tic();
