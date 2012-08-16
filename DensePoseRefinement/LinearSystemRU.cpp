@@ -5,7 +5,7 @@
  * Created on July 29, 2012, 1:44 PM
  */
 
-#include "LinearSystem.h"
+#include "LinearSystemRU.h"
 #include <sophus/so3.h>
 #include <sophus/se3.h>
 #include <Mvlpp/Mvl.h>
@@ -68,6 +68,26 @@ void LinearSystem::Init(
         // RefImg is assumed to have top-left origin
         m_vRefImg = RefImg;
 
+		// pre-calculate finite difference matrix
+		unsigned int TopPix;
+		unsigned int BotPix;
+		unsigned int LeftPix;
+		unsigned int RightPix;
+
+		m_vFDImgBT.resize( m_nImgWidth * m_nImgHeight );
+		m_vFDImgRL.resize( m_nImgWidth * m_nImgHeight );
+
+		for( int ii = 1; ii < m_nImgHeight-1; ii++ ) {
+			for( int jj = 1; jj < m_nImgWidth-1; jj++ ) {
+				TopPix = m_vRefImg[ (ii - 1) * m_nImgWidth + jj ];
+				BotPix = m_vRefImg[ (ii + 1) * m_nImgWidth + jj ];
+				LeftPix = m_vRefImg[ ii * m_nImgWidth + jj - 1];
+				RightPix = m_vRefImg[ ii * m_nImgWidth + jj + 1 ];
+				m_vFDImgBT[ii * m_nImgWidth + jj] = (BotPix - TopPix) / 2.0;
+				m_vFDImgRL[ii * m_nImgWidth + jj] = (RightPix - LeftPix) / 2.0;
+			}
+		}
+
 		// store virtual image and depth map
 		SnapVirtualCam();
 
@@ -78,72 +98,6 @@ void LinearSystem::Init(
 
         // initialize estimate
         m_dTrv = Eigen::Matrix4d::Identity();
-
-        // print initial error
-        m_nErrorPts = m_nImgHeight * m_nImgWidth;
-        m_dError    = ImgError.lpNorm<1>();
-
-        std::cout << "Error is: " << Error() << std::endl;
-    } else {
-        // store parameters
-        m_nImgWidth  = VirtCam->ImageWidth();
-        m_nImgHeight = VirtCam->ImageHeight();
-
-        // store K matrix in robotics frame
-        // permutation matrix
-        Eigen::Matrix3d M;
-
-        M << 0, 1, 0, 0, 0, 1, 1, 0, 0;
-
-        m_Kv = VirtCam->GetKMatrix();
-        m_Kr = m_Kv * M;
-        m_Kr = m_Kr / 4;
-
-        // populate vectors with decimated data
-        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> Img;
-        Eigen::VectorXf Depth;
-
-        Img.resize( m_nImgWidth * m_nImgHeight );
-        Depth.resize( m_nImgWidth * m_nImgHeight );
-        VirtCam->CaptureGrey( Img.data() );
-        _FlipImg( Img );
-        VirtCam->CaptureDepth( Depth.data() );
-        _FlipDepth( Depth );
-
-        // decimate image
-		cv::Mat In( m_nImgHeight, m_nImgWidth, CV_8UC1, Img.data() );
-		cv::Mat Out;
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/2, m_nImgHeight/2) );
-		In = Out;
-		Out.release();
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/4, m_nImgHeight/4) );
-        m_vVirtImg.resize( (m_nImgHeight / 4) * (m_nImgWidth / 4) );
-		memcpy( m_vVirtImg.data(), Out.data, m_nImgHeight/4 * m_nImgWidth/4 );
-
-        // decimate depth
-		In = cv::Mat( m_nImgHeight, m_nImgWidth, CV_32FC1, Depth.data() );
-		Out.release();
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/2, m_nImgHeight/2) );
-		In = Out;
-		Out.release();
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/4, m_nImgHeight/4) );
-        m_vVirtDepth.resize( (m_nImgHeight / 4) * (m_nImgWidth / 4) );
-		memcpy( m_vVirtDepth.data(), Out.data, 4*(m_nImgHeight/4 * m_nImgWidth/4) );
-
-        // RefImg is assumed to have top-left origin
-        m_vRefImg = RefImg;
-
-        // image error
-        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> ImgError;
-
-        ImgError = m_vRefImg - m_vVirtImg;
-
-        // initialize estimate
-        m_dTrv = Eigen::Matrix4d::Identity();
-
-        // re-adjust image height and width
-        m_nImgHeight = m_nImgHeight / 4;
-        m_nImgWidth  = m_nImgWidth / 4;
 
         // print initial error
         m_nErrorPts = m_nImgHeight * m_nImgWidth;
@@ -300,7 +254,7 @@ void LinearSystem::_BuildSystem(
         for( int jj = StartU; jj < EndU; jj++ ) {
             // variables
             Eigen::Vector2d Ur;        // pixel position
-            Eigen::Vector3d Pr, Pv;    // 3d point
+            Eigen::Vector3d Pv;    // 3d point
             Eigen::Vector4d Ph;        // homogenized point
 
             // check if pixel is contained in our model (i.e. has depth)
@@ -310,24 +264,18 @@ void LinearSystem::_BuildSystem(
 
             // --------------------- first term 1x2
             // evaluate 'a' = L[ Trv * Linv( Uv ) ]
-            // back project to virtual camera's reference frame
-            // this already brings points to robotics reference frame
-            Pv = pLS->_BackProject( jj, ii, pLS->m_vVirtDepth[ii * pLS->m_nImgWidth + jj] );
-
-            // convert to homogeneous coordinate
-            Ph << Pv, 1;
-
-            // transform point to reference camera's frame
-            // Pr = Trv * Pv
-            Ph = pLS->m_dTrv * Ph;
-            Pr = Ph.head( 3 );
+			// since we are moving the virtual camera as we update it
+			// the projection falls in the same place
+			// thus we can compare the intensities directly
+			float fDepth = pLS->m_vVirtDepth[ii * pLS->m_nImgWidth + jj];
+            Pv = pLS->_BackProject( jj, ii, fDepth );
 
             // project onto reference camera
             Eigen::Vector3d Lr;
+			Lr << jj, ii, 1;
+			Lr = Lr * fDepth;
 
-            Lr = pLS->_Project( Pr );
-            Ur = Lr.head( 2 );
-            Ur = Ur / Lr( 2 );
+			Ur << jj, ii;
 
             // check if point falls in camera's field of view
             if( (Ur( 0 ) <= 1) || (Ur( 0 ) >= pLS->m_nImgWidth - 2) || (Ur( 1 ) <= 1)
@@ -336,14 +284,10 @@ void LinearSystem::_BuildSystem(
             }
 
             // finite differences
-            float                       TopPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) - 1, pLS->m_vRefImg );
-            float                       BotPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) + 1, pLS->m_vRefImg );
-            float                       LeftPix  = pLS->_Interpolate( Ur( 0 ) - 1, Ur( 1 ), pLS->m_vRefImg );
-            float                       RightPix = pLS->_Interpolate( Ur( 0 ) + 1, Ur( 1 ), pLS->m_vRefImg );
             Eigen::Matrix<double, 1, 2> Term1;
 
-            Term1( 0 ) = (RightPix - LeftPix) / 2.0;
-            Term1( 1 ) = (BotPix - TopPix) / 2.0;
+            Term1( 0 ) = pLS->m_vFDImgRL[ii * pLS->m_nImgWidth + jj];
+            Term1( 1 ) = pLS->m_vFDImgBT[ii * pLS->m_nImgWidth + jj];
 
             // --------------------- second term 2x3
             // evaluate 'b' = Trv * Linv( Uv )
@@ -372,22 +316,22 @@ void LinearSystem::_BuildSystem(
             Eigen::Vector3d Term3;
 
             // fill Jacobian with T generators
-            Term3i    = pLS->m_dTrv * pLS->m_Gen[0] * Ph;
+            Term3i    = pLS->m_Gen[0] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 0 ) = Term1 * Term2 * Term3;
-            Term3i    = pLS->m_dTrv * pLS->m_Gen[1] * Ph;
+            Term3i    = pLS->m_Gen[1] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 1 ) = Term1 * Term2 * Term3;
-            Term3i    = pLS->m_dTrv * pLS->m_Gen[2] * Ph;
+            Term3i    = pLS->m_Gen[2] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 2 ) = Term1 * Term2 * Term3;
-            Term3i    = pLS->m_dTrv * pLS->m_Gen[3] * Ph;
+            Term3i    = pLS->m_Gen[3] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 3 ) = Term1 * Term2 * Term3;
-            Term3i    = pLS->m_dTrv * pLS->m_Gen[4] * Ph;
+            Term3i    = pLS->m_Gen[4] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 4 ) = Term1 * Term2 * Term3;
-            Term3i    = pLS->m_dTrv * pLS->m_Gen[5] * Ph;
+            Term3i    = pLS->m_Gen[5] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 5 ) = Term1 * Term2 * Term3;
 
@@ -399,12 +343,10 @@ void LinearSystem::_BuildSystem(
             // estimate RHS (error)
             // RHS = Jt * e
             RHS += J.transpose()
-                   * (pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
-                      - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj]);
+                   * (pLS->m_vRefImg[ii * pLS->m_nImgWidth + jj] - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj]);
 
-            // calculate normalized error
-            Error += fabs( pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
-                           - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj] );
+            // calculate mean pixel error
+            Error += fabs( pLS->m_vRefImg[ii * pLS->m_nImgWidth + jj] - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj] );
 
             ErrorPts++;
         }

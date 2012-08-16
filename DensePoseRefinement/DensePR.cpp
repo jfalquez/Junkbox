@@ -95,7 +95,7 @@ void _FlipImg(
 }
 
 // //////////////////////////////////////////////////////////////////////////////
-void UpdateCameraPose()
+void UpdateCameras()
 {
     Eigen::Matrix4d T;
 
@@ -440,7 +440,7 @@ int main(
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
         // pre-render stuff
-        UpdateCameraPose();
+        UpdateCameras();
 
         // render cameras
         glView.ActivateScissorAndClear( glState );

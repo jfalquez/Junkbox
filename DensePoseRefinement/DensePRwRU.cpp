@@ -8,7 +8,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <CVars/CVar.h>
 #include "CVarHelpers.h"
-#include "LinearSystem.h"
+#include "LinearSystemRU.h"
 #include "GLImgPlane.h"
 
 using namespace std;
@@ -95,7 +95,7 @@ void _FlipImg(
 }
 
 // //////////////////////////////////////////////////////////////////////////////
-void UpdateCameraPose()
+void UpdateCameras()
 {
     Eigen::Matrix4d T;
 
@@ -129,27 +129,16 @@ void Localizer()
             //
             // capture reference image
             Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> RefImg;
-            Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> RefImgD;
 
             RefImg.resize( g_nImgHeight * g_nImgWidth );
             RefCam.CaptureGrey( RefImg.data() );
             _FlipImg( RefImg );
-            RefImgD.resize( (g_nImgHeight / 4) * (g_nImgWidth / 4) );
-
-			// decimate image to 1/4th of original size
-            cv::Mat In( g_nImgHeight, g_nImgWidth, CV_8UC1, RefImg.data() );
-            cv::Mat Out;
-			cv::pyrDown( In, Out, cv::Size( g_nImgWidth/2, g_nImgHeight/2) );
-			In = Out;
-			Out.release();
-			cv::pyrDown( In, Out, cv::Size( g_nImgWidth/4, g_nImgHeight/4) );
-            memcpy( RefImgD.data(), Out.data, g_nImgHeight/4 * g_nImgWidth/4 );
 
             // initialize system of equations
-            ESM.Init( RefImgD, &VirtCam, true );
+            ESM.Init( RefImg, &VirtCam, true );
 
-            // hard limit of iterations so we don't loop forever
-            int nMaxIters = 0;
+            // count number of iterations so we don't loop forever
+            unsigned int nMaxIters = 0;
 
             // this variable holds the estimated transform
             Eigen::Matrix4d dTrv = Eigen::Matrix4d::Identity();
@@ -157,60 +146,8 @@ void Localizer()
             // this variable holds the delta update solution
             Eigen::Matrix4d dTdelta;
 
-            // keep track of errors
-            double NewError;
-            double PrevError = ESM.Error();
-
             // keep track of time
             double dTs = mvl::Tic();
-
-            /*
-            while( (nMaxIters < g_nMaxIterations) && g_bLocalize ) {
-                std::cout << "////////////////////////////////////////////////////////////////////////////////"
-                          << std::endl;
-
-                // increment counter
-                nMaxIters++;
-
-                // solve system
-                double dTi = mvl::Tic();
-                dTdelta = ESM.Solve();
-                std::cout << "Solving took: " << mvl::Toc(dTi) << std::endl;
-
-                // show solution
-                std::cout << "Delta Pose is: " << mvl::T2Cart( dTdelta ).transpose() << std::endl;
-
-                // update Trv
-                ESM.ApplyUpdate();
-
-                dTrv = dTrv * mvl::TInv( dTdelta );
-
-                // update camera position
-                g_dVirtPose = dInitialVirtPose - mvl::T2Cart( dTrv );
-                VirtCam.SetPose( mvl::Cart2T( g_dVirtPose ) );
-
-                // get error
-                NewError = ESM.Error();
-
-                std::cout << "New Virtual Pose is: " << g_dVirtPose.transpose() << std::endl;
-                std::cout << "Error is: " << NewError << std::endl;
-
-                // if error change is too small, break
-                if( NewError < 1e-6 ) {
-                    break;
-                }
-
-				sleep(1);
-                PrevError = NewError;
-            }
-
-            std::cout << std::endl << "Reference Pose: " << g_dRefPose.transpose() << std::endl;
-            std::cout << "Final Estimated Pose: " << g_dVirtPose.transpose() << std::endl;
-            std::cout << "Pose Difference: " << (g_dRefPose - g_dVirtPose).transpose() << std::endl;
-
-			sleep(5);
-
-            /* */
 
             //
             // ------------------------------------- Refine Localization
@@ -218,11 +155,6 @@ void Localizer()
             std::cout << std::endl;
             std::cout << "======================== REFINING ========================" << std::endl;
             std::cout << std::endl;
-
-            // wait for GUI loop to render in new position
-            g_bRendered = false;
-
-            while( g_bRendered == false ) {}
 
             // capture reference image
             RefImg.resize( g_nImgHeight * g_nImgWidth );
@@ -237,9 +169,6 @@ void Localizer()
 
             // this variable holds the estimated transform
             dTrv = Eigen::Matrix4d::Identity();
-
-            // keep track of errors
-            PrevError = ESM.Error();
 
             // reset initial pose
             dInitialVirtPose = g_dVirtPose;
@@ -262,8 +191,6 @@ void Localizer()
                 std::cout << "Delta Pose is: " << mvl::T2Cart( dTdelta ).transpose() << std::endl;
 
                 // update Trv
-                ESM.ApplyUpdate();
-
                 dTrv = dTrv * mvl::TInv( dTdelta );
 
                 // update camera position
@@ -271,18 +198,21 @@ void Localizer()
 
                 VirtCam.SetPose( mvl::Cart2T( g_dVirtPose ) );
 
-                // get error
-                NewError = ESM.Error();
+	            // wait for GUI loop to render in new position
+		        g_bRendered = false;
+
+			    while( g_bRendered == false ) {}
+
+				// update image date in LinearSystem
+				ESM.SnapVirtualCam();
 
                 std::cout << "New Virtual Pose is: " << g_dVirtPose.transpose() << std::endl;
-                std::cout << "Error is: " << NewError << std::endl;
+                std::cout << "Error is: " << ESM.Error() << std::endl;
 
                 // if error change is too small, break
-                if( fabs(PrevError - NewError) < 1e-2 ) {
+                if( ESM.Error() < 1e-2 ) {
                     break;
                 }
-
-				PrevError = NewError;
             }
 
             dTs = mvl::TocMS( dTs );
@@ -371,7 +301,7 @@ int main(
 
     // Define Camera Render Object (for view / scene browsing)
     pango::OpenGlRenderState glState( pango::ProjectionMatrix( 640, 480, 420, 420, 320, 240, 0.1, 1000 ),
-                                      pango::ModelViewLookAt( -6, 0, -30, 1, 0, 0, pango::AxisNegZ ) );
+                                      pango::ModelViewLookAt( -30, 5, -30, 20, -10, 0, pango::AxisNegZ ) );
 
     // Pangolin abstracts the OpenGL viewport as a View.
     // Here we get a reference to the default 'base' view.
@@ -440,7 +370,7 @@ int main(
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
         // pre-render stuff
-        UpdateCameraPose();
+        UpdateCameras();
 
         // render cameras
         glView.ActivateScissorAndClear( glState );
@@ -472,8 +402,11 @@ int main(
         // Swap frames and Process Events
         pango::FinishGlutFrame();
 
-        // Pause for 1/60th of a second.
-        usleep( 1E6 / 60 );
+        // pause for 1/60th of a second.
+		// go full speed if localizing
+		if( g_bLocalize == false ) {
+			usleep( 1E6 / 60 );
+		}
     }
 
     return 0;

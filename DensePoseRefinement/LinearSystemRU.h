@@ -5,8 +5,8 @@
  * Created on July 29, 2012, 1:44 PM
  */
 
-#ifndef LINEARSYSTEM_H
-#define LINEARSYSTEM_H
+#ifndef LINEARSYSTEM_RU_H
+#define LINEARSYSTEM_RU_H
 
 #include <SceneGraph/SimCam.h>
 #include <boost/thread.hpp>
@@ -63,6 +63,8 @@ class LinearSystem
     private:
 		SceneGraph::GLSimCam*							m_pVirtCam;
         Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> m_vRefImg;       // grayscale image
+        Eigen::VectorXf			m_vFDImgBT;      // image finite differences - Up/Down
+        Eigen::VectorXf			m_vFDImgRL;      // image finite differences - Left/Right
         Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> m_vVirtImg;      // grayscale image
         Eigen::VectorXf                                 m_vVirtDepth;    // depth image from virtual camera
         Eigen::Matrix3d                                 m_Kv;            // vision frame K matrix

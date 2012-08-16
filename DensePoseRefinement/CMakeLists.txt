@@ -13,7 +13,6 @@ include_directories( ${Pangolin_INCLUDE_DIRS} )
 include_directories( ${SceneGraph_INCLUDE_DIRS} )
 include_directories( ${Sophus_INCLUDE_DIR} )
 include_directories( ${MVL_INCLUDE_DIRS} )
-include_directories( ${CVARS_INCLUDE_DIR} )
 include_directories( ${OpenCV2_INCLUDE_DIRS} )
 
 link_directories( ${Pangolin_LIBRARY_DIRS} )
@@ -26,7 +25,6 @@ target_link_libraries( DensePR
                         ${SceneGraph_LIBRARIES}
                         ${Sophus_LIBRARIES}
                         ${MVL_LIBRARIES}
-                        ${CVARS_LIBRARIES}
                         ${OpenCV2_LIBRARIES}
                      )
 
@@ -38,6 +36,5 @@ target_link_libraries( DensePRwRU
                         ${SceneGraph_LIBRARIES}
                         ${Sophus_LIBRARIES}
                         ${MVL_LIBRARIES}
-                        ${CVARS_LIBRARIES}
                         ${OpenCV2_LIBRARIES}
                      )
