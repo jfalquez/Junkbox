@@ -6,13 +6,13 @@
  */
 
 #include "LinearSystem.h"
-#include <sophus/so3.h>
 #include <sophus/se3.h>
+#include <sophus/so3.h>
 #include <Mvlpp/Mvl.h>
-#include <opencv/cv.h>
-#include <opencv2/highgui/highgui.hpp>
 
+using namespace std;
 namespace sg =SceneGraph;
+
 LinearSystem::LinearSystem()
 {
     // Initialize generators
@@ -42,17 +42,20 @@ LinearSystem::~LinearSystem() {}
 
 // //////////////////////////////////////////////////////////////////////////////
 void LinearSystem::Init(
-        const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& RefImg,     // < Input: Reference image
-        sg::GLSimCam*                                          VirtCam,    // < Input: Virtual camera handle
-        bool                                                   Decimate    // < Input: True if decimate
+        const Eigen::Matrix3d& K,            // < Input: K matrix
+        const cv::Mat&         CurImg,       // < Input: Current image
+        const cv::Mat&         PrevImg,      // < Input: Image in previous time instance
+        const cv::Mat&         PrevDepth,    // < Input: Depth map in previous time instance
+        bool                   Decimate      // < Input: True if decimate
         )
 {
-    // this is such a crappy hack given how FBO works as a singleton
-    // we cannot create SimCams with different sizes
     if( Decimate == false ) {
-        // store parameters
-        m_nImgWidth  = VirtCam->ImageWidth();
-        m_nImgHeight = VirtCam->ImageHeight();
+        // store stuff
+        m_CurImg     = CurImg;
+        m_PrevImg    = PrevImg;
+        m_PrevDepth  = PrevDepth;
+        m_nImgWidth  = CurImg.cols;
+        m_nImgHeight = CurImg.rows;
 
         // store K matrix in robotics frame
         // permutation matrix
@@ -60,36 +63,25 @@ void LinearSystem::Init(
 
         M << 0, 1, 0, 0, 0, 1, 1, 0, 0;
 
-        m_Kv = VirtCam->GetKMatrix();
+        m_Kv = K;
         m_Kr = m_Kv * M;
 
-        // resize vectors
-        m_vVirtImg.resize( m_nImgWidth * m_nImgHeight );
-        m_vVirtDepth.resize( m_nImgWidth * m_nImgHeight );
-
-        // RefImg is assumed to have top-left origin
-        m_vRefImg = RefImg;
-
-        // populate vectors
-        VirtCam->CaptureGrey( m_vVirtImg.data() );
-        _FlipImg( m_vVirtImg );
-        VirtCam->CaptureDepth( m_vVirtDepth.data() );
-        _FlipDepth( m_vVirtDepth );
-
-        // print initial error
-        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> ImgError;
-
-        ImgError = m_vRefImg - m_vVirtImg;
+        // calculate initial error
+		cv::Mat ImgError;
+        ImgError = CurImg - PrevImg;
 
         // initialize estimate
         m_dTrv = Eigen::Matrix4d::Identity();
 
         // print initial error
         m_nErrorPts = m_nImgHeight * m_nImgWidth;
-        m_dError    = ImgError.lpNorm<1>();
+        m_dError    = cv::norm( ImgError, cv::NORM_L1 );
 
-        std::cout << "Error is: " << Error() << std::endl;
-    } else {
+//        std::cout << "Error is: " << Error() << std::endl;
+    }
+
+    /*
+    else {
         // store parameters
         m_nImgWidth  = VirtCam->ImageWidth();
         m_nImgHeight = VirtCam->ImageHeight();
@@ -116,24 +108,24 @@ void LinearSystem::Init(
         _FlipDepth( Depth );
 
         // decimate image
-		cv::Mat In( m_nImgHeight, m_nImgWidth, CV_8UC1, Img.data() );
-		cv::Mat Out;
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/2, m_nImgHeight/2) );
-		In = Out;
-		Out.release();
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/4, m_nImgHeight/4) );
+        cv::Mat In( m_nImgHeight, m_nImgWidth, CV_8UC1, Img.data() );
+        cv::Mat Out;
+        cv::pyrDown( In, Out, cv::Size( m_nImgWidth/2, m_nImgHeight/2) );
+        In = Out;
+        Out.release();
+        cv::pyrDown( In, Out, cv::Size( m_nImgWidth/4, m_nImgHeight/4) );
         m_vVirtImg.resize( (m_nImgHeight / 4) * (m_nImgWidth / 4) );
-		memcpy( m_vVirtImg.data(), Out.data, m_nImgHeight/4 * m_nImgWidth/4 );
+        memcpy( m_vVirtImg.data(), Out.data, m_nImgHeight/4 * m_nImgWidth/4 );
 
         // decimate depth
-		In = cv::Mat( m_nImgHeight, m_nImgWidth, CV_32FC1, Depth.data() );
-		Out.release();
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/2, m_nImgHeight/2) );
-		In = Out;
-		Out.release();
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/4, m_nImgHeight/4) );
+        In = cv::Mat( m_nImgHeight, m_nImgWidth, CV_32FC1, Depth.data() );
+        Out.release();
+        cv::pyrDown( In, Out, cv::Size( m_nImgWidth/2, m_nImgHeight/2) );
+        In = Out;
+        Out.release();
+        cv::pyrDown( In, Out, cv::Size( m_nImgWidth/4, m_nImgHeight/4) );
         m_vVirtDepth.resize( (m_nImgHeight / 4) * (m_nImgWidth / 4) );
-		memcpy( m_vVirtDepth.data(), Out.data, 4*(m_nImgHeight/4 * m_nImgWidth/4) );
+        memcpy( m_vVirtDepth.data(), Out.data, 4*(m_nImgHeight/4 * m_nImgWidth/4) );
 
         // RefImg is assumed to have top-left origin
         m_vRefImg = RefImg;
@@ -156,10 +148,11 @@ void LinearSystem::Init(
 
         std::cout << "Error is: " << Error() << std::endl;
     }
+    */
 }
 
 // //////////////////////////////////////////////////////////////////////////////
-Eigen::Matrix4d LinearSystem::Solve()
+Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads )
 {
     // reset LHS + RHS
     m_LHS.setZero();
@@ -169,66 +162,71 @@ Eigen::Matrix4d LinearSystem::Solve()
     m_dError    = 0;
     m_nErrorPts = 0;
 
-    boost::thread * pT;
+    boost::thread* pT;
 
-    // _BuildSystem( this, 0, m_nImgWidth, 0, m_nImgHeight );
 
-    /*
+	if( nNumThreads == 4 ) {
 
-    // 4 ways
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 0, m_nImgHeight / 4 );
+		// 4 ways
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 0, m_nImgHeight / 4 );
 
-    m_ThreadGrp.add_thread( pT );
+		m_ThreadGrp.add_thread( pT );
 
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 4, m_nImgHeight / 2 );
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 4, m_nImgHeight / 2 );
 
-    m_ThreadGrp.add_thread( pT );
+		m_ThreadGrp.add_thread( pT );
 
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 2, 3 * m_nImgHeight / 4 );
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 2, 3 * m_nImgHeight / 4 );
 
-    m_ThreadGrp.add_thread( pT );
-    _BuildSystem( this, 0, m_nImgWidth, 3 * m_nImgHeight / 4, m_nImgHeight );
+		m_ThreadGrp.add_thread( pT );
 
-    /*  */
+		_BuildSystem( this, 0, m_nImgWidth, 3 * m_nImgHeight / 4, m_nImgHeight );
 
-    /*  */
+	    // wait for all threads to finish
+		m_ThreadGrp.join_all();
 
-    // 8 ways
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 0, m_nImgHeight / 8 );
+	} else if( nNumThreads == 8 ) {
 
-    m_ThreadGrp.add_thread( pT );
+		// 8 ways
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 0, m_nImgHeight / 8 );
 
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 8, m_nImgHeight / 4 );
+		m_ThreadGrp.add_thread( pT );
 
-    m_ThreadGrp.add_thread( pT );
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 8, m_nImgHeight / 4 );
 
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 4, 3 * m_nImgHeight / 8 );
+		m_ThreadGrp.add_thread( pT );
 
-    m_ThreadGrp.add_thread( pT );
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 4, 3 * m_nImgHeight / 8 );
 
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 3 * m_nImgHeight / 8, m_nImgHeight / 2 );
+		m_ThreadGrp.add_thread( pT );
 
-    m_ThreadGrp.add_thread( pT );
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 3 * m_nImgHeight / 8, m_nImgHeight / 2 );
 
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 2, 5 * m_nImgHeight / 8 );
+		m_ThreadGrp.add_thread( pT );
 
-    m_ThreadGrp.add_thread( pT );
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 2, 5 * m_nImgHeight / 8 );
 
-    pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 5 * m_nImgHeight / 8, 3 * m_nImgHeight / 4 );
+		m_ThreadGrp.add_thread( pT );
 
-    m_ThreadGrp.add_thread( pT );
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 5 * m_nImgHeight / 8, 3 * m_nImgHeight / 4 );
 
-    // pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 3*m_nImgHeight/4, 7*m_nImgHeight/8 );
-    // m_ThreadGrp.add_thread(pT);
-    _BuildSystem( this, 0, m_nImgWidth, 3 * m_nImgHeight / 4, m_nImgHeight );
+		m_ThreadGrp.add_thread( pT );
 
-    /*  */
+		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 3 * m_nImgHeight / 4, 7 * m_nImgHeight / 8 );
 
-    // wait for all threads to finish
-    m_ThreadGrp.join_all();
+		m_ThreadGrp.add_thread( pT );
+
+		_BuildSystem( this, 0, m_nImgWidth, 7 * m_nImgHeight / 8, m_nImgHeight );
+
+	    // wait for all threads to finish
+		m_ThreadGrp.join_all();
+	}
+	else {
+		// 1 thread or an invalid number was requested
+		_BuildSystem( this, 0, m_nImgWidth, 0, m_nImgHeight );
+	}
 
     // calculate deltaPose as Hinv * Jt * error
-    // deltaPose = LHS.inverse() * RHS;
     Eigen::Vector6d Delta;
 
     Delta = m_LHS.ldlt().solve( m_RHS );
@@ -290,7 +288,7 @@ void LinearSystem::_BuildSystem(
             Eigen::Vector4d Ph;        // homogenized point
 
             // check if pixel is contained in our model (i.e. has depth)
-            if( pLS->m_vVirtDepth[ii * pLS->m_nImgWidth + jj] == 0 ) {
+            if( pLS->m_PrevDepth.at<float>( ii, jj ) == 0 ) {
                 continue;
             }
 
@@ -298,7 +296,7 @@ void LinearSystem::_BuildSystem(
             // evaluate 'a' = L[ Trv * Linv( Uv ) ]
             // back project to virtual camera's reference frame
             // this already brings points to robotics reference frame
-            Pv = pLS->_BackProject( jj, ii, pLS->m_vVirtDepth[ii * pLS->m_nImgWidth + jj] );
+            Pv = pLS->_BackProject( jj, ii, pLS->m_PrevDepth.at<float>( ii, jj ) );
 
             // convert to homogeneous coordinate
             Ph << Pv, 1;
@@ -322,10 +320,10 @@ void LinearSystem::_BuildSystem(
             }
 
             // finite differences
-            float                       TopPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) - 1, pLS->m_vRefImg );
-            float                       BotPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) + 1, pLS->m_vRefImg );
-            float                       LeftPix  = pLS->_Interpolate( Ur( 0 ) - 1, Ur( 1 ), pLS->m_vRefImg );
-            float                       RightPix = pLS->_Interpolate( Ur( 0 ) + 1, Ur( 1 ), pLS->m_vRefImg );
+            float                       TopPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) - 1, pLS->m_CurImg );
+            float                       BotPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) + 1, pLS->m_CurImg );
+            float                       LeftPix  = pLS->_Interpolate( Ur( 0 ) - 1, Ur( 1 ), pLS->m_CurImg );
+            float                       RightPix = pLS->_Interpolate( Ur( 0 ) + 1, Ur( 1 ), pLS->m_CurImg );
             Eigen::Matrix<double, 1, 2> Term1;
 
             Term1( 0 ) = (RightPix - LeftPix) / 2.0;
@@ -385,12 +383,12 @@ void LinearSystem::_BuildSystem(
             // estimate RHS (error)
             // RHS = Jt * e
             RHS += J.transpose()
-                   * (pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
-                      - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj]);
+                   * (pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_CurImg )
+                      - pLS->m_PrevImg.at<unsigned char>( ii, jj ));
 
             // calculate normalized error
-            Error += fabs( pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
-                           - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj] );
+            Error += fabs( pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_CurImg )
+                           - pLS->m_PrevImg.at<unsigned char>( ii, jj ) );
 
             ErrorPts++;
         }
@@ -450,80 +448,22 @@ inline Eigen::Vector3d LinearSystem::_BackProject(
 
 // //////////////////////////////////////////////////////////////////////////////
 inline float LinearSystem::_Interpolate(
-        const float&                                           X,       // < Input: X coordinate
-        const float&                                           Y,       // < Input: Y coordinate
-        const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& Image    // < Input: Image
+        const float&   X,       // < Input: X coordinate
+        const float&   Y,       // < Input: Y coordinate
+        const cv::Mat& Image    // < Input: Image
         )
 {
-    int          xt  = (int)X;    /* top-left corner */
-    int          yt  = (int)Y;
-    float        ax  = X - xt;
-    float        ay  = Y - yt;
-    unsigned int idx = (m_nImgWidth * yt) + xt;
+    int   xt = (int)X;    /* top-left corner */
+    int   yt = (int)Y;
+    float ax = X - xt;
+    float ay = Y - yt;
 
     if( (xt >= 0) && (yt >= 0) && (xt <= m_nImgWidth - 2) && (yt <= m_nImgHeight - 2) ) {
-        return((1 - ax) * (1 - ay) * Image[idx] + (ax)*(1 - ay) * Image[idx + 1]
-               + (1 - ax) * (ay)*Image[idx + m_nImgWidth] + (ax)*(ay)*Image[idx + m_nImgWidth + 1]);
+        return((1 - ax) * (1 - ay) * Image.at<unsigned char>( yt, xt )
+               + (ax)*(1 - ay) * Image.at<unsigned char>( yt, xt + 1 )
+               + (1 - ax) * (ay)*Image.at<unsigned char>( yt + 1, xt )
+               + (ax)*(ay)*Image.at<unsigned char>( yt + 1, xt + 1 ));
     }
 
     return 0;
-}
-
-// //////////////////////////////////////////////////////////////////////////////
-inline void LinearSystem::_RGB2Gray(
-        const std::vector<unsigned char>& RGB,    // < Input: RGB image
-        Eigen::VectorXf&                  Gray    // < Output: Grayscale image
-        )
-{
-    unsigned int Idx;
-
-    for( int ii = 0; ii < m_nImgHeight; ii++ ) {
-        for( int jj = 0; jj < m_nImgWidth; jj++ ) {
-            // with flipping
-            Idx                         = (m_nImgHeight - ii - 1) * m_nImgWidth * 3 + jj * 3;
-            Gray[ii * m_nImgWidth + jj] = float(RGB[Idx] + RGB[Idx + 1] + RGB[Idx + 2]) / 3.0;
-
-            // without flipping
-            // Idx = ii * g_nImgWidth * 3 + jj * 3;
-            // Gray[ii * g_nImgWidth + jj] = float(RGB[Idx] + RGB[Idx + 1] + RGB[Idx + 2] ) / 3.0;
-        }
-    }
-}
-
-// //////////////////////////////////////////////////////////////////////////////
-inline void LinearSystem::_FlipDepth(
-        Eigen::VectorXf& vDepth    // < Input/Output: Depth buffer
-        )
-{
-    Eigen::VectorXf tmp;
-
-    tmp = vDepth;
-
-    unsigned int Idx;
-
-    for( int ii = 0; ii < m_nImgHeight; ii++ ) {
-        for( int jj = 0; jj < m_nImgWidth; jj++ ) {
-            Idx                           = (m_nImgHeight - ii - 1) * m_nImgWidth + jj;
-            vDepth[ii * m_nImgWidth + jj] = tmp[Idx];
-        }
-    }
-}
-
-// //////////////////////////////////////////////////////////////////////////////
-inline void LinearSystem::_FlipImg(
-        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& vImg    // < Input/Output: Img buffer
-        )
-{
-    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> tmp;
-
-    tmp = vImg;
-
-    unsigned int Idx;
-
-    for( int ii = 0; ii < m_nImgHeight; ii++ ) {
-        for( int jj = 0; jj < m_nImgWidth; jj++ ) {
-            Idx                         = (m_nImgHeight - ii - 1) * m_nImgWidth + jj;
-            vImg[ii * m_nImgWidth + jj] = tmp[Idx];
-        }
-    }
 }
