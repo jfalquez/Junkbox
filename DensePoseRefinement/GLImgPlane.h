@@ -73,13 +73,13 @@ public SceneGraph::GLObject
             glColor4f(1.0, 1.0, 1.0, 1.0);
             glBegin(GL_QUADS);
             glTexCoord2f(0.0, 0.0);
-            glVertex3f(1.0, nRight, nTop);
+            glVertex3f(0.0, nRight, nTop);
             glTexCoord2f(m_nImageWidth, 0.0);
-            glVertex3f(1.0, nRight, nBottom);
+            glVertex3f(0.0, nRight, nBottom);
             glTexCoord2f(m_nImageWidth, m_nImageHeight);
-            glVertex3f(1.0, nLeft, nBottom);
+            glVertex3f(0.0, nLeft, nBottom);
             glTexCoord2f(0.0, m_nImageHeight);
-            glVertex3f(1.0, nLeft, nTop);
+            glVertex3f(0.0, nLeft, nTop);
             glEnd();
             glBindTexture(GL_TEXTURE_RECTANGLE_ARB, 0);
             glDisable(GL_TEXTURE_RECTANGLE_ARB);

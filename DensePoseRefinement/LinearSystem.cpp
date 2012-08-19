@@ -12,7 +12,9 @@
 #include <opencv/cv.h>
 #include <opencv2/highgui/highgui.hpp>
 
+using namespace std;
 namespace sg =SceneGraph;
+
 LinearSystem::LinearSystem()
 {
     // Initialize generators
@@ -60,7 +62,9 @@ void LinearSystem::Init(
         // permutation matrix
         Eigen::Matrix3d M;
 
-        M << 0, 1, 0, 0, 0, 1, 1, 0, 0;
+        M << 0, 1, 0,
+				0, 0, 1,
+				1, 0, 0;
 
         m_Kv = VirtCam->GetKMatrix();
         m_Kr = m_Kv * M;
@@ -84,73 +88,7 @@ void LinearSystem::Init(
         m_dError    = ImgError.lpNorm<1>();
 
         std::cout << "Error is: " << Error() << std::endl;
-    } else {
-        // store parameters
-        m_nImgWidth  = VirtCam->ImageWidth();
-        m_nImgHeight = VirtCam->ImageHeight();
-
-        // store K matrix in robotics frame
-        // permutation matrix
-        Eigen::Matrix3d M;
-
-        M << 0, 1, 0, 0, 0, 1, 1, 0, 0;
-
-        m_Kv = VirtCam->GetKMatrix();
-        m_Kr = m_Kv * M;
-        m_Kr = m_Kr / 4;
-
-        // populate vectors with decimated data
-        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> Img;
-        Eigen::VectorXf Depth;
-
-        Img.resize( m_nImgWidth * m_nImgHeight );
-        Depth.resize( m_nImgWidth * m_nImgHeight );
-        VirtCam->CaptureGrey( Img.data() );
-        _FlipImg( Img );
-        VirtCam->CaptureDepth( Depth.data() );
-        _FlipDepth( Depth );
-
-        // decimate image
-		cv::Mat In( m_nImgHeight, m_nImgWidth, CV_8UC1, Img.data() );
-		cv::Mat Out;
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/2, m_nImgHeight/2) );
-		In = Out;
-		Out.release();
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/4, m_nImgHeight/4) );
-        m_vVirtImg.resize( (m_nImgHeight / 4) * (m_nImgWidth / 4) );
-		memcpy( m_vVirtImg.data(), Out.data, m_nImgHeight/4 * m_nImgWidth/4 );
-
-        // decimate depth
-		In = cv::Mat( m_nImgHeight, m_nImgWidth, CV_32FC1, Depth.data() );
-		Out.release();
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/2, m_nImgHeight/2) );
-		In = Out;
-		Out.release();
-		cv::pyrDown( In, Out, cv::Size( m_nImgWidth/4, m_nImgHeight/4) );
-        m_vVirtDepth.resize( (m_nImgHeight / 4) * (m_nImgWidth / 4) );
-		memcpy( m_vVirtDepth.data(), Out.data, 4*(m_nImgHeight/4 * m_nImgWidth/4) );
-
-        // RefImg is assumed to have top-left origin
-        m_vRefImg = RefImg;
-
-        // image error
-        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> ImgError;
-
-        ImgError = m_vRefImg - m_vVirtImg;
-
-        // initialize estimate
-        m_dTrv = Eigen::Matrix4d::Identity();
-
-        // re-adjust image height and width
-        m_nImgHeight = m_nImgHeight / 4;
-        m_nImgWidth  = m_nImgWidth / 4;
-
-        // print initial error
-        m_nErrorPts = m_nImgHeight * m_nImgWidth;
-        m_dError    = ImgError.lpNorm<1>();
-
-        std::cout << "Error is: " << Error() << std::endl;
-    }
+	}
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -256,9 +194,7 @@ void LinearSystem::SnapVirtualCam()
 
 	// populate vectors
 	m_pVirtCam->CaptureGrey( m_vVirtImg.data() );
-	_FlipImg( m_vVirtImg );
 	m_pVirtCam->CaptureDepth( m_vVirtDepth.data() );
-	_FlipDepth( m_vVirtDepth );
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -360,7 +296,7 @@ void LinearSystem::_BuildSystem(
             Term2( 1, 0 ) = 0;
             Term2( 1, 1 ) = 1.0 / Lr( 2 );
             Term2( 1, 2 ) = -(Lr( 1 )) / PowC;
-            Term2         = Term2 * pLS->m_Kr;
+//            Term2         = Term2 * pLS->m_Kr;
 
             // --------------------- third term 3x1
             // we need Pv in homogenous coordinates
@@ -431,7 +367,7 @@ inline Eigen::Vector3d LinearSystem::_Project(
 {
     Eigen::Vector3d T = P;
 
-    T = m_Kr * T;
+    T = m_Kv * T;
 
     if( T( 2 ) == 0 ) {
         std::cout << "Oops! I just saved you from making a division by zero!" << std::endl;
@@ -456,9 +392,9 @@ inline Eigen::Vector3d LinearSystem::_BackProject(
     double          fy = m_Kv( 1, 1 );
     Eigen::Vector3d P;
 
-    P( 1 ) = Depth * ((X - cx) / fx);
-    P( 2 ) = Depth * ((Y - cy) / fy);
-    P( 0 ) = Depth;
+    P( 0 ) = Depth * ((X - cx) / fx);
+    P( 1 ) = Depth * ((Y - cy) / fy);
+    P( 2 ) = Depth;
     return P;
 }
 
@@ -481,63 +417,4 @@ inline float LinearSystem::_Interpolate(
     }
 
     return 0;
-}
-
-// //////////////////////////////////////////////////////////////////////////////
-inline void LinearSystem::_RGB2Gray(
-        const std::vector<unsigned char>& RGB,    // < Input: RGB image
-        Eigen::VectorXf&                  Gray    // < Output: Grayscale image
-        )
-{
-    unsigned int Idx;
-
-    for( int ii = 0; ii < m_nImgHeight; ii++ ) {
-        for( int jj = 0; jj < m_nImgWidth; jj++ ) {
-            // with flipping
-            Idx                         = (m_nImgHeight - ii - 1) * m_nImgWidth * 3 + jj * 3;
-            Gray[ii * m_nImgWidth + jj] = float(RGB[Idx] + RGB[Idx + 1] + RGB[Idx + 2]) / 3.0;
-
-            // without flipping
-            // Idx = ii * g_nImgWidth * 3 + jj * 3;
-            // Gray[ii * g_nImgWidth + jj] = float(RGB[Idx] + RGB[Idx + 1] + RGB[Idx + 2] ) / 3.0;
-        }
-    }
-}
-
-// //////////////////////////////////////////////////////////////////////////////
-inline void LinearSystem::_FlipDepth(
-        Eigen::VectorXf& vDepth    // < Input/Output: Depth buffer
-        )
-{
-    Eigen::VectorXf tmp;
-
-    tmp = vDepth;
-
-    unsigned int Idx;
-
-    for( int ii = 0; ii < m_nImgHeight; ii++ ) {
-        for( int jj = 0; jj < m_nImgWidth; jj++ ) {
-            Idx                           = (m_nImgHeight - ii - 1) * m_nImgWidth + jj;
-            vDepth[ii * m_nImgWidth + jj] = tmp[Idx];
-        }
-    }
-}
-
-// //////////////////////////////////////////////////////////////////////////////
-inline void LinearSystem::_FlipImg(
-        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& vImg    // < Input/Output: Img buffer
-        )
-{
-    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> tmp;
-
-    tmp = vImg;
-
-    unsigned int Idx;
-
-    for( int ii = 0; ii < m_nImgHeight; ii++ ) {
-        for( int jj = 0; jj < m_nImgWidth; jj++ ) {
-            Idx                         = (m_nImgHeight - ii - 1) * m_nImgWidth + jj;
-            vImg[ii * m_nImgWidth + jj] = tmp[Idx];
-        }
-    }
 }

@@ -64,7 +64,7 @@ void _ResetCamera()
     g_bLocalize = false;
     g_dVirtPose = g_dRefPose;
 
-    VirtCam.SetPose( mvl::Cart2T( g_dVirtPose ) );
+    VirtCam.SetRobotPose( mvl::Cart2T( g_dVirtPose ) );
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -104,7 +104,7 @@ void UpdateCameras()
     T          = T * mvl::Cart2T( g_dRefVel );
     g_dRefPose = mvl::T2Cart( T );
 
-    RefCam.SetPose( mvl::Cart2T( g_dRefPose ) );
+    RefCam.SetRobotPose( mvl::Cart2T( g_dRefPose ) );
     RefCam.RenderToTexture();    // will render to texture, then copy texture to CPU memory
     VirtCam.RenderToTexture();
 
@@ -118,7 +118,7 @@ void Localizer()
 
     while( 1 ) {
         if( g_bLocalize ) {
-            Eigen::Vector6d dInitialVirtPose = g_dVirtPose;
+            Eigen::Matrix4d dInitialVirtPose = mvl::Cart2T(g_dVirtPose);
 
             // print initial poses
             std::cout << "Reference Pose: " << g_dRefPose.transpose() << std::endl;
@@ -171,7 +171,7 @@ void Localizer()
             dTrv = Eigen::Matrix4d::Identity();
 
             // reset initial pose
-            dInitialVirtPose = g_dVirtPose;
+			dInitialVirtPose = mvl::Cart2T(g_dVirtPose);
 
             while( (nMaxIters < g_nMaxIterations) && g_bLocalize ) {
                 std::cout << "////////////////////////////////////////////////////////////////////////////////"
@@ -194,9 +194,9 @@ void Localizer()
                 dTrv = dTrv * mvl::TInv( dTdelta );
 
                 // update camera position
-                g_dVirtPose = dInitialVirtPose - mvl::T2Cart( dTrv );
+                g_dVirtPose = mvl::T2Cart( dInitialVirtPose * mvl::TInv( dTrv ) );
 
-                VirtCam.SetPose( mvl::Cart2T( g_dVirtPose ) );
+                VirtCam.SetRobotPose( mvl::Cart2T(g_dVirtPose) );
 
 	            // wait for GUI loop to render in new position
 		        g_bRendered = false;

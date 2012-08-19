@@ -49,16 +49,6 @@ class LinearSystem
                 const float&                                           Y,       // < Input: Y coordinate
                 const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& Image    // < Input: Image
                 );
-        void _RGB2Gray(
-                const std::vector<unsigned char>& RGB,                          // < Input: RGB image
-                Eigen::VectorXf&                  Gray                          // < Output: Grayscale image
-                );
-        void _FlipDepth(
-                Eigen::VectorXf& vDepth                                         // < Input/Output: Depth buffer
-                );
-        void _FlipImg(
-                Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& vImg           // < Input/Output: Img buffer
-                );
 
     private:
 		SceneGraph::GLSimCam*							m_pVirtCam;

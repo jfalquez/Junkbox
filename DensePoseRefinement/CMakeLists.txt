@@ -29,12 +29,12 @@ target_link_libraries( DensePR
                      )
 
 
-add_executable( DensePRwRU DensePRwRU.cpp LinearSystem.cpp )
+#add_executable( DensePRwRU DensePRwRU.cpp LinearSystem.cpp )
 
-target_link_libraries( DensePRwRU
-                        ${Pangolin_LIBRARIES}
-                        ${SceneGraph_LIBRARIES}
-                        ${Sophus_LIBRARIES}
-                        ${MVL_LIBRARIES}
-                        ${OpenCV2_LIBRARIES}
-                     )
+#target_link_libraries( DensePRwRU
+#                        ${Pangolin_LIBRARIES}
+#                        ${SceneGraph_LIBRARIES}
+#                        ${Sophus_LIBRARIES}
+#                        ${MVL_LIBRARIES}
+#                        ${OpenCV2_LIBRARIES}
+#                     )
