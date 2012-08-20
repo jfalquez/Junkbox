@@ -73,10 +73,12 @@ class LinearSystem
         std::vector<Eigen::Matrix4d>                    m_Gen;           // SE3 generators
         Eigen::Matrix<double, 6, 6>                     m_LHS;           // Left Hand Side
         Eigen::Matrix<double, 6, 1>                     m_RHS;           // Right Hand Side
+		Eigen::Matrix<double, 1, 6>						m_J;
+		Eigen::Matrix<double, 1, 6>						m_Jo;
+        double                                          m_dSSD;
         double                                          m_dError;
         unsigned int                                    m_nErrorPts;
         boost::mutex                                    m_Mutex;
-        boost::thread_group                             m_ThreadGrp;
 
 		// Jacobian
 		Eigen::VectorXf m_vJImgX;

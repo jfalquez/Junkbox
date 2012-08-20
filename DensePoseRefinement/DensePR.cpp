@@ -18,6 +18,41 @@ namespace pango =pangolin;
 
 /**************************************************************************************************
  *
+ * GUI Variables
+ *
+ **************************************************************************************************/
+struct TypePose
+{
+  float x;
+  float y;
+  float z;
+  float p;
+  float q;
+  float r;
+};
+
+std::ostream& operator<< (std::ostream& os, const TypePose& o)
+{
+	os.precision(3);
+	os.fixed;
+	os.floatfield;
+	os << "( " << o.x << ", " << o.y << ", " << o.z << ", " << o.p << ", " << o.q << ", " << o.r << " )";
+	return os;
+}
+
+std::istream& operator>> (std::istream& is, TypePose& o)
+{
+  is >> o.x;
+  is >> o.y;
+  is >> o.z;
+  is >> o.p;
+  is >> o.q;
+  is >> o.r;
+  return is;
+}
+
+/**************************************************************************************************
+ *
  * VARIABLES
  *
  **************************************************************************************************/
@@ -159,7 +194,7 @@ void Localizer()
 				// solve system
                 double dTi = mvl::Tic();
 
-                dTdelta = ESM.Solve(1, glJacobians);
+                dTdelta = ESM.Solve(8, glJacobians);
 
                 std::cout << "Solving took: " << mvl::Toc( dTi ) << std::endl;
 
@@ -292,9 +327,15 @@ int main(
     // We set the views location on screen and add a handler which will
     // let user input update the model_view matrix (stacks3d) and feed through
     // to our scenegraph
-    glView.SetBounds( 1.0 / 3.0, 1.0, 0.0, 3.0 / 4.0, 640.0f / 480.0f );
+    glView.SetBounds( 1.0 / 3.0, 1.0, pango::Attach::Pix(250), 3.0 / 4.0, 640.0f / 480.0f );
     glView.SetHandler( new sg::HandlerSceneGraph( glGraph, glState, pango::AxisNegZ ) );
     glView.SetDrawFunction( sg::ActivateDrawFunctor( glGraph, glState ) );
+
+	// Add named Panel and bind to variables beginning 'ui'
+	// A Panel is just a View with a default layout and input handling
+	pango::View& glPanel = pango::CreatePanel("ui");
+    glPanel.SetBounds( 1.0 / 3.0, 1.0, 0.0, pango::Attach::Pix(250));
+
 
     // display images
     sg::ImageView glRefImg( true, true );
@@ -372,7 +413,13 @@ int main(
 
     // Default hooks for exiting (Esc) and fullscreen (tab).
     while( !pango::ShouldQuit() ) {
-        // Clear whole screen
+		/// panel variables
+		pango::Var<TypePose> uiRefPose("ui.RefPose");
+		uiRefPose = (TypePose){g_dRefPose(0),g_dRefPose(1),g_dRefPose(2),g_dRefPose(3),g_dRefPose(4),g_dRefPose(5)};
+		pango::Var<TypePose> uiVirtPose("ui.VirtPose");
+		uiVirtPose = (TypePose){g_dVirtPose(0),g_dVirtPose(1),g_dVirtPose(2),g_dVirtPose(3),g_dVirtPose(4),g_dVirtPose(5)};
+
+        // clear whole screen
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
         // pre-render stuff
@@ -404,6 +451,11 @@ int main(
 
         glErrorImg.SetImage( vErrorImg.data(), g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE,
                              GL_UNSIGNED_BYTE );
+
+	    // Render our UI panel when we receive input
+		if(pango::HadInput()) {
+			glPanel.Render();
+		}
 
         // Swap frames and Process Events
         pango::FinishGlutFrame();

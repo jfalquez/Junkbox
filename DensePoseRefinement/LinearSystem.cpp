@@ -52,6 +52,11 @@ void LinearSystem::Init(
 {
 	m_pVirtCam = VirtCam;
 
+	// ESM init
+	m_Jo.setZero();
+	m_dSSD = 0;
+
+
     // this is such a crappy hack given how FBO works as a singleton
     // we cannot create SimCams with different sizes
     if( Decimate == false ) {
@@ -104,6 +109,9 @@ void LinearSystem::Init(
 // //////////////////////////////////////////////////////////////////////////////
 Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads, const vector< sg::ImageView* >& vJac )
 {
+	// reset Jacobians
+	m_J.setZero();
+
     // reset LHS + RHS
     m_LHS.setZero();
     m_RHS.setZero();
@@ -112,74 +120,89 @@ Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads, const vector< sg:
     m_dError    = 0;
     m_nErrorPts = 0;
 
-    boost::thread * pT;
+	// previous SSD error
+	double dError = m_dSSD;
+	m_dSSD = 0;
+
+    boost::thread*		pT;
+	boost::thread_group ThreadGrp;
 
 	if( nNumThreads == 4 ) {
 
 		// 4 ways
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 0, m_nImgHeight / 4 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 4, m_nImgHeight / 2 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 2, 3 * m_nImgHeight / 4 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		_BuildSystem( this, 0, m_nImgWidth, 3 * m_nImgHeight / 4, m_nImgHeight );
 
 	    // wait for all threads to finish
-		m_ThreadGrp.join_all();
+		ThreadGrp.join_all();
 
 	} else if( nNumThreads == 8 ) {
 
 		// 8 ways
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 0, m_nImgHeight / 8 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 8, m_nImgHeight / 4 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 4, 3 * m_nImgHeight / 8 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 3 * m_nImgHeight / 8, m_nImgHeight / 2 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, m_nImgHeight / 2, 5 * m_nImgHeight / 8 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 5 * m_nImgHeight / 8, 3 * m_nImgHeight / 4 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		pT = new boost::thread( _BuildSystem, this, 0, m_nImgWidth, 3 * m_nImgHeight / 4, 7 * m_nImgHeight / 8 );
 
-		m_ThreadGrp.add_thread( pT );
+		ThreadGrp.add_thread( pT );
 
 		_BuildSystem( this, 0, m_nImgWidth, 7 * m_nImgHeight / 8, m_nImgHeight );
 
 	    // wait for all threads to finish
-		m_ThreadGrp.join_all();
+		ThreadGrp.join_all();
 	}
 	else {
 		// 1 thread or an invalid number was requested
 		_BuildSystem( this, 0, m_nImgWidth, 0, m_nImgHeight );
 	}
 
-    // calculate deltaPose as Hinv * Jt * error
-    // deltaPose = LHS.inverse() * RHS;
+	// update variable
     Eigen::Vector6d Delta;
 
-    Delta = m_LHS.ldlt().solve( m_RHS );
+	// solve via ESM
+//	if( m_Jo.norm() != 0 ) {
+//		m_J = (m_Jo + m_J) / 2.0;
+//	}
+
+//    Delta = m_J.inverse() * -m_dSSD;
+
+	// solve via GN
+	Delta = m_LHS.ldlt().solve( m_RHS );
+
+	// set J as previous Jo
+	m_Jo = m_J;
 
 	// normalize jacobians
 	float Max = 0;
@@ -225,11 +248,11 @@ Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads, const vector< sg:
 	vJac[4]->SetImage( m_vJImgQ.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
 	vJac[5]->SetImage( m_vJImgR.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
 
-
     // convert Delta from Lie
     Sophus::SE3 DeltaPose;
 
     DeltaPose = Sophus::SE3::exp( Delta );
+
     m_dX      = DeltaPose.matrix();
     return m_dX;
 }
@@ -265,6 +288,7 @@ double LinearSystem::Error()
  * PRIVATE METHODS
  *
  **************************************************************************************************/
+#if 1
 void LinearSystem::_BuildSystem(
         LinearSystem*       pLS,
         const unsigned int& StartU,
@@ -286,6 +310,161 @@ void LinearSystem::_BuildSystem(
 
     RHS.setZero();
 
+    double       Error    = 0;
+    unsigned int ErrorPts = 0;
+
+    for( int ii = StartV; ii < EndV; ii++ ) {
+        for( int jj = StartU; jj < EndU; jj++ ) {
+            // variables
+            Eigen::Vector2d Ur;        // pixel position
+            Eigen::Vector3d Pr, Pv;    // 3d point
+            Eigen::Vector4d Ph;        // homogenized point
+
+            // check if pixel is contained in our model (i.e. has depth)
+            if( pLS->m_vVirtDepth[ii * pLS->m_nImgWidth + jj] == 0 ) {
+                continue;
+            }
+
+            // --------------------- first term 1x2
+            // evaluate 'a' = L[ Trv * Linv( Uv ) ]
+            // back project to virtual camera's reference frame
+            // this already brings points to robotics reference frame
+            Pv = pLS->_BackProject( jj, ii, pLS->m_vVirtDepth[ii * pLS->m_nImgWidth + jj] );
+
+            // convert to homogeneous coordinate
+            Ph << Pv, 1;
+
+            // transform point to reference camera's frame
+            // Pr = Trv * Pv
+            Ph = pLS->m_dTrv * Ph;
+            Pr = Ph.head( 3 );
+
+            // project onto reference camera
+            Eigen::Vector3d Lr;
+
+            Lr = pLS->_Project( Pr );
+            Ur = Lr.head( 2 );
+            Ur = Ur / Lr( 2 );
+
+            // check if point falls in camera's field of view
+            if( (Ur( 0 ) <= 1) || (Ur( 0 ) >= pLS->m_nImgWidth - 2) || (Ur( 1 ) <= 1)
+                    || (Ur( 1 ) >= pLS->m_nImgHeight - 2) ) {
+                continue;
+            }
+
+            // finite differences
+            float                       TopPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) - 1, pLS->m_vRefImg );
+            float                       BotPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) + 1, pLS->m_vRefImg );
+            float                       LeftPix  = pLS->_Interpolate( Ur( 0 ) - 1, Ur( 1 ), pLS->m_vRefImg );
+            float                       RightPix = pLS->_Interpolate( Ur( 0 ) + 1, Ur( 1 ), pLS->m_vRefImg );
+            Eigen::Matrix<double, 1, 2> Term1;
+
+            Term1( 0 ) = (RightPix - LeftPix) / 2.0;
+            Term1( 1 ) = (BotPix - TopPix) / 2.0;
+
+            // --------------------- second term 2x3
+            // evaluate 'b' = Trv * Linv( Uv )
+            // this was already calculated for Term1
+            // fill matrix
+            // 1/c      0       -a/c^2
+            // 0       1/c     -b/c^2
+            Eigen::Matrix<double, 2, 3> Term2;
+            double                      PowC = Lr( 2 ) * Lr( 2 );
+
+            Term2( 0, 0 ) = 1.0 / Lr( 2 );
+            Term2( 0, 1 ) = 0;
+            Term2( 0, 2 ) = -(Lr( 0 )) / PowC;
+            Term2( 1, 0 ) = 0;
+            Term2( 1, 1 ) = 1.0 / Lr( 2 );
+            Term2( 1, 2 ) = -(Lr( 1 )) / PowC;
+            Term2         = Term2 * pLS->m_Kr;
+
+            // --------------------- third term 3x1
+            // we need Pv in homogenous coordinates
+            Ph << Pv, 1;
+
+            Eigen::Vector4d Term3i;
+
+            // last row of Term3 is truncated since it is always 0
+            Eigen::Vector3d Term3;
+
+            // fill Jacobian with T generators
+            Term3i    = pLS->m_dTrv * pLS->m_Gen[0] * Ph;
+            Term3     = Term3i.head( 3 );
+            J( 0, 0 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgX[ii * pLS->m_nImgWidth + jj] = J(0, 0);
+            Term3i    = pLS->m_dTrv * pLS->m_Gen[1] * Ph;
+            Term3     = Term3i.head( 3 );
+            J( 0, 1 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgY[ii * pLS->m_nImgWidth + jj] = J(0, 1);
+            Term3i    = pLS->m_dTrv * pLS->m_Gen[2] * Ph;
+            Term3     = Term3i.head( 3 );
+            J( 0, 2 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgZ[ii * pLS->m_nImgWidth + jj] = J(0, 2);
+            Term3i    = pLS->m_dTrv * pLS->m_Gen[3] * Ph;
+            Term3     = Term3i.head( 3 );
+            J( 0, 3 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgP[ii * pLS->m_nImgWidth + jj] = J(0, 3);
+            Term3i    = pLS->m_dTrv * pLS->m_Gen[4] * Ph;
+            Term3     = Term3i.head( 3 );
+            J( 0, 4 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgQ[ii * pLS->m_nImgWidth + jj] = J(0, 4);
+            Term3i    = pLS->m_dTrv * pLS->m_Gen[5] * Ph;
+            Term3     = Term3i.head( 3 );
+            J( 0, 5 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgR[ii * pLS->m_nImgWidth + jj] = J(0, 5);
+
+            // estimate LHS (Hessian)
+            // LHS = Hessian = Jt * J
+            LHS += J.transpose() * J;
+
+            // std::cout << "J is: " << std::endl << J << std::endl;
+            // estimate RHS (error)
+            // RHS = Jt * e
+            RHS += J.transpose()
+                   * (pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
+                      - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj]);
+
+            // calculate normalized error
+            Error += fabs( pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
+                           - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj] );
+
+            ErrorPts++;
+        }
+    }
+
+    // update global LHS and RHS
+    // ---------- start contention zone
+    pLS->m_Mutex.lock();
+
+    pLS->m_LHS       += LHS;
+    pLS->m_RHS       += RHS;
+    pLS->m_dError    += Error;
+    pLS->m_nErrorPts += ErrorPts;
+
+    pLS->m_Mutex.unlock();
+
+    // ---------- end contention zone
+}
+#else
+void LinearSystem::_BuildSystem(
+        LinearSystem*       pLS,
+        const unsigned int& StartU,
+        const unsigned int& EndU,
+        const unsigned int& StartV,
+        const unsigned int& EndV
+        )
+{
+    // Jacobian
+    Eigen::Matrix<double, 1, 6> BigJ;
+    Eigen::Matrix<double, 1, 6> J;
+
+    BigJ.setZero();
+    J.setZero();
+
+	// Errors
+	double		 e;
+	double		 SSD = 0;
     double       Error    = 0;
     unsigned int ErrorPts = 0;
 
@@ -390,16 +569,14 @@ void LinearSystem::_BuildSystem(
             J( 0, 5 ) = Term1 * Term2 * Term3;
 			pLS->m_vJImgR[(StartV + ii) * pLS->m_nImgWidth + (StartU) + jj] = J(0, 5);
 
-            // estimate LHS (Hessian)
-            // LHS = Hessian = Jt * J
-            LHS += J.transpose() * J;
+            // accumulate Jacobian
+            BigJ += J;
 
-            // std::cout << "J is: " << std::endl << J << std::endl;
-            // estimate RHS (error)
-            // RHS = Jt * e
-            RHS += J.transpose()
-                   * (pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
-                      - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj]);
+			// accumulate SSD error
+			e = pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
+					- pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj];
+
+			SSD += e * e;
 
             // calculate normalized error
             Error += fabs( pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
@@ -413,8 +590,8 @@ void LinearSystem::_BuildSystem(
     // ---------- start contention zone
     pLS->m_Mutex.lock();
 
-    pLS->m_LHS       += LHS;
-    pLS->m_RHS       += RHS;
+    pLS->m_J         += BigJ;
+	pLS->m_dSSD		 += SSD;
     pLS->m_dError    += Error;
     pLS->m_nErrorPts += ErrorPts;
 
@@ -422,6 +599,8 @@ void LinearSystem::_BuildSystem(
 
     // ---------- end contention zone
 }
+#endif
+
 
 // //////////////////////////////////////////////////////////////////////////////
 inline Eigen::Vector3d LinearSystem::_Project(
