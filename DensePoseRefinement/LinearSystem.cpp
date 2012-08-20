@@ -5,12 +5,13 @@
  * Created on July 29, 2012, 1:44 PM
  */
 
-#include "LinearSystem.h"
 #include <sophus/so3.h>
 #include <sophus/se3.h>
 #include <Mvlpp/Mvl.h>
 #include <opencv/cv.h>
 #include <opencv2/highgui/highgui.hpp>
+#include "LinearSystem.h"
+
 
 using namespace std;
 namespace sg =SceneGraph;
@@ -58,6 +59,14 @@ void LinearSystem::Init(
         m_nImgWidth  = VirtCam->ImageWidth();
         m_nImgHeight = VirtCam->ImageHeight();
 
+		// initialize jacobian image containers
+		m_vJImgX.resize(m_nImgWidth * m_nImgHeight);
+		m_vJImgY.resize(m_nImgWidth * m_nImgHeight);
+		m_vJImgZ.resize(m_nImgWidth * m_nImgHeight);
+		m_vJImgP.resize(m_nImgWidth * m_nImgHeight);
+		m_vJImgQ.resize(m_nImgWidth * m_nImgHeight);
+		m_vJImgR.resize(m_nImgWidth * m_nImgHeight);
+
         // store K matrix in robotics frame
         // permutation matrix
         Eigen::Matrix3d M;
@@ -71,6 +80,7 @@ void LinearSystem::Init(
 
         // RefImg is assumed to have top-left origin
         m_vRefImg = RefImg;
+		_FlipImg(m_vRefImg);
 
 		// store virtual image and depth map
 		SnapVirtualCam();
@@ -92,7 +102,7 @@ void LinearSystem::Init(
 }
 
 // //////////////////////////////////////////////////////////////////////////////
-Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads )
+Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads, const vector< sg::ImageView* >& vJac )
 {
     // reset LHS + RHS
     m_LHS.setZero();
@@ -171,6 +181,51 @@ Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads )
 
     Delta = m_LHS.ldlt().solve( m_RHS );
 
+	// normalize jacobians
+	float Max = 0;
+	float Maxi;
+
+	Max = m_vJImgX.maxCoeff();
+	Maxi = m_vJImgY.maxCoeff();
+	if( Maxi > Max ) {
+		Max = Maxi;
+	}
+	Maxi = m_vJImgZ.maxCoeff();
+	if( Maxi > Max ) {
+		Max = Maxi;
+	}
+	Maxi = m_vJImgP.maxCoeff();
+	if( Maxi > Max ) {
+		Max = Maxi;
+	}
+	Maxi = m_vJImgQ.maxCoeff();
+	if( Maxi > Max ) {
+		Max = Maxi;
+	}
+	Maxi = m_vJImgR.maxCoeff();
+	if( Maxi > Max ) {
+		Max = Maxi;
+	}
+//	m_vJImgX = m_vJImgX / Max;
+//	m_vJImgY = m_vJImgY / Max;
+//	m_vJImgZ = m_vJImgZ / Max;
+//	m_vJImgP = m_vJImgP / Max;
+//	m_vJImgQ = m_vJImgQ / Max;
+//	m_vJImgR = m_vJImgR / Max;
+	m_vJImgX = m_vJImgX / m_vJImgX.maxCoeff();
+	m_vJImgY = m_vJImgY / m_vJImgY.maxCoeff();
+	m_vJImgZ = m_vJImgZ / m_vJImgZ.maxCoeff();
+	m_vJImgP = m_vJImgP / m_vJImgP.maxCoeff();
+	m_vJImgQ = m_vJImgQ / m_vJImgQ.maxCoeff();
+	m_vJImgR = m_vJImgR / m_vJImgR.maxCoeff();
+	vJac[0]->SetImage( m_vJImgX.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+	vJac[1]->SetImage( m_vJImgY.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+	vJac[2]->SetImage( m_vJImgZ.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+	vJac[3]->SetImage( m_vJImgP.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+	vJac[4]->SetImage( m_vJImgQ.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+	vJac[5]->SetImage( m_vJImgR.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+
+
     // convert Delta from Lie
     Sophus::SE3 DeltaPose;
 
@@ -194,7 +249,9 @@ void LinearSystem::SnapVirtualCam()
 
 	// populate vectors
 	m_pVirtCam->CaptureGrey( m_vVirtImg.data() );
+	_FlipImg(m_vVirtImg);
 	m_pVirtCam->CaptureDepth( m_vVirtDepth.data() );
+	_FlipDepth(m_vVirtDepth);
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -296,7 +353,7 @@ void LinearSystem::_BuildSystem(
             Term2( 1, 0 ) = 0;
             Term2( 1, 1 ) = 1.0 / Lr( 2 );
             Term2( 1, 2 ) = -(Lr( 1 )) / PowC;
-//            Term2         = Term2 * pLS->m_Kr;
+            Term2         = Term2 * pLS->m_Kr;
 
             // --------------------- third term 3x1
             // we need Pv in homogenous coordinates
@@ -311,21 +368,27 @@ void LinearSystem::_BuildSystem(
             Term3i    = pLS->m_dTrv * pLS->m_Gen[0] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 0 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgX[(StartV + ii) * pLS->m_nImgWidth + (StartU) + jj] = J(0, 0);
             Term3i    = pLS->m_dTrv * pLS->m_Gen[1] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 1 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgY[(StartV + ii) * pLS->m_nImgWidth + (StartU) + jj] = J(0, 1);
             Term3i    = pLS->m_dTrv * pLS->m_Gen[2] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 2 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgZ[(StartV + ii) * pLS->m_nImgWidth + (StartU) + jj] = J(0, 2);
             Term3i    = pLS->m_dTrv * pLS->m_Gen[3] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 3 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgP[(StartV + ii) * pLS->m_nImgWidth + (StartU) + jj] = J(0, 3);
             Term3i    = pLS->m_dTrv * pLS->m_Gen[4] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 4 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgQ[(StartV + ii) * pLS->m_nImgWidth + (StartU) + jj] = J(0, 4);
             Term3i    = pLS->m_dTrv * pLS->m_Gen[5] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 5 ) = Term1 * Term2 * Term3;
+			pLS->m_vJImgR[(StartV + ii) * pLS->m_nImgWidth + (StartU) + jj] = J(0, 5);
 
             // estimate LHS (Hessian)
             // LHS = Hessian = Jt * J
@@ -367,7 +430,8 @@ inline Eigen::Vector3d LinearSystem::_Project(
 {
     Eigen::Vector3d T = P;
 
-    T = m_Kv * T;
+//    T = m_Kv * T;
+    T = m_Kr * T;
 
     if( T( 2 ) == 0 ) {
         std::cout << "Oops! I just saved you from making a division by zero!" << std::endl;
@@ -392,9 +456,14 @@ inline Eigen::Vector3d LinearSystem::_BackProject(
     double          fy = m_Kv( 1, 1 );
     Eigen::Vector3d P;
 
-    P( 0 ) = Depth * ((X - cx) / fx);
-    P( 1 ) = Depth * ((Y - cy) / fy);
-    P( 2 ) = Depth;
+//    P( 0 ) = Depth * ((X - cx) / fx);
+//    P( 1 ) = Depth * ((Y - cy) / fy);
+//    P( 2 ) = Depth;
+
+	P( 1 ) = Depth * ((X - cx) / fx);
+    P( 2 ) = Depth * ((Y - cy) / fy);
+    P( 0 ) = Depth;
+
     return P;
 }
 
@@ -417,4 +486,42 @@ inline float LinearSystem::_Interpolate(
     }
 
     return 0;
+}
+
+// //////////////////////////////////////////////////////////////////////////////
+inline void LinearSystem::_FlipDepth(
+        Eigen::VectorXf& vDepth    // < Input/Output: Depth buffer
+        )
+{
+    Eigen::VectorXf tmp;
+
+    tmp = vDepth;
+
+    unsigned int Idx;
+
+    for( int ii = 0; ii < m_nImgHeight; ii++ ) {
+        for( int jj = 0; jj < m_nImgWidth; jj++ ) {
+            Idx                           = (m_nImgHeight - ii - 1) * m_nImgWidth + jj;
+            vDepth[ii * m_nImgWidth + jj] = tmp[Idx];
+        }
+    }
+}
+
+// //////////////////////////////////////////////////////////////////////////////
+inline void LinearSystem::_FlipImg(
+        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& vImg    // < Input/Output: Img buffer
+        )
+{
+    Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> tmp;
+
+    tmp = vImg;
+
+    unsigned int Idx;
+
+    for( int ii = 0; ii < m_nImgHeight; ii++ ) {
+        for( int jj = 0; jj < m_nImgWidth; jj++ ) {
+            Idx                         = (m_nImgHeight - ii - 1) * m_nImgWidth + jj;
+            vImg[ii * m_nImgWidth + jj] = tmp[Idx];
+        }
+    }
 }

@@ -8,6 +8,8 @@
 #ifndef LINEARSYSTEM_H
 #define LINEARSYSTEM_H
 
+#include <pangolin/pangolin.h>
+#include <SceneGraph/SceneGraph.h>
 #include <SceneGraph/SimCam.h>
 #include <boost/thread.hpp>
 
@@ -23,7 +25,8 @@ class LinearSystem
 				SceneGraph::GLSimCam* VirtCam,												// < Input: Virtual camera handle
 				bool Decimate = false											// < Input: True if decimate
 				);
-        Eigen::Matrix4d Solve( unsigned int nNumThreads = 8 );
+//        Eigen::Matrix4d Solve( unsigned int nNumThreads = 8 );
+		Eigen::Matrix4d Solve( unsigned int nNumThreads, const std::vector< SceneGraph::ImageView* >& vJac );
         void ApplyUpdate();
 		void SnapVirtualCam();
         double Error();
@@ -49,11 +52,17 @@ class LinearSystem
                 const float&                                           Y,       // < Input: Y coordinate
                 const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& Image    // < Input: Image
                 );
+        void _FlipDepth(
+                Eigen::VectorXf& vDepth                                         // < Input/Output: Depth buffer
+                );
+        void _FlipImg(
+                Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& vImg           // < Input/Output: Img buffer
+                );
 
     private:
 		SceneGraph::GLSimCam*							m_pVirtCam;
-        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> m_vRefImg;       // grayscale image
-        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> m_vVirtImg;      // grayscale image
+        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> m_vRefImg;       // greyscale image
+        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> m_vVirtImg;      // greyscale image
         Eigen::VectorXf                                 m_vVirtDepth;    // depth image from virtual camera
         Eigen::Matrix3d                                 m_Kv;            // vision frame K matrix
         Eigen::Matrix3d                                 m_Kr;            // robotics frame K matrix
@@ -68,5 +77,14 @@ class LinearSystem
         unsigned int                                    m_nErrorPts;
         boost::mutex                                    m_Mutex;
         boost::thread_group                             m_ThreadGrp;
+
+		// Jacobian
+		Eigen::VectorXf m_vJImgX;
+		Eigen::VectorXf m_vJImgY;
+		Eigen::VectorXf m_vJImgZ;
+		Eigen::VectorXf m_vJImgP;
+		Eigen::VectorXf m_vJImgQ;
+		Eigen::VectorXf m_vJImgR;
+
 };
 #endif   /* LINEARSYSTEM_H */

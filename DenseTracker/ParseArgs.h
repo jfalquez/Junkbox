@@ -49,7 +49,7 @@ CameraDevice* ParseArgs(
 	std::string sSourceDir        = cl.follow( ".", 1, "-sdir"  );
 
 	// store camera model file name
-	pCam->SetProperty("CamModelFile", sSourceDir + "/" + sLeftCameraModel );
+	pCam->SetProperty("CamModelFile", sSourceDir + "/" + sRightCameraModel );
 
 	if( sDeviceDriver == "Bumblebee2" ) {
 		if( sLeftCameraModel.empty() || sRightCameraModel.empty() ) {

@@ -33,6 +33,8 @@ Eigen::Vector6d& g_dVirtPose = CVarUtils::CreateCVar( "Cam.Pose.Virt", Eigen::Ve
 // Cameras
 sg::GLSimCam RefCam;     // reference camera we move
 sg::GLSimCam VirtCam;    // virtual camera which calculates transformation
+vector < sg::ImageView* > glJacobians;
+
 
 // Reference Camera Controls
 Eigen::Vector6d g_dRefVel = Eigen::Vector6d::Zero();
@@ -42,6 +44,23 @@ unsigned int  g_nImgWidth  = 512;
 unsigned int  g_nImgHeight = 512;
 volatile bool g_bLocalize  = false;
 volatile bool g_bRendered  = false;
+volatile bool g_bPlaying   = false;
+volatile bool g_bContinue  = false;
+
+// //////////////////////////////////////////////////////////////////////////////
+void _Pause( )
+{
+	g_bPlaying = g_bPlaying ? false : true;
+	if( g_bPlaying ) {
+		g_bContinue = true;
+	}
+}
+
+// //////////////////////////////////////////////////////////////////////////////
+void _Continue( )
+{
+	g_bContinue = g_bContinue ? false : true;
+}
 
 // //////////////////////////////////////////////////////////////////////////////
 void _MoveCamera(
@@ -64,7 +83,7 @@ void _ResetCamera()
     g_bLocalize = false;
     g_dVirtPose = g_dRefPose;
 
-    VirtCam.SetRobotPose( mvl::Cart2T( g_dVirtPose ) );
+    VirtCam.SetPose( mvl::Cart2T( g_dVirtPose ) );
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -83,7 +102,7 @@ void UpdateCameras()
     T          = T * mvl::Cart2T( g_dRefVel );
     g_dRefPose = mvl::T2Cart( T );
 
-    RefCam.SetRobotPose( mvl::Cart2T( g_dRefPose ) );
+    RefCam.SetPose( mvl::Cart2T( g_dRefPose ) );
     RefCam.RenderToTexture();    // will render to texture, then copy texture to CPU memory
     VirtCam.RenderToTexture();
 
@@ -127,7 +146,7 @@ void Localizer()
             double dTs = mvl::Tic();
 
             // store initial pose
-            Eigen::Matrix4d dInitialVirtPose = VirtCam.GetCameraPose();
+            Eigen::Matrix4d dInitialVirtPose = VirtCam.GetPose();
 			std::cout << "Initial Virtual Pose in Vision Frame: " << mvl::T2Cart( dInitialVirtPose ).transpose() << endl;
 
             while( (nMaxIters < g_nMaxIterations) && g_bLocalize ) {
@@ -140,7 +159,7 @@ void Localizer()
 				// solve system
                 double dTi = mvl::Tic();
 
-                dTdelta = ESM.Solve(1);
+                dTdelta = ESM.Solve(1, glJacobians);
 
                 std::cout << "Solving took: " << mvl::Toc( dTi ) << std::endl;
 
@@ -155,9 +174,9 @@ void Localizer()
                 // update camera position
 				Eigen::Matrix4d NewPose;
 				NewPose = dInitialVirtPose * mvl::TInv( dTrv );
-				VirtCam.SetCameraPose( NewPose );
+				VirtCam.SetPose( NewPose );
 				std::cout << "New Pose in Vision Frame: " << mvl::T2Cart(NewPose).transpose() << endl;
-				g_dVirtPose = mvl::T2Cart( VirtCam.GetRobotPose() );
+				g_dVirtPose = mvl::T2Cart( VirtCam.GetPose() );
 				std::cout << "New Pose in Robotics Frame: " << g_dVirtPose.transpose() << endl;
 
                 // get error
@@ -167,12 +186,16 @@ void Localizer()
                 std::cout << "Error is: " << NewError << std::endl;
 
                 // if error change is too small, break
-//                if( fabs(PrevError - NewError) < 1e-2 ) {
-//                    break;
-//                }
-				sleep(1);
+                if( fabs(PrevError - NewError) < 1e-2 ) {
+                    break;
+                }
 
 				PrevError = NewError;
+
+				if( g_bPlaying == false ) {
+					while( g_bContinue == false ) {}
+					g_bContinue = false;
+				}
             }
 
             dTs = mvl::TocMS( dTs );
@@ -204,15 +227,15 @@ int main(
     sg::GLSceneGraph glGraph;
 
     // set up mesh
-    sg::GLMesh glMesh;
+//    sg::GLMesh glMesh;
 
     string sMesh = cl.follow( "CityBlock.obj", 1, "-mesh" );
 
     try
     {
-        glMesh.Init( sMesh );
-        glMesh.SetPerceptable( true );
-        // glGraph.AddChild( &glMesh );
+//        glMesh.Init( sMesh );
+//        glMesh.SetPerceptable( true );
+//        glGraph.AddChild( &glMesh );
 
         cout << "Mesh '" << sMesh << "' loaded." << endl;
     }
@@ -269,21 +292,18 @@ int main(
     // We set the views location on screen and add a handler which will
     // let user input update the model_view matrix (stacks3d) and feed through
     // to our scenegraph
-    glView.SetBounds( 0.0, 1.0, 0.0, 3.0 / 4.0, 640.0f / 480.0f );
+    glView.SetBounds( 1.0 / 3.0, 1.0, 0.0, 3.0 / 4.0, 640.0f / 480.0f );
     glView.SetHandler( new sg::HandlerSceneGraph( glGraph, glState, pango::AxisNegZ ) );
     glView.SetDrawFunction( sg::ActivateDrawFunctor( glGraph, glState ) );
 
     // display images
     sg::ImageView glRefImg( true, true );
-
     glRefImg.SetBounds( 2.0 / 3.0, 1.0, 3.0 / 4.0, 1.0, (double)g_nImgWidth / g_nImgHeight );
 
     sg::ImageView glVirtImg( true, true );
-
     glVirtImg.SetBounds( 1.0 / 3.0, 2.0 / 3.0, 3.0 / 4.0, 1.0, (double)g_nImgWidth / g_nImgHeight );
 
     sg::ImageView glErrorImg( true, false );
-
     glErrorImg.SetBounds( 0.0, 1.0 / 3.0, 3.0 / 4.0, 1.0, (double)g_nImgWidth / g_nImgHeight );
 
     // Add our views as children to the base container.
@@ -291,6 +311,34 @@ int main(
     glBaseView.AddDisplay( glRefImg );
     glBaseView.AddDisplay( glVirtImg );
     glBaseView.AddDisplay( glErrorImg );
+
+
+	// Jacobian Images
+	sg::ImageView g_JImgX;
+	sg::ImageView g_JImgY;
+	sg::ImageView g_JImgZ;
+	sg::ImageView g_JImgP;
+	sg::ImageView g_JImgQ;
+	sg::ImageView g_JImgR;
+	g_JImgX.SetBounds( 0.0, 1.0 / 3.0, 0.0, (1.0 / 6.0) * (3.0 / 4.0), (double)g_nImgWidth / g_nImgHeight );
+	g_JImgY.SetBounds( 0.0, 1.0 / 3.0, (1.0 / 6.0) * (3.0 / 4.0), (2.0 / 6.0) * (3.0 / 4.0), (double)g_nImgWidth / g_nImgHeight );
+	g_JImgZ.SetBounds( 0.0, 1.0 / 3.0, (2.0 / 6.0) * (3.0 / 4.0), (3.0 / 6.0) * (3.0 / 4.0), (double)g_nImgWidth / g_nImgHeight );
+	g_JImgP.SetBounds( 0.0, 1.0 / 3.0, (3.0 / 6.0) * (3.0 / 4.0), (4.0 / 6.0) * (3.0 / 4.0), (double)g_nImgWidth / g_nImgHeight );
+	g_JImgQ.SetBounds( 0.0, 1.0 / 3.0, (4.0 / 6.0) * (3.0 / 4.0), (5.0 / 6.0) * (3.0 / 4.0), (double)g_nImgWidth / g_nImgHeight );
+	g_JImgR.SetBounds( 0.0, 1.0 / 3.0, (5.0 / 6.0) * (3.0 / 4.0), 3.0 / 4.0, (double)g_nImgWidth / g_nImgHeight );
+    glBaseView.AddDisplay( g_JImgX );
+    glBaseView.AddDisplay( g_JImgY );
+    glBaseView.AddDisplay( g_JImgZ );
+    glBaseView.AddDisplay( g_JImgP );
+    glBaseView.AddDisplay( g_JImgQ );
+    glBaseView.AddDisplay( g_JImgR );
+	glJacobians.push_back( &g_JImgX );
+	glJacobians.push_back( &g_JImgY );
+	glJacobians.push_back( &g_JImgZ );
+	glJacobians.push_back( &g_JImgP );
+	glJacobians.push_back( &g_JImgQ );
+	glJacobians.push_back( &g_JImgR );
+
 
     // launch ESM thread
     boost::thread Lclzr_Thread( Localizer );
@@ -311,6 +359,8 @@ int main(
     pango::RegisterKeyPressCallback( ' ', boost::bind( _StopCamera ) );
     pango::RegisterKeyPressCallback( 'r', boost::bind( _ResetCamera ) );
     pango::RegisterKeyPressCallback( 't', boost::bind( _StartLclzr ) );
+    pango::RegisterKeyPressCallback( pango::PANGO_SPECIAL + GLUT_KEY_DOWN, boost::bind( _Pause ) );
+    pango::RegisterKeyPressCallback( pango::PANGO_SPECIAL + GLUT_KEY_RIGHT, boost::bind( _Continue ) );
 
     // buffer for images
     Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> vRefImg;
