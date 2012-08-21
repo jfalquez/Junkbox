@@ -16,38 +16,28 @@ using namespace std;
 namespace sg =SceneGraph;
 namespace pango =pangolin;
 
+#define VISION 1
+
 /**************************************************************************************************
  *
  * GUI Variables
  *
  **************************************************************************************************/
-struct TypePose
-{
-  float x;
-  float y;
-  float z;
-  float p;
-  float q;
-  float r;
-};
 
-std::ostream& operator<< (std::ostream& os, const TypePose& o)
+std::ostream& operator<< (std::ostream& os, const Eigen::Vector6d& v)
 {
-	os.precision(3);
-	os.fixed;
-	os.floatfield;
-	os << "( " << o.x << ", " << o.y << ", " << o.z << ", " << o.p << ", " << o.q << ", " << o.r << " )";
+	os << "( " << fixed << setprecision(1) << v(0) << ", " << v(1) << ", " << v(2) << ", " << v(3) << ", " << v(4) << ", " << v(5) << " )";
 	return os;
 }
 
-std::istream& operator>> (std::istream& is, TypePose& o)
+std::istream& operator>> (std::istream& is, Eigen::Vector6d& v)
 {
-  is >> o.x;
-  is >> o.y;
-  is >> o.z;
-  is >> o.p;
-  is >> o.q;
-  is >> o.r;
+  is >> v(0);
+  is >> v(1);
+  is >> v(2);
+  is >> v(3);
+  is >> v(4);
+  is >> v(5);
   return is;
 }
 
@@ -75,8 +65,8 @@ vector < sg::ImageView* > glJacobians;
 Eigen::Vector6d g_dRefVel = Eigen::Vector6d::Zero();
 
 // Global Vars
-unsigned int  g_nImgWidth  = 512;
-unsigned int  g_nImgHeight = 512;
+unsigned int  g_nImgWidth  = 32;
+unsigned int  g_nImgHeight = 32;
 volatile bool g_bLocalize  = false;
 volatile bool g_bRendered  = false;
 volatile bool g_bPlaying   = false;
@@ -118,7 +108,11 @@ void _ResetCamera()
     g_bLocalize = false;
     g_dVirtPose = g_dRefPose;
 
+#if VISION
+    VirtCam.SetPoseRobot( mvl::Cart2T( g_dVirtPose ) );
+#else
     VirtCam.SetPose( mvl::Cart2T( g_dVirtPose ) );
+#endif
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -137,7 +131,11 @@ void UpdateCameras()
     T          = T * mvl::Cart2T( g_dRefVel );
     g_dRefPose = mvl::T2Cart( T );
 
+#if VISION
+    RefCam.SetPoseRobot( mvl::Cart2T( g_dRefPose ) );
+#else
     RefCam.SetPose( mvl::Cart2T( g_dRefPose ) );
+#endif
     RefCam.RenderToTexture();    // will render to texture, then copy texture to CPU memory
     VirtCam.RenderToTexture();
 
@@ -181,10 +179,14 @@ void Localizer()
             double dTs = mvl::Tic();
 
             // store initial pose
-            Eigen::Matrix4d dInitialVirtPose = VirtCam.GetPose();
+#if VISION
+            Eigen::Matrix4d dInitialVirtPose = VirtCam.GetPoseVision();
 			std::cout << "Initial Virtual Pose in Vision Frame: " << mvl::T2Cart( dInitialVirtPose ).transpose() << endl;
+#else
+            Eigen::Matrix4d dInitialVirtPose = VirtCam.GetPose();
+#endif
 
-            while( (nMaxIters < g_nMaxIterations) && g_bLocalize ) {
+            while( /*(nMaxIters < g_nMaxIterations) && */ g_bLocalize ) {
                 std::cout << "////////////////////////////////////////////////////////////////////////////////"
                           << std::endl;
 
@@ -194,7 +196,12 @@ void Localizer()
 				// solve system
                 double dTi = mvl::Tic();
 
-                dTdelta = ESM.Solve(8, glJacobians);
+				RefCam.CaptureGrey( RefImg.data() );
+
+		        // initialize system of equations
+			     ESM.Crap( RefImg );
+
+                dTdelta = ESM.Solve(1, glJacobians);
 
                 std::cout << "Solving took: " << mvl::Toc( dTi ) << std::endl;
 
@@ -204,15 +211,19 @@ void Localizer()
                 // update Trv
                 ESM.ApplyUpdate();
 
-                dTrv = dTrv * mvl::TInv( dTdelta );
+                dTrv = dTrv * dTdelta;
 
                 // update camera position
 				Eigen::Matrix4d NewPose;
 				NewPose = dInitialVirtPose * mvl::TInv( dTrv );
-				VirtCam.SetPose( NewPose );
+#if VISION
+				VirtCam.SetPoseVision( NewPose );
 				std::cout << "New Pose in Vision Frame: " << mvl::T2Cart(NewPose).transpose() << endl;
-				g_dVirtPose = mvl::T2Cart( VirtCam.GetPose() );
+				g_dVirtPose = mvl::T2Cart( VirtCam.GetPoseRobot() );
 				std::cout << "New Pose in Robotics Frame: " << g_dVirtPose.transpose() << endl;
+#else
+				VirtCam.SetPose( NewPose );
+#endif
 
                 // get error
                 NewError = ESM.Error();
@@ -220,10 +231,10 @@ void Localizer()
                 std::cout << "New Virtual Pose is: " << g_dVirtPose.transpose() << std::endl;
                 std::cout << "Error is: " << NewError << std::endl;
 
-                // if error change is too small, break
-                if( fabs(PrevError - NewError) < 1e-2 ) {
-                    break;
-                }
+//                // if error change is too small, break
+//                if( fabs(PrevError - NewError) < 1e-2 ) {
+//                    break;
+//                }
 
 				PrevError = NewError;
 
@@ -306,7 +317,9 @@ int main(
     // prepare K matrix
     Eigen::Matrix3d K;    // computer vision K matrix
 
-    K << g_nImgWidth, 0, g_nImgWidth / 2, 0, g_nImgHeight, g_nImgHeight / 2, 0, 0, 1;
+    K << g_nImgWidth, 0, g_nImgWidth / 2,
+		 0, g_nImgHeight, g_nImgHeight / 2,
+		 0, 0, 1;
 
     // initialize cameras
     RefCam.Init( &glGraph, mvl::Cart2T( g_dRefPose ), K, g_nImgWidth, g_nImgHeight, sg::eSimCamLuminance );
@@ -355,12 +368,12 @@ int main(
 
 
 	// Jacobian Images
-	sg::ImageView g_JImgX;
-	sg::ImageView g_JImgY;
-	sg::ImageView g_JImgZ;
-	sg::ImageView g_JImgP;
-	sg::ImageView g_JImgQ;
-	sg::ImageView g_JImgR;
+	sg::ImageView g_JImgX(false,false);
+	sg::ImageView g_JImgY(false,false);
+	sg::ImageView g_JImgZ(false,false);
+	sg::ImageView g_JImgP(false,false);
+	sg::ImageView g_JImgQ(false,false);
+	sg::ImageView g_JImgR(false,false);
 	g_JImgX.SetBounds( 0.0, 1.0 / 3.0, 0.0, (1.0 / 6.0) * (3.0 / 4.0), (double)g_nImgWidth / g_nImgHeight );
 	g_JImgY.SetBounds( 0.0, 1.0 / 3.0, (1.0 / 6.0) * (3.0 / 4.0), (2.0 / 6.0) * (3.0 / 4.0), (double)g_nImgWidth / g_nImgHeight );
 	g_JImgZ.SetBounds( 0.0, 1.0 / 3.0, (2.0 / 6.0) * (3.0 / 4.0), (3.0 / 6.0) * (3.0 / 4.0), (double)g_nImgWidth / g_nImgHeight );
@@ -414,10 +427,10 @@ int main(
     // Default hooks for exiting (Esc) and fullscreen (tab).
     while( !pango::ShouldQuit() ) {
 		/// panel variables
-		pango::Var<TypePose> uiRefPose("ui.RefPose");
-		uiRefPose = (TypePose){g_dRefPose(0),g_dRefPose(1),g_dRefPose(2),g_dRefPose(3),g_dRefPose(4),g_dRefPose(5)};
-		pango::Var<TypePose> uiVirtPose("ui.VirtPose");
-		uiVirtPose = (TypePose){g_dVirtPose(0),g_dVirtPose(1),g_dVirtPose(2),g_dVirtPose(3),g_dVirtPose(4),g_dVirtPose(5)};
+		pango::Var<Eigen::Vector6d> uiRefPose("ui.Ref:");
+		uiRefPose = g_dRefPose;
+		pango::Var<Eigen::Vector6d> uiVirtPose("ui.Virt:");
+		uiVirtPose = g_dVirtPose;
 
         // clear whole screen
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );

@@ -30,6 +30,8 @@ class LinearSystem
         void ApplyUpdate();
 		void SnapVirtualCam();
         double Error();
+		void Crap(
+				const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& RefImg2);
 
     private:
         static void _BuildSystem(
@@ -47,7 +49,7 @@ class LinearSystem
                 const int&    Y,
                 const double& Depth
                 );
-        float _Interpolate(
+        double _Interpolate(
                 const float&                                           X,       // < Input: X coordinate
                 const float&                                           Y,       // < Input: Y coordinate
                 const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& Image    // < Input: Image
@@ -62,6 +64,7 @@ class LinearSystem
     private:
 		SceneGraph::GLSimCam*							m_pVirtCam;
         Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> m_vRefImg;       // greyscale image
+        Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> m_vRefImg2;       // greyscale image
         Eigen::Matrix<unsigned char, 1, Eigen::Dynamic> m_vVirtImg;      // greyscale image
         Eigen::VectorXf                                 m_vVirtDepth;    // depth image from virtual camera
         Eigen::Matrix3d                                 m_Kv;            // vision frame K matrix

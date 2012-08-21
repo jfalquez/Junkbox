@@ -22,22 +22,40 @@ LinearSystem::LinearSystem()
     m_Gen.resize( 6 );
 
     // 1st generator
-    m_Gen[0] << 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
+    m_Gen[0] << 0, 0, 0, 1,
+			0, 0, 0, 0,
+			0, 0, 0, 0,
+			0, 0, 0, 0;
 
     // 2nd generator
-    m_Gen[1] << 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0;
+    m_Gen[1] << 0, 0, 0, 0,
+			0, 0, 0, 1,
+			0, 0, 0, 0,
+			0, 0, 0, 0;
 
     // 3rd generator
-    m_Gen[2] << 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0;
+    m_Gen[2] << 0, 0, 0, 0,
+			0, 0, 0, 0,
+			0, 0, 0, 1,
+			0, 0, 0, 0;
 
     // 4th generator
-    m_Gen[3] << 0, 0, 0, 0, 0, 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 0;
+    m_Gen[3] << 0, 0, 0, 0,
+			0, 0, -1, 0,
+			0, 1, 0, 0,
+			0, 0, 0, 0;
 
     // 5th generator
-    m_Gen[4] << 0, 0, 1, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0;
+    m_Gen[4] << 0, 0, 1, 0,
+			0, 0, 0, 0,
+			-1, 0, 0, 0,
+			0, 0, 0, 0;
 
     // 6th generator
-    m_Gen[5] << 0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0;
+    m_Gen[5] << 0, -1, 0, 0,
+			1, 0, 0, 0,
+			0, 0, 0, 0,
+			0, 0, 0, 0;
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -85,7 +103,7 @@ void LinearSystem::Init(
 
         // RefImg is assumed to have top-left origin
         m_vRefImg = RefImg;
-		_FlipImg(m_vRefImg);
+//		_FlipImg(m_vRefImg);
 
 		// store virtual image and depth map
 		SnapVirtualCam();
@@ -104,6 +122,11 @@ void LinearSystem::Init(
 
         std::cout << "Error is: " << Error() << std::endl;
 	}
+}
+
+void LinearSystem::Crap(const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& RefImg )
+{
+	m_vRefImg2 = RefImg;
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -126,6 +149,8 @@ Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads, const vector< sg:
 
     boost::thread*		pT;
 	boost::thread_group ThreadGrp;
+
+	m_vJImgX.setZero();
 
 	if( nNumThreads == 4 ) {
 
@@ -198,8 +223,24 @@ Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads, const vector< sg:
 
 //    Delta = m_J.inverse() * -m_dSSD;
 
-	// solve via GN
-	Delta = m_LHS.ldlt().solve( m_RHS );
+	cout << m_LHS << endl;
+	cout << m_RHS.transpose() << endl;
+
+	// Just solving the rotation
+	//Eigen::Vector3d rotx = m_LHS.block<3,3>(3,3).ldlt().solve( m_RHS.segment<3>(3));
+	//Eigen::FullPivLU<Eigen::Matrix<double,3,3> > lu(m_LHS.block<3,3>(3,3));
+//	Eigen::Vector3d rotx = -lu.solve(m_RHS.segment<3>(3));
+//	m_dX = Eigen::Matrix4d::Identity();
+//	m_dX.block<3,3>(0,0) = Sophus::SO3::exp(rotx).matrix();
+
+	Eigen::FullPivLU<Eigen::Matrix<double,6,6> > lu(m_LHS);
+	Eigen::Matrix<double,6,1> x = -lu.solve(m_RHS);
+	m_dX = Sophus::SE3::exp(1E-3 * x).matrix();
+	cout << lu.rank() << endl;
+
+//	// solve via GN
+//	Delta = m_LHS.ldlt().solve( m_RHS );
+//	m_dX      = Sophus::SE3::exp( -1 * Delta ).matrix();
 
 	// set J as previous Jo
 	m_Jo = m_J;
@@ -229,18 +270,19 @@ Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads, const vector< sg:
 	if( Maxi > Max ) {
 		Max = Maxi;
 	}
-//	m_vJImgX = m_vJImgX / Max;
-//	m_vJImgY = m_vJImgY / Max;
-//	m_vJImgZ = m_vJImgZ / Max;
-//	m_vJImgP = m_vJImgP / Max;
-//	m_vJImgQ = m_vJImgQ / Max;
-//	m_vJImgR = m_vJImgR / Max;
-	m_vJImgX = m_vJImgX / m_vJImgX.maxCoeff();
-	m_vJImgY = m_vJImgY / m_vJImgY.maxCoeff();
-	m_vJImgZ = m_vJImgZ / m_vJImgZ.maxCoeff();
-	m_vJImgP = m_vJImgP / m_vJImgP.maxCoeff();
-	m_vJImgQ = m_vJImgQ / m_vJImgQ.maxCoeff();
-	m_vJImgR = m_vJImgR / m_vJImgR.maxCoeff();
+	Max = 255.0;
+	m_vJImgX = m_vJImgX / Max;
+	m_vJImgY = m_vJImgY / Max;
+	m_vJImgZ = m_vJImgZ / Max;
+	m_vJImgP = m_vJImgP / Max;
+	m_vJImgQ = m_vJImgQ / Max;
+	m_vJImgR = m_vJImgR / Max;
+//	m_vJImgX = m_vJImgX / m_vJImgX.maxCoef();
+//	m_vJImgY = m_vJImgY / m_vJImgY.maxCoeff();
+//	m_vJImgZ = m_vJImgZ / m_vJImgZ.maxCoeff();
+//	m_vJImgP = m_vJImgP / m_vJImgP.maxCoeff();
+//	m_vJImgQ = m_vJImgQ / m_vJImgQ.maxCoeff();
+//	m_vJImgR = m_vJImgR / m_vJImgR.maxCoeff();
 	vJac[0]->SetImage( m_vJImgX.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
 	vJac[1]->SetImage( m_vJImgY.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
 	vJac[2]->SetImage( m_vJImgZ.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
@@ -249,18 +291,16 @@ Eigen::Matrix4d LinearSystem::Solve( unsigned int nNumThreads, const vector< sg:
 	vJac[5]->SetImage( m_vJImgR.data(), m_nImgWidth, m_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
 
     // convert Delta from Lie
-    Sophus::SE3 DeltaPose;
 
-    DeltaPose = Sophus::SE3::exp( Delta );
+//	m_dX = mvl::Cart2T( Delta );
 
-    m_dX      = DeltaPose.matrix();
-    return m_dX;
+	return m_dX;
 }
 
 // //////////////////////////////////////////////////////////////////////////////
 void LinearSystem::ApplyUpdate()
 {
-    m_dTrv = m_dTrv * mvl::TInv( m_dX );
+    m_dTrv = m_dTrv * m_dX ;
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -272,9 +312,9 @@ void LinearSystem::SnapVirtualCam()
 
 	// populate vectors
 	m_pVirtCam->CaptureGrey( m_vVirtImg.data() );
-	_FlipImg(m_vVirtImg);
+//	_FlipImg(m_vVirtImg);
 	m_pVirtCam->CaptureDepth( m_vVirtDepth.data() );
-	_FlipDepth(m_vVirtDepth);
+//	_FlipDepth(m_vVirtDepth);
 }
 
 // //////////////////////////////////////////////////////////////////////////////
@@ -353,14 +393,18 @@ void LinearSystem::_BuildSystem(
             }
 
             // finite differences
-            float                       TopPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) - 1, pLS->m_vRefImg );
-            float                       BotPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) + 1, pLS->m_vRefImg );
-            float                       LeftPix  = pLS->_Interpolate( Ur( 0 ) - 1, Ur( 1 ), pLS->m_vRefImg );
-            float                       RightPix = pLS->_Interpolate( Ur( 0 ) + 1, Ur( 1 ), pLS->m_vRefImg );
+            float                       TopPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) - 1.0, pLS->m_vRefImg );
+            float                       BotPix   = pLS->_Interpolate( Ur( 0 ), Ur( 1 ) + 1.0, pLS->m_vRefImg );
+            float                       LeftPix  = pLS->_Interpolate( Ur( 0 ) - 1.0, Ur( 1 ), pLS->m_vRefImg );
+            float                       RightPix = pLS->_Interpolate( Ur( 0 ) + 1.0, Ur( 1 ), pLS->m_vRefImg );
             Eigen::Matrix<double, 1, 2> Term1;
 
             Term1( 0 ) = (RightPix - LeftPix) / 2.0;
             Term1( 1 ) = (BotPix - TopPix) / 2.0;
+
+			pLS->m_vJImgY[ii * pLS->m_nImgWidth + jj] = Term1(0);
+			pLS->m_vJImgZ[ii * pLS->m_nImgWidth + jj] = Term1(1);
+
 
             // --------------------- second term 2x3
             // evaluate 'b' = Trv * Linv( Uv )
@@ -377,7 +421,7 @@ void LinearSystem::_BuildSystem(
             Term2( 1, 0 ) = 0;
             Term2( 1, 1 ) = 1.0 / Lr( 2 );
             Term2( 1, 2 ) = -(Lr( 1 )) / PowC;
-            Term2         = Term2 * pLS->m_Kr;
+            Term2         = Term2 * pLS->m_Kv;
 
             // --------------------- third term 3x1
             // we need Pv in homogenous coordinates
@@ -392,15 +436,17 @@ void LinearSystem::_BuildSystem(
             Term3i    = pLS->m_dTrv * pLS->m_Gen[0] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 0 ) = Term1 * Term2 * Term3;
-			pLS->m_vJImgX[ii * pLS->m_nImgWidth + jj] = J(0, 0);
+//			pLS->m_vJImgX[ii * pLS->m_nImgWidth + jj] = J(0, 0);
+			pLS->m_vJImgX[ii * pLS->m_nImgWidth + jj] = pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg2 )
+                      - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj];
             Term3i    = pLS->m_dTrv * pLS->m_Gen[1] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 1 ) = Term1 * Term2 * Term3;
-			pLS->m_vJImgY[ii * pLS->m_nImgWidth + jj] = J(0, 1);
+//			pLS->m_vJImgY[ii * pLS->m_nImgWidth + jj] = J(0, 1);
             Term3i    = pLS->m_dTrv * pLS->m_Gen[2] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 2 ) = Term1 * Term2 * Term3;
-			pLS->m_vJImgZ[ii * pLS->m_nImgWidth + jj] = J(0, 2);
+//			pLS->m_vJImgZ[ii * pLS->m_nImgWidth + jj] = J(0, 2);
             Term3i    = pLS->m_dTrv * pLS->m_Gen[3] * Ph;
             Term3     = Term3i.head( 3 );
             J( 0, 3 ) = Term1 * Term2 * Term3;
@@ -425,7 +471,7 @@ void LinearSystem::_BuildSystem(
                    * (pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
                       - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj]);
 
-            // calculate normalized error
+            // calculate per pixel error
             Error += fabs( pLS->_Interpolate( Ur( 0 ), Ur( 1 ), pLS->m_vRefImg )
                            - pLS->m_vVirtImg[ii * pLS->m_nImgWidth + jj] );
 
@@ -609,8 +655,8 @@ inline Eigen::Vector3d LinearSystem::_Project(
 {
     Eigen::Vector3d T = P;
 
-//    T = m_Kv * T;
-    T = m_Kr * T;
+    T = m_Kv * T;
+//    T = m_Kr * T;
 
     if( T( 2 ) == 0 ) {
         std::cout << "Oops! I just saved you from making a division by zero!" << std::endl;
@@ -635,19 +681,20 @@ inline Eigen::Vector3d LinearSystem::_BackProject(
     double          fy = m_Kv( 1, 1 );
     Eigen::Vector3d P;
 
-//    P( 0 ) = Depth * ((X - cx) / fx);
-//    P( 1 ) = Depth * ((Y - cy) / fy);
-//    P( 2 ) = Depth;
-
+#if 1
+    P( 0 ) = Depth * ((X - cx) / fx);
+    P( 1 ) = Depth * ((Y - cy) / fy);
+    P( 2 ) = Depth;
+#else
 	P( 1 ) = Depth * ((X - cx) / fx);
     P( 2 ) = Depth * ((Y - cy) / fy);
     P( 0 ) = Depth;
-
+#endif
     return P;
 }
 
 // //////////////////////////////////////////////////////////////////////////////
-inline float LinearSystem::_Interpolate(
+inline double LinearSystem::_Interpolate(
         const float&                                           X,       // < Input: X coordinate
         const float&                                           Y,       // < Input: Y coordinate
         const Eigen::Matrix<unsigned char, 1, Eigen::Dynamic>& Image    // < Input: Image
