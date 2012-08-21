@@ -1,6 +1,6 @@
 cmake_minimum_required( VERSION 2.8 )
 
-project( DTrack )
+project( DTrackCUDA )
 
 find_package( Pangolin REQUIRED )
 find_package( SceneGraph REQUIRED )

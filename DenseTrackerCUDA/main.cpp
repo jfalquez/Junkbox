@@ -3,6 +3,7 @@
 #include <kangaroo/kangaroo.h>
 #include <sophus/se3.h>
 #include <kangaroo/../applications/common/ImageSelect.h>
+#include <kangaroo/../applications/common/CameraModelPyramid.h>
 #include <SceneGraph/SceneGraph.h>
 #include <RPG/Devices.h>
 #include <Mvlpp/Mvl.h>
@@ -12,6 +13,8 @@ using namespace std;
 namespace pango = pangolin;
 namespace sg = SceneGraph;
 
+const int nMaxLevels = 6;
+
 int main(int argc, char** argv)
 {
     // parse parameters
@@ -19,7 +22,8 @@ int main(int argc, char** argv)
 
     // read camera model file
     std::string sCamModFileName = pCam->GetProperty( "CamModelFile", "rcmod.xml" );
-    mvl::CameraModel CamModel( sCamModFileName );
+    CameraModelPyramid CamModel( sCamModFileName );
+    CamModel.PopulatePyramid(nMaxLevels);
 
     // vector of images captured
     vector< rpg::ImageWrapper > vImages;
@@ -53,8 +57,10 @@ int main(int argc, char** argv)
 
     // create a side panel
     pango::CreatePanel("ui").SetBounds(0,1,0,pangolin::Attach::Pix(180));
-    pango::Var<int> nMaxDisparity("ui.MaxDisp",10,0,100);
-    pango::Var<float> fNormC("ui.Norm c",10,0,10);
+    pango::Var<int> nMaxDisparity("ui.MaxDisp",16,0,100);
+    pango::Var<float> fNormC("ui.Norm c",50,0,100);
+    pango::Var<float> fSqErr("ui.Mean Sq Error");
+    pango::Var<int> nPyramid("ui.Pyramid",0,0,nMaxLevels-1);
 
     // create a view container
     pangolin::View& guiContainer = pangolin::CreateDisplay()
@@ -98,18 +104,18 @@ int main(int argc, char** argv)
     glGraph.AddChild( &glVBO );
     glVBO.AddChild(&glPrevPose);
 
-    Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage> dLeftImg(nImgWidth, nImgHeight);
-    Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage> dRightImg(nImgWidth, nImgHeight);
+    Gpu::Pyramid<unsigned char, nMaxLevels, Gpu::TargetDevice, Gpu::Manage> dLeftPyr(nImgWidth, nImgHeight);
+    Gpu::Pyramid<unsigned char, nMaxLevels, Gpu::TargetDevice, Gpu::Manage> dRightPyr(nImgWidth, nImgHeight);
     Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > dDispInt( nImgWidth, nImgHeight );
     Gpu::Image< float, Gpu::TargetDevice, Gpu::Manage >         dDisp( nImgWidth, nImgHeight );
 
     Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > dWorkspace( nImgWidth*sizeof(Gpu::LeastSquaresSystem<float,6>), nImgHeight );
     Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage> dDebug(nImgWidth, nImgHeight);
 
-    Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage> dPrevImg(nImgWidth, nImgHeight);
-    Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage> dPrevVbo(nImgWidth, nImgHeight);
+    Gpu::Pyramid<unsigned char, nMaxLevels, Gpu::TargetDevice, Gpu::Manage> dPrevPyr(nImgWidth, nImgHeight);
+    Gpu::Pyramid<float4, nMaxLevels, Gpu::TargetDevice, Gpu::Manage> dPrevVboPyr(nImgWidth, nImgHeight);
 
-    pangolin::ActivateDrawImage<unsigned char> DrawLeftImg(dLeftImg,GL_LUMINANCE8,true,true);
+    pangolin::ActivateDrawPyramid<unsigned char,nMaxLevels> DrawLeftImg(dLeftPyr,GL_LUMINANCE8,true,true);
     pangolin::ActivateDrawImage<float4> DrawDebugImg(dDebug,GL_RGBA32F_ARB,true,true);
     pangolin::ActivateDrawImage<float> DrawDisparity(dDisp,GL_LUMINANCE32F_ARB,true,true);
 
@@ -140,10 +146,14 @@ int main(int argc, char** argv)
 
     // keyboard callbacks
     pangolin::RegisterKeyPressCallback(' ',[&guiRunning](){ guiRunning = !guiRunning; });
-pangolin::RegisterKeyPressCallback('p',[&guiSetPrevious](){ guiSetPrevious = true; });
-pangolin::RegisterKeyPressCallback(pango::PANGO_SPECIAL + GLUT_KEY_RIGHT,[&guiGo](){ guiGo = true; });
+    pangolin::RegisterKeyPressCallback('p',[&guiSetPrevious](){ guiSetPrevious = true; });
+    pangolin::RegisterKeyPressCallback(pango::PANGO_SPECIAL + GLUT_KEY_RIGHT,[&guiGo](){ guiGo = true; });
+    pangolin::RegisterKeyPressCallback('r',[&T_pc](){ T_pc = Sophus::SE3(); });
 
-while( !pangolin::ShouldQuit() ) {
+for(unsigned frame=0; !pangolin::ShouldQuit(); ++frame ) {
+
+    const unsigned w = nImgWidth >> nPyramid;
+    const unsigned h = nImgHeight >> nPyramid;
 
     if( guiRunning || pangolin::Pushed(guiGo)) {
         // capture an image
@@ -151,33 +161,49 @@ while( !pangolin::ShouldQuit() ) {
     }
 
     // upload images
-    dLeftImg.MemcpyFromHost(vImages[0].Image.data,nImgWidth);
-    dRightImg.MemcpyFromHost(vImages[1].Image.data,nImgWidth);
+    dLeftPyr[0].MemcpyFromHost(vImages[0].Image.data,nImgWidth);
+    dRightPyr[0].MemcpyFromHost(vImages[1].Image.data,nImgWidth);
+
+    Gpu::BoxReduce<unsigned char, nMaxLevels, unsigned int>(dLeftPyr);
+    Gpu::BoxReduce<unsigned char, nMaxLevels, unsigned int>(dRightPyr);
+
+//    for(int i=0; i<20; ++i) {
+//        Gpu::Blur(dLeftImg, dWorkspace.SubImage(nImgWidth, nImgHeight));
+//        Gpu::Blur(dRightImg, dWorkspace.SubImage(nImgWidth, nImgHeight));
+//    }
 
     // Update our pose
-    Eigen::Matrix<double,3,4> KTpc = CamModel.K() * T_pc.matrix3x4();
-    Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthmap(dLeftImg,dPrevImg,dPrevVbo,KTpc,fNormC,dWorkspace,dDebug);
-    Eigen::Matrix<double,6,6> LHS = LSS.JTJ;
-    Eigen::Vector6d RHS = LSS.JTy;
-    Eigen::Vector6d X;
-    Eigen::FullPivLU<Eigen::Matrix<double,6,6> > lu_JTJ(LHS);
-    X = - (lu_JTJ.solve(RHS));
-    T_pc = T_pc * Sophus::SE3::exp(X);
+    for(int its=0; its < 5; ++its) {
+        Eigen::Matrix<double,3,4> KTcp = CamModel.K(nPyramid) * T_pc.inverse().matrix3x4();
+        Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthmap(dLeftPyr[nPyramid],dPrevPyr[nPyramid],dPrevVboPyr[nPyramid],KTcp,fNormC,dWorkspace,dDebug.SubImage(w,h));
+        Eigen::Matrix<double,6,6> LHS = LSS.JTJ;
+        Eigen::Vector6d RHS = LSS.JTy;
+        Eigen::FullPivLU<Eigen::Matrix<double,6,6> > lu_JTJ(LHS);
+        Eigen::Vector6d X = - (lu_JTJ.solve(RHS));
+        T_pc = (T_pc.inverse() * Sophus::SE3::exp(X)).inverse();
+        fSqErr =  LSS.sqErr / LSS.obs;
+    }
 
-    if(pangolin::Pushed(guiSetPrevious))
+    if(pangolin::Pushed(guiSetPrevious) /*|| (guiRunning && !(frame%2) )*/ )
     {
-        // calculate disparity
-        Gpu::DenseStereo( dDispInt, dLeftImg, dRightImg, nMaxDisparity, 0 );
-        Gpu::ReverseCheck( dDispInt, dLeftImg, dRightImg);
-        Gpu::DenseStereoSubpixelRefine( dDisp, dDispInt, dLeftImg, dRightImg );
-        Gpu::MedianFilterRejectNegative9x9( dDisp, dDisp, 50 );
-        Gpu::FilterDispGrad(dDisp, dDisp, 2.0);
-        Eigen::Matrix3d K = CamModel.K();
-        Eigen::Matrix4d RightCamPose = CamModel.GetPose();
+        for(int l=0; l < nMaxLevels; ++l )
+        {
+            const unsigned w = nImgWidth >> l;
+            const unsigned h = nImgHeight >> l;
 
-        // Store Previous image / vbo
-        Gpu::DisparityImageToVbo( dPrevVbo, dDisp, RightCamPose( 1, 3 ), K( 0, 0 ), K( 1, 1 ), K( 0, 2 ), K( 1, 2 ) );
-        dPrevImg.CopyFrom(dLeftImg);
+            // calculate disparity
+            Gpu::DenseStereo( dDispInt.SubImage(w,h), dLeftPyr[l], dRightPyr[l], nMaxDisparity >> l, 0 );
+            Gpu::ReverseCheck( dDispInt.SubImage(w,h), dLeftPyr[l], dRightPyr[l]);
+            Gpu::DenseStereoSubpixelRefine( dDisp.SubImage(w,h), dDispInt.SubImage(w,h), dLeftPyr[l], dRightPyr[l] );
+            Gpu::MedianFilterRejectNegative9x9( dDisp.SubImage(w,h), dDisp.SubImage(w,h), 50 );
+            Gpu::FilterDispGrad(dDisp.SubImage(w,h), dDisp.SubImage(w,h), 2.0);
+
+            // Store Previous image / vbo
+            Eigen::Matrix3d K = CamModel.K(l);
+            Eigen::Matrix4d RightCamPose = CamModel.GetPose();
+            Gpu::DisparityImageToVbo( dPrevVboPyr[l], dDisp.SubImage(w,h), RightCamPose( 1, 3 ), K( 0, 0 ), K( 1, 1 ), K( 0, 2 ), K( 1, 2 ) );
+        }
+        dPrevPyr.CopyFrom(dLeftPyr);
 
         // Update 'previous' position to current position
         T_wp = T_wp * T_pc;
@@ -187,13 +213,13 @@ while( !pangolin::ShouldQuit() ) {
         {
             pango::CudaScopedMappedPtr var( cbo );
             Gpu::Image< uchar4 >       dCbo( (uchar4*)*var, nImgWidth, nImgHeight );
-            Gpu::ConvertImage< uchar4, unsigned char >( dCbo, dPrevImg );
+            Gpu::ConvertImage< uchar4, unsigned char >( dCbo, dPrevPyr[0] );
         }
 
         {
             pango::CudaScopedMappedPtr var( vbo );
             Gpu::Image< float4 >       dVbo( (float4*)*var, nImgWidth, nImgHeight );
-            dVbo.CopyFrom(dPrevVbo);
+            dVbo.CopyFrom(dPrevVboPyr[0]);
         }
 
         // Normalise for display
@@ -204,6 +230,7 @@ while( !pangolin::ShouldQuit() ) {
     glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
     glColor4f( 1, 1, 1, 1);
 
+    DrawLeftImg.SetLevel(nPyramid);
     glVBO.SetPose(T_wp.matrix());
     glCurPose.SetPose( (T_wp * T_pc).matrix() );
 
