@@ -107,17 +107,19 @@ int main(int argc, char** argv)
     Gpu::Pyramid<unsigned char, nMaxLevels, Gpu::TargetDevice, Gpu::Manage> dLeftPyr(nImgWidth, nImgHeight);
     Gpu::Pyramid<unsigned char, nMaxLevels, Gpu::TargetDevice, Gpu::Manage> dRightPyr(nImgWidth, nImgHeight);
     Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > dDispInt( nImgWidth, nImgHeight );
-    Gpu::Image< float, Gpu::TargetDevice, Gpu::Manage >         dDisp( nImgWidth, nImgHeight );
+    Gpu::Pyramid< float, nMaxLevels, Gpu::TargetDevice, Gpu::Manage > dDispPyr( nImgWidth, nImgHeight );
 
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > dBlurTmp1( nImgWidth, nImgHeight );
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > dBlurTmp2( nImgWidth, nImgHeight );
     Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > dWorkspace( nImgWidth*sizeof(Gpu::LeastSquaresSystem<float,6>), nImgHeight );
     Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage> dDebug(nImgWidth, nImgHeight);
 
     Gpu::Pyramid<unsigned char, nMaxLevels, Gpu::TargetDevice, Gpu::Manage> dPrevPyr(nImgWidth, nImgHeight);
     Gpu::Pyramid<float4, nMaxLevels, Gpu::TargetDevice, Gpu::Manage> dPrevVboPyr(nImgWidth, nImgHeight);
 
-    pangolin::ActivateDrawPyramid<unsigned char,nMaxLevels> DrawLeftImg(dLeftPyr,GL_LUMINANCE8,true,true);
-    pangolin::ActivateDrawImage<float4> DrawDebugImg(dDebug,GL_RGBA32F_ARB,true,true);
-    pangolin::ActivateDrawImage<float> DrawDisparity(dDisp,GL_LUMINANCE32F_ARB,true,true);
+    pangolin::ActivateDrawPyramid<unsigned char,nMaxLevels> DrawLeftImg(dLeftPyr,GL_LUMINANCE8,false,true);
+    pangolin::ActivateDrawImage<float4> DrawDebugImg(dDebug,GL_RGBA32F_ARB,false,true);
+    pangolin::ActivateDrawPyramid<float,nMaxLevels> DrawDisparity(dDispPyr,GL_LUMINANCE32F_ARB,false,true);
 
     guiContainer[0].SetDrawFunction(boost::ref(DrawLeftImg));
     guiContainer[1].SetDrawFunction(boost::ref(DrawDebugImg));
@@ -164,18 +166,20 @@ for(unsigned frame=0; !pangolin::ShouldQuit(); ++frame ) {
     dLeftPyr[0].MemcpyFromHost(vImages[0].Image.data,nImgWidth);
     dRightPyr[0].MemcpyFromHost(vImages[1].Image.data,nImgWidth);
 
-    Gpu::BoxReduce<unsigned char, nMaxLevels, unsigned int>(dLeftPyr);
-    Gpu::BoxReduce<unsigned char, nMaxLevels, unsigned int>(dRightPyr);
+    Gpu::Blur(dLeftPyr[0], dBlurTmp1);
+    Gpu::Blur(dRightPyr[0], dBlurTmp1);
 
-//    for(int i=0; i<20; ++i) {
-//        Gpu::Blur(dLeftImg, dWorkspace.SubImage(nImgWidth, nImgHeight));
-//        Gpu::Blur(dRightImg, dWorkspace.SubImage(nImgWidth, nImgHeight));
-//    }
+    Gpu::BlurReduce<unsigned char, nMaxLevels, unsigned int>(dLeftPyr, dBlurTmp1, dBlurTmp2);
+    Gpu::BlurReduce<unsigned char, nMaxLevels, unsigned int>(dRightPyr, dBlurTmp1, dBlurTmp2 );
 
     // Update our pose
     for(int its=0; its < 5; ++its) {
         Eigen::Matrix<double,3,4> KTcp = CamModel.K(nPyramid) * T_pc.inverse().matrix3x4();
-        Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthmap(dLeftPyr[nPyramid],dPrevPyr[nPyramid],dPrevVboPyr[nPyramid],KTcp,fNormC,dWorkspace,dDebug.SubImage(w,h));
+//        Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromVbo(dLeftPyr[nPyramid],dPrevPyr[nPyramid],dPrevVboPyr[nPyramid],KTcp,fNormC,dWorkspace,dDebug.SubImage(w,h));
+
+        Eigen::Matrix3d K = CamModel.K(nPyramid);
+        const float baseline = (1<<nPyramid) * CamModel.GetPose()( 1, 3 );
+        Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDisparity(dLeftPyr[nPyramid],dPrevPyr[nPyramid],dDispPyr[nPyramid],KTcp,fNormC,baseline, K( 0, 0 ), K( 1, 1 ), K( 0, 2 ), K( 1, 2 ), dWorkspace,dDebug.SubImage(w,h));
         Eigen::Matrix<double,6,6> LHS = LSS.JTJ;
         Eigen::Vector6d RHS = LSS.JTy;
         Eigen::FullPivLU<Eigen::Matrix<double,6,6> > lu_JTJ(LHS);
@@ -186,23 +190,14 @@ for(unsigned frame=0; !pangolin::ShouldQuit(); ++frame ) {
 
     if(pangolin::Pushed(guiSetPrevious) /*|| (guiRunning && !(frame%2) )*/ )
     {
-        for(int l=0; l < nMaxLevels; ++l )
-        {
-            const unsigned w = nImgWidth >> l;
-            const unsigned h = nImgHeight >> l;
+        Gpu::DenseStereo( dDispInt, dLeftPyr[0], dRightPyr[0], nMaxDisparity, 0 );
+        Gpu::ReverseCheck( dDispInt, dLeftPyr[0], dRightPyr[0]);
+        Gpu::DenseStereoSubpixelRefine( dDispPyr[0], dDispInt, dLeftPyr[0], dRightPyr[0] );
+        Gpu::MedianFilterRejectNegative9x9( dDispPyr[0], dDispPyr[0], 50 );
+        Gpu::FilterDispGrad(dDispPyr[0], dDispPyr[0], 2.0);
+//        nppiDivC_32f_C1IR(nMaxDisparity,dDispPyr[0].ptr,dDispPyr[0].pitch,dDispPyr[0].Size());
+        Gpu::BoxReduce<float,nMaxLevels,float>(dDispPyr);
 
-            // calculate disparity
-            Gpu::DenseStereo( dDispInt.SubImage(w,h), dLeftPyr[l], dRightPyr[l], nMaxDisparity >> l, 0 );
-            Gpu::ReverseCheck( dDispInt.SubImage(w,h), dLeftPyr[l], dRightPyr[l]);
-            Gpu::DenseStereoSubpixelRefine( dDisp.SubImage(w,h), dDispInt.SubImage(w,h), dLeftPyr[l], dRightPyr[l] );
-            Gpu::MedianFilterRejectNegative9x9( dDisp.SubImage(w,h), dDisp.SubImage(w,h), 50 );
-            Gpu::FilterDispGrad(dDisp.SubImage(w,h), dDisp.SubImage(w,h), 2.0);
-
-            // Store Previous image / vbo
-            Eigen::Matrix3d K = CamModel.K(l);
-            Eigen::Matrix4d RightCamPose = CamModel.GetPose();
-            Gpu::DisparityImageToVbo( dPrevVboPyr[l], dDisp.SubImage(w,h), RightCamPose( 1, 3 ), K( 0, 0 ), K( 1, 1 ), K( 0, 2 ), K( 1, 2 ) );
-        }
         dPrevPyr.CopyFrom(dLeftPyr);
 
         // Update 'previous' position to current position
@@ -221,9 +216,6 @@ for(unsigned frame=0; !pangolin::ShouldQuit(); ++frame ) {
             Gpu::Image< float4 >       dVbo( (float4*)*var, nImgWidth, nImgHeight );
             dVbo.CopyFrom(dPrevVboPyr[0]);
         }
-
-        // Normalise for display
-        nppiDivC_32f_C1IR(nMaxDisparity,dDisp.ptr,dDisp.pitch,dDisp.Size());
     }
 
     ///--------------------------------------------------------------------------
@@ -231,6 +223,7 @@ for(unsigned frame=0; !pangolin::ShouldQuit(); ++frame ) {
     glColor4f( 1, 1, 1, 1);
 
     DrawLeftImg.SetLevel(nPyramid);
+    DrawDisparity.SetLevel(nPyramid);
     glVBO.SetPose(T_wp.matrix());
     glCurPose.SetPose( (T_wp * T_pc).matrix() );
 

@@ -23,9 +23,9 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
  SET(CMAKE_CXX_FLAGS "-std=c++11 -g")
 ENDIF()
 
-add_executable( DTrack main.cpp )
+add_executable( DTrackCUDA main.cpp )
 
-target_link_libraries( DTrack
+target_link_libraries( DTrackCUDA
                         ${Pangolin_LIBRARIES}
                         ${SceneGraph_LIBRARIES}
                         ${Kangaroo_LIBRARIES}
