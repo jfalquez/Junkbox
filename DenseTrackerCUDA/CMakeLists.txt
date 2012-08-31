@@ -23,7 +23,16 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
  SET(CMAKE_CXX_FLAGS "-std=c++11 -g")
 ENDIF()
 
-add_executable( DTrackCUDA main.cpp )
+list(APPEND HDRS
+    ParseArgs.h
+)
+
+list(APPEND SRCS
+    main.cpp
+)
+
+
+add_executable( DTrackCUDA ${HDRS} ${SRCS} )
 
 target_link_libraries( DTrackCUDA
                         ${Pangolin_LIBRARIES}

@@ -92,10 +92,10 @@ inline void SnapVirtualImages()
     }
 
     // flip images
-    cv::flip( g_vVirtualImg[0], g_vVirtualImg[0], 0 );
-    cv::flip( g_vVirtualImg[1], g_vVirtualImg[1], 0 );
-    cv::flip( g_vVirtualImg[2], g_vVirtualImg[2], 0 );
-    cv::flip( g_vVirtualImg[3], g_vVirtualImg[3], 0 );
+//    cv::flip( g_vVirtualImg[0], g_vVirtualImg[0], 0 );
+//    cv::flip( g_vVirtualImg[1], g_vVirtualImg[1], 0 );
+//    cv::flip( g_vVirtualImg[2], g_vVirtualImg[2], 0 );
+//    cv::flip( g_vVirtualImg[3], g_vVirtualImg[3], 0 );
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -163,8 +163,8 @@ void _TrackerLoop(
         //
 
         // initialize ESM with: K, CurImg, PrevImg, PrevDepthMap
-//        ESM.Init( K, g_vCapturedImg[0].Image, g_vPrevCapturedImg[0].Image, g_vPrevCapturedImg[2].Image );
-        ESM.Init( K, g_vCapturedImg[0].Image, g_vVirtualImg[0], g_vVirtualImg[1] );
+        ESM.Init( K, g_vCapturedImg[0].Image, g_vPrevCapturedImg[0].Image, g_vPrevCapturedImg[2].Image );
+//        ESM.Init( K, g_vCapturedImg[0].Image, g_vVirtualImg[0], g_vVirtualImg[1] );
 //        ESM.Init( g_vCapturedImg[0].Image, &glLeftCam );
 
         // hard limit of iterations so we don't loop forever
@@ -203,12 +203,12 @@ void _TrackerLoop(
             // update camera position
             g_mCamPose      = mInitialPose * mvl::TInv( dTrv );
 
-			g_bVirtualDirty = true;
+//			g_bVirtualDirty = true;
 
-            while( g_bVirtualDirty ) {}
+//            while( g_bVirtualDirty ) {}
 
 			// reinitalize
-	        ESM.Init( K, g_vCapturedImg[0].Image, g_vVirtualImg[0], g_vVirtualImg[1] );
+//	        ESM.Init( K, g_vCapturedImg[0].Image, g_vVirtualImg[0], g_vVirtualImg[1] );
 //			ESM.SnapVirtualCam();
 
             // get error
@@ -451,8 +451,6 @@ int main(
         // update cameras poses
         glLeftCam.SetPoseRobot( g_mTwl );
         glRightCam.SetPoseRobot( g_mTwr );
-//        glLeftCam.SetPose( g_mTwl );
-//        glRightCam.SetPose( g_mTwr );
 
         // update virtual images if needed
         if( g_bVirtualDirty ) {

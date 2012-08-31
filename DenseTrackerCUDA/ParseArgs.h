@@ -45,7 +45,7 @@ CameraDevice* ParseArgs(
     std::string sRightCameraModel = cl.follow( "rcmod.xml", 1, "-rcmod" );
     std::string sLeftFileRegex    = cl.follow( "Left.*pgm", 1, "-lfile" );
     std::string sRightFileRegex   = cl.follow( "Right.*pgm", 1, "-rfile" );
-    std::string sDepthFileRegex   = cl.follow( "Depth.*pdm", 1, "-dfile" );
+    std::string sDepthFileRegex   = cl.follow( "", 1, "-dfile" );
     std::string sSourceDir        = cl.follow( ".", 1, "-sdir"  );
 
     // store camera model file name
@@ -76,9 +76,13 @@ CameraDevice* ParseArgs(
         pCam->SetProperty("DataSourceDir", sSourceDir );
         pCam->SetProperty("Channel-0",     sLeftFileRegex );
         pCam->SetProperty("Channel-1",     sRightFileRegex );
-        pCam->SetProperty("Channel-2",     sDepthFileRegex );
-        pCam->SetProperty("NumChannels", 3 );
 
+        if( sDepthFileRegex.empty() ) {
+            pCam->SetProperty("NumChannels", 2 );
+        } else {
+            pCam->SetProperty("Channel-2",     sDepthFileRegex );
+            pCam->SetProperty("NumChannels", 3 );
+        }
     }
 
     // init driver
