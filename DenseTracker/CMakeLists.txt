@@ -21,7 +21,21 @@ include_directories( ${OpenCV2_INCLUDE_DIRS} )
 link_directories( ${Pangolin_LIBRARY_DIRS} )
 link_directories( ${Sophus_LIBRARY_DIRS} )
 
-add_executable( DTrack DTrack.cpp LinearSystem.cpp )
+IF(CMAKE_COMPILER_IS_GNUCXX)
+ SET(CMAKE_CXX_FLAGS "-std=c++11 -g")
+ENDIF()
+
+list(APPEND HDRS
+    ParseArgs.h
+    CVarHelpers.h
+    GLPath.h
+)
+
+list(APPEND SRCS
+    DTrack.cpp
+)
+
+add_executable( DTrack ${HDRS} ${SRCS} )
 
 target_link_libraries( DTrack
                         ${Pangolin_LIBRARIES}

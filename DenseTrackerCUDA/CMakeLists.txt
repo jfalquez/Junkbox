@@ -25,6 +25,8 @@ ENDIF()
 
 list(APPEND HDRS
     ParseArgs.h
+    CVarHelpers.h
+    GLPath.h
 )
 
 list(APPEND SRCS

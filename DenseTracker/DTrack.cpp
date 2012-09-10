@@ -1,41 +1,38 @@
-
 #include <pangolin/pangolin.h>
 #include <pangolin/glcuda.h>
+#include <sophus/se3.h>
 #include <SceneGraph/SceneGraph.h>
 #include <SceneGraph/SimCam.h>
 #include <kangaroo/kangaroo.h>
+#include <kangaroo/../applications/common/CameraModelPyramid.h>
 #include <RPG/Utils/ImageWrapper.h>
-#include <boost/thread.hpp>
-#include <Mvlpp/Mvl.h>
-
-//#include <opencv/cv.h>
-//#include <opencv2/highgui/highgui.hpp>
-
+//#include <boost/thread.hpp>
+//#include <Mvlpp/Mvl.h>
 #include <CVars/CVar.h>
 #include "ParseArgs.h"
 #include "GLPath.h"
-#include "LinearSystem.h"
+#include "CVarHelpers.h"
 
 using namespace std;
 
 namespace sg =SceneGraph;
 namespace pango =pangolin;
 
+const int PYR_LEVELS = 5;
+
+
 /**************************************************************************************************
 *
 * VARIABLES
 *
 **************************************************************************************************/
-unsigned int& g_nMaxIterations = CVarUtils::CreateCVar( "ESM.MaxIterations", 100u, "Max number of iterations." );
 bool&         g_bShowFrustum   = CVarUtils::CreateCVar( "Gui.ShowFrustum", true, "Show cameras viewing frustum." );
 unsigned int& g_nPoseDisplay   = CVarUtils::CreateCVar( "Gui.PoseDisplay", 5u,
                                    "Number of poses to display (0 displays all)." );
 unsigned int& g_nMaxDisparity = CVarUtils::CreateCVar( "Gpu.MaxDisparity", 20u,
                                     "Maximum disparity for depth generation." );
-unsigned int& g_nFilter33Iters = CVarUtils::CreateCVar( "Gpu.Filter.Iters3", 0u,
-                                     "Number of iterations for the median 3x3 filter." );
-unsigned int& g_nFilter55Iters = CVarUtils::CreateCVar( "Gpu.Filter.Iters5", 5u,
-                                     "Number of iterations for the median 5x5 filter." );
+Eigen::Matrix<int,1,Eigen::Dynamic>& g_vPyrCycles = CVarUtils::CreateCVar( "Tracker.PyrCycles", Eigen::Matrix<int,1,Eigen::Dynamic>(), "Number of cycles per pyramid level." );
+Eigen::Matrix<int,1,Eigen::Dynamic>& g_vPyrFullMask = CVarUtils::CreateCVar( "Tracker.PyrFullMask", Eigen::Matrix<int,1,Eigen::Dynamic>(), "Set 1 for full estimate, 0 for rotation only estimates." );
 
 /// Camera Model Information
 mvl::CameraModel* g_CamModel;
@@ -44,7 +41,7 @@ mvl::CameraModel* g_CamModel;
 #define g_nImgWidth ( g_CamModel->Width() )
 #define g_nImgHeight ( g_CamModel->Height() )
 #define g_nImgSize ( g_nImgWidth * g_nImgHeight )
-#define K ( g_CamModel->K() )
+#define g_K ( g_CamModel->K() )
 
 /// Image Containers
 vector< rpg::ImageWrapper > g_vCapturedImg;
@@ -59,14 +56,6 @@ sg::GLSimCam    glRightCam;
 #define g_mTwv ( g_mCamPose )
 #define g_mTwl ( g_mCamPose )
 #define g_mTwr ( g_mTwl * g_mTvr )
-
-/// GL Objects
-GLPath     glPath;
-sg::GLVbo* glVBO;
-
-/// Synch Stuff
-volatile bool g_bCaptureDirty;
-volatile bool g_bVirtualDirty;
 
 /////////////////////////////////////////////////////////////////////////////////
 inline void SnapVirtualImages()
@@ -122,116 +111,6 @@ inline void NormalizeDepth(
     }
 }
 
-/////////////////////////////////////////////////////////////////////////////////
-void _TrackerLoop(
-        CameraDevice* pCam
-        )
-{
-    // set up LinearSystem
-    LinearSystem ESM;
-
-    while( 1 ) {
-        // ///////////////////////////////////////////////////////////////////////////////
-        // Capture Images
-        //
-
-        // save previous images
-        g_vPrevCapturedImg = g_vCapturedImg;
-
-        // capture new images
-        // but first, wait for GUI to finish copying data if needed
-        while( g_bCaptureDirty ) {}
-
-        pCam->Capture( g_vCapturedImg );
-
-        // set dirty bit so GUI knows it needs to update
-        g_bCaptureDirty = true;
-
-        // set base pose for VBO relative to current pose
-        // so convert pose to vision frame
-        Eigen::Matrix4d M;
-        M << 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1;
-
-        M = g_mTwv * M;
-
-        glVBO->SetPose( M );
-
-        /* */
-
-        // ///////////////////////////////////////////////////////////////////////////////
-        // Optimization Loop
-        //
-
-        // initialize ESM with: K, CurImg, PrevImg, PrevDepthMap
-        ESM.Init( K, g_vCapturedImg[0].Image, g_vPrevCapturedImg[0].Image, g_vPrevCapturedImg[2].Image );
-//        ESM.Init( K, g_vCapturedImg[0].Image, g_vVirtualImg[0], g_vVirtualImg[1] );
-//        ESM.Init( g_vCapturedImg[0].Image, &glLeftCam );
-
-        // hard limit of iterations so we don't loop forever
-        unsigned int nMaxIters = 0;
-
-        // this variable holds the estimated transform
-        Eigen::Matrix4d dTrv = Eigen::Matrix4d::Identity();
-
-        // this variable holds the delta update solution
-        Eigen::Matrix4d dTdelta;
-
-        // keep track of errors
-        double NewError;
-        double PrevError = ESM.Error();
-
-        // store initial pose
-        Eigen::Matrix4d mInitialPose = g_mCamPose;
-
-        while( nMaxIters < g_nMaxIterations ) {
-            // increment counter
-            nMaxIters++;
-
-            // solve system
-            double dTi = mvl::Tic();
-
-            // solve with 1, 4 or 8 threads
-            dTdelta = ESM.Solve( 8 );
-
-//          std::cout << "Solving took: " << mvl::Toc( dTi ) << std::endl;
-
-            // update Trv
-            ESM.ApplyUpdate();
-
-            dTrv = dTrv * mvl::TInv( dTdelta );
-
-            // update camera position
-            g_mCamPose      = mInitialPose * mvl::TInv( dTrv );
-
-//			g_bVirtualDirty = true;
-
-//            while( g_bVirtualDirty ) {}
-
-			// reinitalize
-//	        ESM.Init( K, g_vCapturedImg[0].Image, g_vVirtualImg[0], g_vVirtualImg[1] );
-//			ESM.SnapVirtualCam();
-
-            // get error
-            NewError = ESM.Error();
-
-          std::cout << "Error is: " << NewError << std::endl;
-            // if error change is too small, break
-            if( fabs( PrevError - NewError ) < 1e-2 ) {
-                break;
-			}
-
-            PrevError = NewError;
-        }
-
-        // show solution
-        std::cout << "Estimated Delta: " << mvl::T2Cart( dTrv ).transpose() << std::endl;
-
-        glPath.PushPose( mvl::TInv( dTrv ) );
-
-        /*  */
-    }
-}
-
 /**************************************************************************************************
 *
 * MAIN
@@ -251,20 +130,11 @@ int main(
     // read camera model file
     std::string sCamModFileName = pCam->GetProperty( "CamModelFile", "rcmod.xml" );
     g_CamModel = new mvl::CameraModel( sCamModFileName );
+    CameraModelPyramid CamModelPyr( sCamModFileName );
+    CamModelPyr.PopulatePyramid( PYR_LEVELS );
 
     // initialize camera pose
     g_mCamPose = Eigen::Matrix4d::Identity();
-
-    // capture an initial image to get image params
-    pCam->Capture( g_vCapturedImg );
-
-    g_bCaptureDirty = true;
-
-    if( g_vCapturedImg.size() == 0 ) {
-        cerr << "No images found!" << endl;
-
-        exit( 0 );
-    }
 
     // Create OpenGL window in single line thanks to GLUT
     pango::CreateGlutWindowAndBind( "Dense Tracker", 1280, 768 );
@@ -294,8 +164,8 @@ int main(
     glGraph.AddChild( &glGrid );
 
     // initialize cameras
-    glLeftCam.Init( &glGraph, g_mTwl, K, g_nImgWidth, g_nImgHeight, sg::eSimCamDepth | sg::eSimCamLuminance );
-    glRightCam.Init( &glGraph, g_mTwr, K, g_nImgWidth, g_nImgHeight, sg::eSimCamDepth | sg::eSimCamLuminance );
+    glLeftCam.Init( &glGraph, g_mTwl, g_K, g_nImgWidth, g_nImgHeight, sg::eSimCamDepth | sg::eSimCamLuminance );
+    glRightCam.Init( &glGraph, g_mTwr, g_K, g_nImgWidth, g_nImgHeight, sg::eSimCamDepth | sg::eSimCamLuminance );
 
     // prepare virtual images
     g_vVirtualImg.resize( 4 );
@@ -316,7 +186,7 @@ int main(
     pango::GlBufferCudaPtr cbo( pango::GlArrayBuffer, g_nImgWidth, g_nImgHeight, GL_UNSIGNED_BYTE, 4,
                                 cudaGraphicsMapFlagsWriteDiscard, GL_STREAM_DRAW );
     pango::GlBufferCudaPtr ibo( pango::GlElementArrayBuffer, g_nImgWidth, g_nImgHeight, GL_UNSIGNED_INT, 2 );
-    glVBO = new sg::GLVbo( &vbo, &ibo, &cbo );
+    sg::GLVbo glVBO( &vbo, &ibo, &cbo );
 
     // Generate Index Buffer Object for rendering mesh
     {
@@ -324,14 +194,10 @@ int main(
         Gpu::Image< uint2 >        dIbo( (uint2*)*var, g_nImgWidth, g_nImgHeight );
         Gpu::GenerateTriangleStripIndexBuffer( dIbo );
     }
-    glGraph.AddChild( glVBO );
+    glGraph.AddChild( &glVBO );
 
     // add path to 3D window
-    glPath.PushPose( Eigen::Vector6d( Eigen::Vector6d::Zero() ) );
-    Eigen::Vector3d dRot;
-    dRot << 0, 10, 0;
-
-    // glPath.SetRotation( dRot );
+    GLPath     glPath;
     glGraph.AddChild( &glPath );
 
     // display captured images
@@ -367,95 +233,134 @@ int main(
     glBaseView.AddDisplay( glEImgLeft );
     glBaseView.AddDisplay( glEImgRight );
 
-    // register key callbacks
-    // pango::RegisterKeyPressCallback( 't', boost::bind( _StartLclzr ) );
-
     // launch tracker thread
-    boost::thread TrackerThread( _TrackerLoop, pCam );
+//    boost::thread TrackerThread( _TrackerLoop, pCam );
 
     // prepare GPU images
-    Gpu::Image< float, Gpu::TargetDevice, Gpu::Manage >         dDepth( g_nImgWidth, g_nImgHeight );
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > dLeftImg( g_nImgWidth, g_nImgHeight );
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > dRightImg( g_nImgWidth, g_nImgHeight );
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > dDisp( g_nImgWidth, g_nImgHeight );
+    Gpu::Pyramid<unsigned char, PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage> d_LeftPyr( g_nImgWidth, g_nImgHeight );
+    Gpu::Pyramid<unsigned char, PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage> d_RightPyr( g_nImgWidth, g_nImgHeight );
+    Gpu::Pyramid<unsigned char, PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage> d_VirtPyr( g_nImgWidth, g_nImgHeight );
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > d_BlurTmp1( g_nImgWidth, g_nImgHeight );
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > d_BlurTmp2( g_nImgWidth, g_nImgHeight );
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > d_DispInt( g_nImgWidth, g_nImgHeight );
+    Gpu::Pyramid< float, PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage > d_DispPyr( g_nImgWidth, g_nImgHeight );
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage > d_Workspace( g_nImgWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), g_nImgHeight );
+    Gpu::Image< float4, Gpu::TargetDevice, Gpu::Manage > d_Debug( g_nImgWidth, g_nImgHeight );
 
-    // ///////////////////////////////////////////////////////////////////////////////
-    // Screen Rendering
-    //
+//    Gpu::Pyramid< float, PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage > dDispPyrC( nImgWidth, nImgHeight );
+
+    // Pose variables
+    Eigen::Matrix4d Trl = Eigen::Matrix4d::Identity();
+
+    // Start camera with robot identity
+    Eigen::Matrix4d T_vis2rob = Eigen::Matrix4d::Identity( );
+    Eigen::Matrix4d T_rob2vis = Eigen::Matrix4d::Identity( );
+    {
+        Eigen::Matrix3d RDFvision;
+        RDFvision << 1, 0, 0,
+                     0, 1, 0,
+                     0, 0, 1;
+        Eigen::Matrix3d RDFrobot;
+        RDFrobot << 0, 1, 0,
+                    0, 0, 1,
+                    1, 0, 0;
+        T_vis2rob.block < 3, 3 > (0, 0) = RDFvision.transpose( ) * RDFrobot;
+        T_rob2vis.block < 3, 3 > (0, 0) = RDFrobot.transpose( ) * RDFvision;
+    }
+//    g_mTwv = /*T_wr*/ Eigen::Matrix4d::Identity() * T_rob2vis;
+//    glPath.PushPose( T_rob2vis );
+
+    // initialize number of iterations to perform at each pyramid level
+    // level 0 is finest (ie. biggest image)
+    g_vPyrCycles.resize( PYR_LEVELS );
+    g_vPyrCycles << 1, 2, 3, 4, 5;
+    g_vPyrFullMask.resize( PYR_LEVELS );
+    g_vPyrFullMask << 1, 1, 1, 1, 0;
+
+
+    // side panel
+    pangolin::Var<unsigned int> nBlur("ui.Blur",1,0,5);
+    pangolin::Var<int> nMaxDisparity("ui.MaxDisp",16,0,100);
+    pangolin::Var<int> nMedianFilter("ui.MedianFilter",50,0,100);
+    pangolin::Var<float> fNormC("ui.Norm C",50,0,100);
+    pangolin::Var<float> fSqErr("ui.Mean Sq Error");
+    pangolin::Var<float> fKeyThreshold("ui.Keyframe Threshold",0.75,0,1);
+
+    // gui control variables
+    bool guiStep = true;
+    bool guiRunning = false;
+    bool guiSetKeyframe = true;
+
+    // synch variables
+    bool bVboInit = false;
+    bool bVirtualDirty = true;  // force a capture of virtual images
+
+    // register key callbacks
+    pangolin::RegisterKeyPressCallback(' ',[&guiRunning](){ guiRunning = !guiRunning; });
+    pangolin::RegisterKeyPressCallback('k',[&guiSetKeyframe](){ guiSetKeyframe = true; });
+    pangolin::RegisterKeyPressCallback(pangolin::PANGO_SPECIAL + GLUT_KEY_RIGHT,[&guiStep](){ guiStep = true; });
+
     while( !pango::ShouldQuit() ) {
-        // update capture data if needed
-        if( g_bCaptureDirty ) {
-            cv::Mat& LeftImg = g_vCapturedImg[0].Image;
 
+        // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Capture
+        //
+        if( guiRunning || pangolin::Pushed(guiStep)) {
+            // capture an image
+            pCam->Capture( g_vCapturedImg );
+
+            // handy alias to avoid long names
+            const cv::Mat& LeftImg = g_vCapturedImg[0].Image;
+            const cv::Mat& RightImg = g_vCapturedImg[1].Image;
+
+            // upload images
+            d_LeftPyr[0].MemcpyFromHost( LeftImg.data, g_nImgWidth );
+            d_RightPyr[0].MemcpyFromHost( RightImg.data, g_nImgWidth );
+
+            // blur bottom image
+            for (int ii = 0; ii < nBlur; ++ii) {
+                Gpu::Blur( d_LeftPyr[0], d_BlurTmp1 );
+                Gpu::Blur( d_RightPyr[0], d_BlurTmp1 );
+            }
+
+            // reduce and blur rest of pyramid
+            Gpu::BlurReduce<unsigned char, PYR_LEVELS, unsigned int>(d_LeftPyr, d_BlurTmp1, d_BlurTmp2);
+            Gpu::BlurReduce<unsigned char, PYR_LEVELS, unsigned int>(d_RightPyr, d_BlurTmp1, d_BlurTmp2 );
+
+            // TODO: these do NOT show any blur.. we have to bring them down from GPU
+            // if we want to see blur on GUI
+
+            // show left image
             glImgLeft.SetImage( LeftImg.data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_BYTE );
 
             // show right image
-            cv::Mat& RightImg = g_vCapturedImg[1].Image;
-            glImgRight.SetImage( RightImg.data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE,
-                                 GL_UNSIGNED_BYTE );
-
-            Gpu::Image< unsigned char, Gpu::TargetHost > hLeftImg( LeftImg.data, g_nImgWidth, g_nImgHeight );
-            dLeftImg.CopyFrom( hLeftImg );
-            {
-                pango::CudaScopedMappedPtr var( cbo );
-                Gpu::Image< uchar4 >       dCbo( (uchar4*)*var, g_nImgWidth, g_nImgHeight );
-                Gpu::ConvertImage< uchar4, unsigned char >( dCbo, dLeftImg );
-            }
-
-            // check if depth map is given to us by camera
-            if( g_vCapturedImg.size() == 3 ) {
-                cv::Mat                              DepthMap = g_vCapturedImg[2].Image.clone();
-                Gpu::Image< float, Gpu::TargetHost > hDepth( (float*)DepthMap.data, g_nImgWidth, g_nImgHeight );
-                dDepth.CopyFrom( hDepth );
-
-                {
-                    pango::CudaScopedMappedPtr var( vbo );
-                    Gpu::Image< float4 >       dVbo( (float4*)*var, g_nImgWidth, g_nImgHeight );
-                    Gpu::DepthToVbo( dVbo, dDepth, K( 0, 0 ), K( 1, 1 ), K( 0, 2 ), K( 1, 2 ) );
-                }
-
-                // show depth image (normalize first)
-                NormalizeDepth( (float*)DepthMap.data, g_nImgWidth * g_nImgHeight );
-                glDepth.SetImage( DepthMap.data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
-            } else {
-                Gpu::Image< unsigned char, Gpu::TargetHost > hRightImg( RightImg.data, g_nImgWidth, g_nImgHeight );
-                dRightImg.CopyFrom( hRightImg );
-
-                Gpu::DenseStereo( dDisp, dLeftImg, dRightImg, 20, 0 );
-                Gpu::DenseStereoSubpixelRefine( dDepth, dDisp, dLeftImg, dRightImg );
-
-                for( int ii = 0; ii < g_nFilter33Iters; ii++ ) {
-                    Gpu::MedianFilter3x3( dDepth, dDepth );
-                }
-
-                for( int ii = 0; ii < g_nFilter55Iters; ii++ ) {
-                    Gpu::MedianFilter5x5( dDepth, dDepth );
-                }
-
-                {
-                    pango::CudaScopedMappedPtr var( vbo );
-                    Gpu::Image< float4 >       dVbo( (float4*)*var, g_nImgWidth, g_nImgHeight );
-                    Gpu::DisparityImageToVbo( dVbo, dDepth, g_mTvr( 1, 3 ), K( 0, 0 ), K( 1, 1 ), K( 0, 2 ), K( 1, 2 ) );
-                }
-
-                // copy depth map from GPU memory in order to display on GUI
-                Gpu::Image< float, Gpu::TargetHost, Gpu::Manage > hDepth( g_nImgWidth, g_nImgHeight );
-                hDepth.CopyFrom( dDepth );
-                NormalizeDepth( hDepth.ptr, g_nImgWidth * g_nImgHeight );
-                glDepth.SetImage( hDepth.ptr, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
-            }
-
-            g_bCaptureDirty = false;
+            glImgRight.SetImage( RightImg.data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_BYTE );
         }
 
-        // update cameras poses
-        glLeftCam.SetPoseRobot( g_mTwl );
-        glRightCam.SetPoseRobot( g_mTwr );
 
-        // update virtual images if needed
-        if( g_bVirtualDirty ) {
+        // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Capture Virtual Images
+        //
+        if( bVirtualDirty ) {
             // render to texture
             SnapVirtualImages();
+
+            // upload image
+            d_VirtPyr[0].MemcpyFromHost( g_vVirtualImg[0].data, g_nImgWidth );
+
+            // upload depthmap
+            d_DispPyr[0].MemcpyFromHost( g_vVirtualImg[1].data, g_nImgWidth*4 );
+            Gpu::BoxReduce< float, PYR_LEVELS, float >( d_DispPyr );
+
+            // blur bottom image
+            /*
+            for (int ii = 0; ii < nBlur; ++ii) {
+                Gpu::Blur( d_VirtPyr[0], d_BlurTmp1 );
+            }
+            */
+
+            // reduce and blur rest of pyramid
+            Gpu::BlurReduce<unsigned char, PYR_LEVELS, unsigned int>( d_VirtPyr, d_BlurTmp1, d_BlurTmp2 );
 
             // update image holders
             glVImgLeft.SetImage( g_vVirtualImg[0].data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE,
@@ -478,8 +383,163 @@ int main(
             glEImgRight.SetImage( g_vErrorImg[1].data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE,
                                   GL_UNSIGNED_BYTE );
 
-            g_bVirtualDirty = false;
+            bVirtualDirty = false;
         }
+
+
+        // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Localize
+        //
+        unsigned int nObs;
+        if( bVboInit ) {
+            for( int PyrLvl = PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
+                for( int ii = 0; ii < g_vPyrCycles[PyrLvl]; ii++ ) {
+                    const unsigned w = (int)g_nImgWidth >> PyrLvl;
+                    const unsigned h = (int)g_nImgHeight >> PyrLvl;
+
+                    Eigen::Matrix3d Kpyr = CamModelPyr.K(PyrLvl);
+                    Sophus::SE3 sTrl = Sophus::SE3( Trl );
+                    Eigen::Matrix<double,3,4> KTlr = Kpyr * sTrl.inverse().matrix3x4();
+                    const float fBaseline = (1 << PyrLvl) * CamModelPyr.GetPose()( 1, 3 );
+
+                    // build system
+                    Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDisparity( d_LeftPyr[PyrLvl],d_VirtPyr[PyrLvl],
+                                                                                            d_DispPyr[PyrLvl],Kpyr,KTlr,fNormC,fBaseline,
+                                                                                            d_Workspace,d_Debug.SubImage(w,h) );
+                    Eigen::Matrix<double,6,6> LHS = LSS.JTJ;
+                    Eigen::Vector6d RHS = LSS.JTy;
+
+                    // solve system
+                    Eigen::Vector6d X;
+
+                    // check if we are solving only for rotation, or full estimate
+                    if( g_vPyrFullMask(PyrLvl) != 0 ) {
+                        Eigen::FullPivLU<Eigen::Matrix<double,6,6> > lu_JTJ(LHS);
+
+                        // check degenerate system
+                        if( lu_JTJ.rank() < 6 ) {
+                            cerr << "warning(@L" << PyrLvl << "I" << ii << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << endl;
+                            continue;
+                        }
+
+                        X = - (lu_JTJ.solve(RHS));
+                    } else {
+                        // extract rotation information only
+                        Eigen::Matrix<double,3,3> rLHS = LHS.block<3,3>(3,3);
+                        Eigen::Vector3d rRHS = RHS.tail(3);
+                        Eigen::FullPivLU<Eigen::Matrix<double,3,3> > lu_JTJ(rLHS);
+
+                        // check degenerate system
+                        if( lu_JTJ.rank() < 3 ) {
+                            cerr << "warning(@L" << PyrLvl << "I" << ii << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << endl;
+                            continue;
+                        }
+
+                        Eigen::Vector3d rX;
+                        rX = - (lu_JTJ.solve(rRHS));
+
+                        // pack solution
+                        X.setZero();
+                        X.tail(3) = rX;
+                    }
+
+                    // if we have too few observations, discard estimate
+                    if( (float)LSS.obs / (float)( w * h ) < fMinPts ) {
+                        cerr << "warning(@L" << PyrLvl << "I" << ii << ") LS trashed. " << "Too few pixels!" << endl;
+                        continue;
+                    }
+
+                    // everything seems fine... apply update
+                    Trl = (Trl.inverse() * Sophus::SE3::exp(X).matrix()).inverse();
+                    fSqErr =  LSS.sqErr / LSS.obs;
+
+                    // only store nObs of last level
+                    if( PyrLvl == 0 ) {
+                        nObs = LSS.obs;
+                    }
+
+                    // mark virtual cameras as dirty to force re-rendering
+                    bVirtualDirty = true;
+                }
+            }
+        }
+
+        // don't know where to put this shit
+        glPath.PushPose( Trl );
+//        Twv = Twv * Trl;
+        Trl = Eigen::Matrix4d::Identity();
+
+        // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Keyframe & VBO Generation
+        //
+        if( pangolin::Pushed(guiSetKeyframe) || (float)nObs / (float)( g_nImgWidth * g_nImgHeight ) < fKeyThreshold )
+        {
+            // create a colored buffer object
+            {
+                pangolin::CudaScopedMappedPtr var( cbo );
+                Gpu::Image< uchar4 >          dCbo( (uchar4*)*var, g_nImgWidth, g_nImgHeight );
+                Gpu::ConvertImage< uchar4, unsigned char >( dCbo, d_LeftPyr[0] );
+            }
+
+            // check if depth map is given to us by camera...
+            if( g_vCapturedImg.size() == 3 ) {
+                cv::Mat                              DepthMap = g_vCapturedImg[2].Image.clone();
+                Gpu::Image< float, Gpu::TargetHost > hDepth( (float*)DepthMap.data, g_nImgWidth, g_nImgHeight );
+                d_DispPyr[0].CopyFrom( hDepth );
+                Gpu::BoxReduce< float, PYR_LEVELS, float >( d_DispPyr );
+
+                {
+                    pango::CudaScopedMappedPtr var( vbo );
+                    Gpu::Image< float4 >       dVbo( (float4*)*var, g_nImgWidth, g_nImgHeight );
+                    Gpu::DepthToVbo( dVbo, d_DispPyr[0], g_K( 0, 0 ), g_K( 1, 1 ), g_K( 0, 2 ), g_K( 1, 2 ) );
+                }
+
+                // show depth image (normalize first)
+                NormalizeDepth( (float*)DepthMap.data, g_nImgWidth * g_nImgHeight );
+                glDepth.SetImage( DepthMap.data, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+            } else {
+                // ... if not, calculate depth.
+                Gpu::DenseStereo( d_DispInt, d_LeftPyr[0], d_RightPyr[0], nMaxDisparity, 0 );
+                Gpu::ReverseCheck( d_DispInt, d_LeftPyr[0], d_RightPyr[0]);
+                Gpu::DenseStereoSubpixelRefine( d_DispPyr[0], d_DispInt, d_LeftPyr[0], d_RightPyr[0] );
+                Gpu::MedianFilterRejectNegative9x9( d_DispPyr[0], d_DispPyr[0], nMedianFilter );
+                Gpu::FilterDispGrad( d_DispPyr[0], d_DispPyr[0], 2.0 );
+                Gpu::BoxReduce< float, PYR_LEVELS, float >( d_DispPyr );
+
+                {
+                    pango::CudaScopedMappedPtr var( vbo );
+                    Gpu::Image< float4 >       dVbo( (float4*)*var, g_nImgWidth, g_nImgHeight );
+                    Gpu::DisparityImageToVbo( dVbo, d_DispPyr[0], g_mTvr( 1, 3 ), g_K( 0, 0 ), g_K( 1, 1 ), g_K( 0, 2 ), g_K( 1, 2 ) );
+                }
+
+                // copy depth map from GPU memory in order to display on GUI
+                Gpu::Image< float, Gpu::TargetHost, Gpu::Manage > hDepth( g_nImgWidth, g_nImgHeight );
+                hDepth.CopyFrom( d_DispPyr[0] );
+                NormalizeDepth( hDepth.ptr, g_nImgWidth * g_nImgHeight );
+                glDepth.SetImage( hDepth.ptr, g_nImgWidth, g_nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+            }
+
+            // set base pose for VBO relative to current pose
+            // so convert pose to vision frame
+            Eigen::Matrix4d M;
+            M << 0, 0, 1, 0,
+                 1, 0, 0, 0,
+                 0, 1, 0, 0,
+                 0, 0, 0, 1;
+            M = g_mTwv * M;
+            glVBO.SetPose( M );
+
+            bVboInit = true;
+        }
+
+
+        ///------------------------------------------------------------------------------------------------------------
+        /// DRAW STUFF
+        ///------------------------------------------------------------------------------------------------------------
+
+        // update stuff
+        glLeftCam.SetPoseRobot( g_mTwl );
+        glRightCam.SetPoseRobot( g_mTwr );
 
         // clear whole screen
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
@@ -496,10 +556,11 @@ int main(
         pango::FinishGlutFrame();
 
         // 60 Hz refresh rate
-//        usleep( 1E6 / 60 );
+        usleep( 1E6 / 60 );
+//        sleep(10);
     }
 
     return 0;
 }
 
-// TODO: load ground truth values
+// TODO:
