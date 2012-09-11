@@ -16,7 +16,8 @@
 using namespace std;
 
 #define     SAVE_POSES      0
-#define     USE_PRELOADED   0
+#define     USE_PRELOADED   1
+#define     DEPTH_MAP       1
 
 const int MAX_LEVELS = 5;
 
@@ -43,12 +44,14 @@ std::istream& operator>> (std::istream& is, Eigen::Vector6d& v)
   return is;
 }
 
+#if USE_PRELOADED
 struct PNode {
     Eigen::Vector6d RelPose;
     Eigen::Vector6d AbsPose;
     cv::Mat         Image;
     cv::Mat         Disparity;
 };
+#endif
 
 void _HardReset( Eigen::Matrix4d* T_pc,
              Eigen::Matrix4d* T_wp,
@@ -75,8 +78,6 @@ int main(int argc, char** argv)
     g_vPyrFullMask.resize( MAX_LEVELS );
     g_vPyrFullMask << 1, 1, 1, 1, 0;
     g_vMotionModel << 0.3, 0.2, 0.05, 0.01, 0.01, 0.7;
-    Eigen::Matrix4d PrevPose;
-    PrevPose.setZero();
 
     // parse parameters
     CameraDevice* pCam = ParseArgs( argc, argv );
@@ -101,6 +102,18 @@ int main(int argc, char** argv)
     // image properties
     const unsigned int nImgWidth = vImages[1].Image.cols;
     const unsigned int nImgHeight = vImages[0].Image.rows;
+
+#if DEPTH_MAP
+{
+    Eigen::Matrix3d             K = CamModel.K(0);
+    const float                 fBaseline = CamModel.GetPose()( 1, 3 );
+    for( int ii = 0; ii < nImgHeight; ii++ ) {
+        for( int jj = 0; jj < nImgWidth; jj++ ) {
+            vImages[2].Image.at<float>(ii,jj) = K(0,0) * fBaseline / vImages[2].Image.at<float>(ii,jj);
+        }
+    }
+}
+#endif
 
     // create a GUI window
     pangolin::CreateGlutWindowAndBind("Dense Tracker",1280,720);
@@ -141,9 +154,10 @@ int main(int argc, char** argv)
     pangolin::Var<float>            ui_gr("ui.-- Depth Range",0.5, 1E-3, 10);
     pangolin::Var<float>            ui_gc("ui.-- Color Range",10, 1E-3, 20);
     pangolin::Var<float>            ui_fMinPts("ui.Min Points Estimate Threshold",0.30,0,1);
-    pangolin::Var<bool>             ui_bUseGlobalMotionModel("ui.Use Global Motion Model", true, true);
+    pangolin::Var<bool>             ui_bUseGlobalMotionModel("ui.Use Global Motion Model", false, true);
     pangolin::Var<float>            ui_fKeyThreshold("ui.Keyframe Threshold",1.0,0,1);
     pangolin::Var<int>              ui_nPyrLevel("ui.Pyramid Level",0,0,MAX_LEVELS-1);
+    pangolin::Var<int>              ui_nKeyframeIndex("ui.Keyframe Index ",0,0,400);
 
 
     // create a view container
@@ -167,12 +181,18 @@ int main(int argc, char** argv)
     // gl axis
     SceneGraph::GLAxis glCurPose;
     SceneGraph::GLAxis glPrevPose;
+    SceneGraph::GLAxis glKeyPose;
     glGraph.AddChild( &glCurPose );
     glGraph.AddChild( &glPrevPose );
+    glGraph.AddChild( &glKeyPose );
+    glCurPose.SetScale( 1.0 );
+    glPrevPose.SetScale( 0.5 );
+    glKeyPose.SetScale( 2.0 );
+
 
     // gl path
     GLPath glPath;
-    glGraph.AddChild(&glPath);
+//    glGraph.AddChild(&glPath);
 
     // initialize vbo's
     vector < pangolin::GlBufferCudaPtr* >      vVBO;
@@ -196,7 +216,7 @@ int main(int argc, char** argv)
 
         // add vbo to scenegraph
         glVBO[ii] = new SceneGraph::GLVbo( vVBO[ii], vIBO[ii], vCBO[ii] );
-        glPrevPose.AddChild( glVBO[ii] );
+        glKeyPose.AddChild( glVBO[ii] );
 
     }
 
@@ -224,8 +244,11 @@ int main(int argc, char** argv)
 
     // Pose variables
     Eigen::Matrix4d T_wk;                                       // keyframe pose in world reference frame
+    Eigen::Matrix4d T_wp;                                       // previous pose in world reference frame
     Eigen::Matrix4d T_wc;                                       // current pose in world reference frame
     Eigen::Matrix4d T_kc = Eigen::Matrix4d::Identity();         // current pose relative to keyframe
+    Eigen::Matrix4d T_pc = Eigen::Matrix4d::Identity();         // current pose relative to previous pose
+    Eigen::Matrix4d T_pc_prev = Eigen::Matrix4d::Identity();    // previous pose update (use if motion model is enabled)
 
     // Start camera with robot identity
     Eigen::Matrix4d T_vr = Eigen::Matrix4d::Identity();
@@ -243,14 +266,15 @@ int main(int argc, char** argv)
         T_rv.block < 3, 3 > (0, 0) = RDFrobot.transpose( ) * RDFvision;
     }
     T_wk = /*T_wr*/ Eigen::Matrix4d::Identity() * T_rv;
+    T_wp = /*T_wr*/ Eigen::Matrix4d::Identity() * T_rv;
     T_wc = /*T_wr*/ Eigen::Matrix4d::Identity() * T_rv;
     glPath.PushPose( T_rv );
 
     // control variables
     bool guiRunning = false;
-    bool guiSetKeyframe = true;
+    bool guiSetKeyframe = false;
     bool guiGo = false;
-    bool bNewCapture = true;
+    bool bNewCapture = false;
 
     // keyboard callbacks
     pangolin::RegisterKeyPressCallback(' ',[&guiRunning](){ guiRunning = !guiRunning; });
@@ -262,8 +286,9 @@ int main(int argc, char** argv)
 #if SAVE_POSES
     // store poses in a file
     ofstream pFile;
-    pFile.open("poses.txt");
+    pFile.open("Poses.txt");
 #endif
+
 
 #if USE_PRELOADED
     // pre-load model as a PoseNode Graph
@@ -274,7 +299,7 @@ int main(int argc, char** argv)
         CameraDevice Cam;
         Cam.SetProperty("DataSourceDir", "./Keyframes" );
         Cam.SetProperty("Channel-0", "Left.*" );
-        Cam.SetProperty("Channel-1", "depth.*" );
+        Cam.SetProperty("Channel-1", "Depth.*" );
         Cam.SetProperty("NumChannels", 2 );
 
         // init driver
@@ -285,36 +310,46 @@ int main(int argc, char** argv)
 
         // pose file
         ifstream pFile;
-        if( pFile.open( "Keyframes/poses.txt" ) == false ) {
+        pFile.open( "Keyframes/Keyframes.txt" );
+        if( pFile.is_open() == false ) {
             cerr << "Pose file not found." << endl;
             exit(-1);
         }
 
         // data containers
-        Eigen::Vector6d RelPose;
-        Eigen::Matrix4d AbsPose = Eigen::Matrix4d::Identity();
+        Eigen::Vector6d ReadPose;
         vector< rpg::ImageWrapper > vImgs;
 
         if( pFile.is_open( ) ) {
             // iterate through pose file
             while( 1 ) {
                 // read pose
-                pFile >> RelPose(0) >> RelPose(1) >> RelPose(2) >> RelPose(3) >> RelPose(4) >> RelPose(5);
+                pFile >> ReadPose(0) >> ReadPose(1) >> ReadPose(2) >> ReadPose(3) >> ReadPose(4) >> ReadPose(5);
 
                 if( pFile.eof( ) ) {
                     break;
                 }
-
-                AbsPose = AbsPose * mvl::Cart2T( RelPose );
 
                 // read images
                 Cam.Capture( vImgs );
 
                 // store data
                 PNode tPNode;
-                tPNode.RelPose = RelPose;
-                tPNode.AbsPose = mvl::T2Cart( AbsPose );
+                //tPNode.RelPose;
+                tPNode.AbsPose = ReadPose;
                 tPNode.Image = vImgs[0].Image;
+#if DEPTH_MAP
+{
+    Eigen::Matrix3d             K = CamModel.K(0);
+    const float                 fBaseline = CamModel.GetPose()( 1, 3 );
+    for( int ii = 0; ii < nImgHeight; ii++ ) {
+        for( int jj = 0; jj < nImgWidth; jj++ ) {
+            vImgs[1].Image.at<float>(ii,jj) = K(0,0) * fBaseline / vImgs[1].Image.at<float>(ii,jj);
+        }
+    }
+}
+#endif
+
                 tPNode.Disparity = vImgs[1].Image;
 
                 PoseVector.push_back(tPNode);
@@ -325,35 +360,37 @@ int main(int argc, char** argv)
         pFile.close( );
         std::cout << "Loaded " << PoseVector.size() << " poses from keyframe file." << std::endl;
     }
-#endif
 
     // keyframe index
     unsigned int nKeyIdx = 0;
 
-    // set up first keyframe
-#if USE_PRELOADED == 0
-    PNode tPNode;
-    tPNode.RelPose.setZero();
-    tPNode.AbsPose.setZero();
-    tPNode.Image = vImages[0].Image;
-    tPNode.Disparity = vImages[2].Image;
+    T_wc = /*T_wr*/ mvl::Cart2T(PoseVector[0].AbsPose) * T_rv;
+    T_wk = /*T_wr*/ mvl::Cart2T(PoseVector[0].AbsPose) * T_rv;
 
-    PoseVector.push_back(tPNode);
+#endif
+
+    // set up first keyframe
+#if USE_PRELOADED
+    dLeftPyr[0].MemcpyFromHost(PoseVector[nKeyIdx].Image.data,nImgWidth);
+    Gpu::Image< float, Gpu::TargetHost > hDisp( (float*)PoseVector[nKeyIdx].Disparity.data, nImgWidth, nImgHeight );
+#else
+    dLeftPyr[0].MemcpyFromHost(vImages[0].Image.data,nImgWidth);
+    Gpu::Image< float, Gpu::TargetHost > hDisp( (float*)vImages[2].Image.data, nImgWidth, nImgHeight );
 #endif
 
     // blur & decimate image
-    dLeftPyr[0].MemcpyFromHost(PoseVector[KeyIdx].Image.data,nImgWidth);
     for (int ii = 0; ii < ui_nBlur; ++ii) {
         Gpu::Blur( dLeftPyr[0], dBlurTmp1 );
     }
     Gpu::BlurReduce<unsigned char, MAX_LEVELS, unsigned int>( dLeftPyr, dBlurTmp1, dBlurTmp2 );
+    dKeyPyr.CopyFrom(dLeftPyr);
 
     // downsample depth map
-    Gpu::Image< float, Gpu::TargetHost > hDisp( (float*)PoseVector[KeyIdx].Disparity.data, nImgWidth, nImgHeight );
-    dKeyPyr.CopyFrom(dLeftPyr);
     dKeyDisp.CopyFrom( hDisp );
     dKeyDispPyr[0].CopyFrom( dKeyDisp );
     Gpu::BoxReduce< float, MAX_LEVELS, float >( dKeyDispPyr );
+
+    unsigned int iidx = 0;
 
     // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Main Loop
@@ -370,6 +407,19 @@ int main(int argc, char** argv)
             Idx++;
             ui_nImgIdx = Idx;
             bNewCapture = true;
+
+#if DEPTH_MAP
+{
+    Eigen::Matrix3d             K = CamModel.K(0);
+    const float                 fBaseline = CamModel.GetPose()( 1, 3 );
+    for( int ii = 0; ii < nImgHeight; ii++ ) {
+        for( int jj = 0; jj < nImgWidth; jj++ ) {
+            vImages[2].Image.at<float>(ii,jj) = K(0,0) * fBaseline / vImages[2].Image.at<float>(ii,jj);
+        }
+    }
+}
+#endif
+
         }
 
         // upload images
@@ -392,8 +442,6 @@ int main(int argc, char** argv)
         // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Localization
         //
-        T_kc = Eigen::Matrix4d::Identity();
-
         for( int PyrLvl = MAX_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
             for(int ii = 0; ii < g_vPyrCycles[PyrLvl]; ii++ ) {
                 const unsigned              w = nImgWidth >> PyrLvl;
@@ -511,24 +559,20 @@ int main(int argc, char** argv)
         glVBO[ ui_nPyrLevel ]->SetVisible(true);
 
 
+        // update poses
+        T_wp = T_wc;
+        T_wc = T_wk * T_kc;
+        T_pc = mvl::TInv(T_wp) * T_wc;
+
+
         // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Keyframe
         //
-        if(pangolin::Pushed(guiSetKeyframe) || (( (float)nObs / (float)( nImgWidth * nImgHeight ) < ui_fKeyThreshold ) && bNewCapture ))
+//        if(pangolin::Pushed(guiSetKeyframe) || (( (float)nObs / (float)( nImgWidth * nImgHeight ) < ui_fKeyThreshold ) && bNewCapture ))
         {
-            Gpu::Image< float, Gpu::TargetHost > hDisp( (float*)vImages[2].Image.data, nImgWidth, nImgHeight );
-            dKeyDisp.CopyFrom( hDisp );
 
-            dKeyPyr.CopyFrom(dLeftPyr);
-
-#if SAVE_POSES
-            // save poses to a file in ROBOTICS frame
-            Eigen::Vector6d Cpc = mvl::T2Cart( T_rv * T_pc * T_vr );
-            pFile << Cpc.transpose() << endl;
-#endif
-
-            // Update 'previous' position to current position
-            Eigen::Vector6d DeltaPose = mvl::T2Cart( T_rv * T_kc * T_vr );
+            // convert T_pc update to robotics frame
+            Eigen::Vector6d DeltaPose = mvl::T2Cart( T_rv * T_pc * T_vr );
 
             // check to see if motion model is enabled
             if( ui_bUseGlobalMotionModel ==  true ) {
@@ -540,14 +584,72 @@ int main(int argc, char** argv)
                         || fabs(DeltaPose(5)) > g_vMotionModel(5)
                   ) {
                     cerr << "warning: Estimate trashed due to motion model. ( " << DeltaPose.transpose() << " )" << endl;
-                    T_kc = PrevPose;
+                    T_pc = T_pc_prev;
+                    T_wc = T_wp * T_pc;
+                    DeltaPose = mvl::T2Cart( T_rv * T_pc * T_vr );
                 }
             }
-            ui_DeltaPose = DeltaPose;
-            PrevPose = T_kc;
-            glPath.PushPose ( Eigen::Matrix4d(T_kc) );
-            T_wk = T_wk * T_kc;
+
+
+            // update keyframe image
+#if USE_PRELOADED
+            // otherwise find closest keyframe based on current pose
+            Eigen::Vector6d CurPose = mvl::T2Cart( mvl::Cart2T( PoseVector[nKeyIdx].AbsPose ) * T_rv * T_kc * T_vr );
+            Eigen::Vector6d PoseError = CurPose - PoseVector[0].AbsPose;
+            float DistError = PoseError.norm();
+            float BestError = DistError;
+            nKeyIdx = 0;
+            for( int ii = 1; ii < PoseVector.size(); ii++ ) {
+                PoseError = CurPose - PoseVector[ii].AbsPose;
+                DistError = PoseError.norm();
+                if( DistError < BestError ) {
+                    BestError = DistError;
+                    nKeyIdx = ii;
+                }
+            }
+            nKeyIdx = ui_nKeyframeIndex;
+            ui_nKeyIdx = nKeyIdx;
+
+            dKeyPyr[0].MemcpyFromHost(PoseVector[nKeyIdx].Image.data,nImgWidth);
+            // blur & decimate image
+            for (int ii = 0; ii < ui_nBlur; ++ii) {
+                Gpu::Blur( dKeyPyr[0], dBlurTmp1 );
+            }
+            Gpu::BlurReduce<unsigned char, MAX_LEVELS, unsigned int>( dKeyPyr, dBlurTmp1, dBlurTmp2 );
+
+            Gpu::Image< float, Gpu::TargetHost > hDisp( (float*)PoseVector[nKeyIdx].Disparity.data, nImgWidth, nImgHeight );
+
+            // update keyframe's pose (in vision frame)
+            T_wk = mvl::Cart2T( PoseVector[nKeyIdx].AbsPose ) * T_rv;
+
+            T_kc = mvl::TInv( T_wk ) * T_wc;
+#else
+            dKeyPyr.CopyFrom(dLeftPyr);
+
+            // update keyframe disparity
+            Gpu::Image< float, Gpu::TargetHost > hDisp( (float*)vImages[2].Image.data, nImgWidth, nImgHeight );
+
+            // our current pose is the new keyframe pose
+            T_wk = T_wc;
+
             T_kc = Eigen::Matrix4d::Identity();
+#endif
+
+            // update keyframe disparity
+            dKeyDisp.CopyFrom( hDisp );
+
+
+#if SAVE_POSES
+            // save poses to a file in ROBOTICS frame
+            Eigen::Vector6d Cpc = mvl::T2Cart( T_rv * T_pc * T_vr );
+            pFile << Cpc.transpose() << endl;
+#endif
+
+            // update GUI
+            ui_DeltaPose = DeltaPose;
+            T_pc_prev = T_pc;
+//            glPath.PushPose ( Eigen::Matrix4d(T_pc) );
+
 
         }
 
@@ -563,9 +665,11 @@ int main(int argc, char** argv)
         dKeyDispPyrNormalized[ui_nPyrLevel].CopyFrom(dKeyDispPyr[ui_nPyrLevel]);
         nppiDivC_32f_C1IR(ui_nMaxDisparity,dKeyDispPyrNormalized[ui_nPyrLevel].ptr,dKeyDispPyrNormalized[ui_nPyrLevel].pitch,dKeyDispPyrNormalized[ui_nPyrLevel].Size());
         DrawDisparity.SetLevel(ui_nPyrLevel);
-        glCurPose.SetPose( Eigen::Matrix4d(T_wk * T_kc) );
-        glPrevPose.SetPose(T_wk);
-        ui_CurPose = mvl::T2Cart(T_wk * T_kc * T_vr );
+
+        glCurPose.SetPose(T_wc);
+        glPrevPose.SetPose(T_wp);
+        glKeyPose.SetPose(T_wk);
+        ui_CurPose = mvl::T2Cart( T_wc * T_vr );
         ui_KeyPose = mvl::T2Cart( T_wk * T_vr );
 
         pangolin::FinishGlutFrame();
