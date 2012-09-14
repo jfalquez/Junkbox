@@ -16,7 +16,7 @@
 using namespace std;
 
 #define     SAVE_POSES      0
-#define     USE_PRELOADED   1
+#define     USE_PRELOADED   0
 #define     DEPTH_MAP       1
 
 const int MAX_LEVELS = 5;
@@ -69,12 +69,12 @@ void _HardReset( Eigen::Matrix4d* T_pc,
 }
 
 int main(int argc, char** argv)
-{    
+{
     // iitialize some CVars
     // initialize number of iterations to perform at each pyramid level
     // level 0 is finest (ie. biggest image)
     g_vPyrCycles.resize( MAX_LEVELS );
-    g_vPyrCycles << 1, 2, 3, 4, 0;
+    g_vPyrCycles << 1, 2, 3, 4, 5;
     g_vPyrFullMask.resize( MAX_LEVELS );
     g_vPyrFullMask << 1, 1, 1, 1, 0;
     g_vMotionModel << 0.3, 0.2, 0.05, 0.01, 0.01, 0.7;
@@ -456,7 +456,7 @@ int main(int argc, char** argv)
                 Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDisparityESM(dLeftPyr[PyrLvl],dKeyPyr[PyrLvl],
                                                                                         dKeyDispPyr[PyrLvl],KTcp,ui_fNormC,fBaseline,
                                                                                         K(0,0),K(1,1),K(0,2),K(1,2),
-                                                                                        dWorkspace,dDebug.SubImage(w,h),ui_nMinU,ui_bDiscHiLo);
+                                                                                        dWorkspace,dDebug.SubImage(w,h),ui_bDiscHiLo);
                 Eigen::Matrix<double,6,6>   LHS = LSS.JTJ;
                 Eigen::Vector6d             RHS = LSS.JTy;
 

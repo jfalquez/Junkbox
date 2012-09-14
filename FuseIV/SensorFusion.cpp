@@ -7,6 +7,18 @@ SensorFusion::SensorFusion(const int nFilterSize) : m_nFilterSize(nFilterSize)
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
+PoseData SensorFusion::GetGlobalPose( double dTime )
+{
+    PoseData PData;
+
+    // check if time is before our history
+    if( dTime < m_lPoses.front().m_dTime ) {
+        return m_lPoses.front();
+    }
+    return PData;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
 void SensorFusion::RegisterImuPose(double accelX,double accelY,double accelZ,double gyroX,double gyroY,double gyroZ, double time)
 {
     boost::mutex::scoped_lock lock(m_ImuLock);
@@ -95,6 +107,7 @@ void SensorFusion::RegisterGlobalPose(Eigen::Vector6d dPose,double time)
     }
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////
 void SensorFusion::ResetCurrentPose(Eigen::Vector6d pose, const Eigen::Vector3d initV, const Eigen::Vector2d initG)
 {
     m_CurrentPose.m_dPose = pose;

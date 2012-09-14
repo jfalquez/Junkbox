@@ -43,6 +43,7 @@ public:
     void RegisterGlobalPose(Eigen::Vector6d dPose, double time);
     PoseParameter GetCurrentPose() { return m_CurrentPose; }
     PoseData GetLastGlobalPose() { return m_lPoses.back(); }
+    PoseData GetGlobalPose( double dTime );
     void ResetCurrentPose(Eigen::Vector6d pose, const Eigen::Vector3d initV, const Eigen::Vector2d initG);
     Eigen::Vector3d _GetGravityVector(const Eigen::Vector2d &direction);
 private:
@@ -55,6 +56,8 @@ private:
     std::list<ImuData> m_lImuData;
     std::list<PoseData> m_lPoses;
     std::list<PoseParameter>  m_lParams;
+
+    double        m_dQueryTime;
 
     PoseParameter m_CurrentPose;
 

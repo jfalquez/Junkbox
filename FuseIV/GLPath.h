@@ -5,7 +5,7 @@
 
 #define MAT4_COL_MAJOR_DATA(m) (Eigen::Matrix<double,4,4,Eigen::ColMajor>(m).data())
 
-extern unsigned int& g_nPoseDisplay;
+unsigned int g_nPoseDisplay = 5;
 
 /////////////////////////////////////////////////////////////////////////////
 // Code to render the vehicle path
@@ -38,50 +38,49 @@ public:
             }
         }
 
-		glPushAttrib(GL_ENABLE_BIT);
+        glPushAttrib(GL_ENABLE_BIT);
 
         // draw at origin
         glPushMatrix();
         glMultMatrixd( MAT4_COL_MAJOR_DATA( m_dBaseFrame ) );
         glCallList( m_nDrawListId );
 
-		glDisable( GL_LIGHTING );
-		glEnable( GL_DEPTH_TEST );
+        glDisable( GL_LIGHTING );
+        glEnable( GL_DEPTH_TEST );
 
         glEnable(GL_LINE_SMOOTH);
 
         glLineWidth(1);
-		int start = 0;
-		if( g_nPoseDisplay != 0 ) {
-			if( m_vPoses.size() > g_nPoseDisplay ) {
-				start = m_vPoses.size() - g_nPoseDisplay;
-			}
-		}
-        for( int ii = 0; ii < (int)m_vPoses.size(); ii++ ) {
-            glMultMatrixd( MAT4_COL_MAJOR_DATA( m_vPoses[ii] ) );
-			if( ii >= start ) {
-				glCallList( m_nDrawListId );
-			}
+        int start = 0;
+        if( g_nPoseDisplay != 0 ) {
+            if( m_vPoses.size() > g_nPoseDisplay ) {
+                start = m_vPoses.size() - g_nPoseDisplay;
+            }
         }
-		glPopMatrix();
+        for( int ii = 0; ii < (int)m_vPoses.size(); ii++ ) {
+            glPushMatrix();
+            glMultMatrixd( MAT4_COL_MAJOR_DATA( m_vPoses[ii] ) );
+            if( ii >= start ) {
+                glCallList( m_nDrawListId );
+            }
+            glPopMatrix();
+        }
+        glPopMatrix();
 
-		glPushMatrix();
-		glMultMatrixd( MAT4_COL_MAJOR_DATA( m_dBaseFrame ) );
+        glPushMatrix();
+        glMultMatrixd( MAT4_COL_MAJOR_DATA( m_dBaseFrame ) );
         glEnable(GL_LINE_SMOOTH);
         glLineWidth(1);
-		glColor3f( 1.0, 1.0, 0.0 );
+        glColor3f( 1.0, 1.0, 0.0 );
 
-		Eigen::Matrix4d Twv;
-		Twv = Eigen::Matrix4d::Identity();
 
-		glBegin(GL_LINE_STRIP);
-		for( int ii = 0; ii < (int)m_vPoses.size(); ii++ ) {
-			Twv = Twv * m_vPoses[ii];
-			glVertex3d( Twv(0,3), Twv(1,3), Twv(2,3) );
-		}
-		glEnd();
+        glBegin(GL_LINE_STRIP);
+        for( int ii = 0; ii < (int)m_vPoses.size(); ii++ ) {
+            glVertex3d( m_vPoses[ii](0,3), m_vPoses[ii](1,3), m_vPoses[ii](2,3) );
+        }
+        glEnd();
         glPopMatrix();
-		glPopAttrib();
+        glPopAttrib();
     }
 
     void InitReset()
@@ -91,19 +90,19 @@ public:
 
     std::vector< Eigen::Matrix4d >& GetPathRef()
     {
-    	return m_vPoses;
+        return m_vPoses;
     }
 
     void PushPose( Eigen::Matrix4d dPose )
     {
-    	m_vPoses.push_back( dPose );
+        m_vPoses.push_back( dPose );
     }
 
-	void PushPose( Eigen::Vector6d dPose )
+    void PushPose( Eigen::Vector6d dPose )
     {
-		Eigen::Matrix4d T;
-		T = mvl::Cart2T(dPose);
-    	m_vPoses.push_back( T );
+        Eigen::Matrix4d T;
+        T = mvl::Cart2T(dPose);
+        m_vPoses.push_back( T );
     }
 
     void SetRotation( const Eigen::Vector3d& dR )
@@ -111,7 +110,7 @@ public:
         // convert from degrees to radians
         Eigen::Vector3d dRR = dR * 0.0174532925;
 
-    	m_dBaseFrame.block<3,3>(0,0) = mvl::Cart2R( dRR );
+        m_dBaseFrame.block<3,3>(0,0) = mvl::Cart2R( dRR );
     }
 
 
