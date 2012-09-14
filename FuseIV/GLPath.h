@@ -15,6 +15,9 @@ public:
     GLPath()
     {
         m_bInitGLComplete = false;
+        m_fLineColor(0) = 1.0;
+        m_fLineColor(1) = 1.0;
+        m_fLineColor(2) = 0.0;
         m_dBaseFrame = Eigen::Matrix4d::Identity();
     }
 
@@ -71,7 +74,7 @@ public:
         glMultMatrixd( MAT4_COL_MAJOR_DATA( m_dBaseFrame ) );
         glEnable(GL_LINE_SMOOTH);
         glLineWidth(1);
-        glColor3f( 1.0, 1.0, 0.0 );
+        glColor3f( m_fLineColor(0), m_fLineColor(1), m_fLineColor(2) );
 
 
         glBegin(GL_LINE_STRIP);
@@ -111,6 +114,13 @@ public:
         Eigen::Vector3d dRR = dR * 0.0174532925;
 
         m_dBaseFrame.block<3,3>(0,0) = mvl::Cart2R( dRR );
+    }
+
+    void SetLineColor( float R, float G, float B )
+    {
+        m_fLineColor(0) = R;
+        m_fLineColor(1) = G;
+        m_fLineColor(2) = B;
     }
 
 
@@ -154,6 +164,7 @@ private:
     GLuint                          m_nDrawListId;
     bool                            m_bInitGLComplete;
     Eigen::Matrix4d                 m_dBaseFrame;
+    Eigen::Matrix3f                 m_fLineColor;
     std::vector< Eigen::Matrix4d >  m_vPoses;
 };
 

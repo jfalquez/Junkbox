@@ -153,26 +153,38 @@ int main(int argc, char** argv)
     // Main Loop
     //
 
+    vector< Eigen::Vector6d > vPoses;
+
     ViconData_t     CurVicon, NextVicon;
     ImuData_t       CurImu, NextImu;
     double          CurStereo;
 
+    // initialize sensor fusion
     CurVicon = ReadVicon( fVicon );
     CurImu = ReadImu( fImu );
+
+    // align IMU to Vicon's time
+    while( CurImu.system_time < CurVicon.system_time ) {
+        CurImu = ReadImu( fImu );
+    }
+
+    SeFu.ResetCurrentPose( CurVicon.pose, CurImu.accel, Eigen::Vector2d::Zero() );
 
     while( !pangolin::ShouldQuit() ) {
 
         // read stereo timestamp
         // push IMU poses and Vicon poses until they are about to skip stereo timestamp
-        //
+
+
 
         //SeFu.RegisterImuPose();
+        if( )
         if( fVicon.eof( ) == false ) {
             glPath.PushPose( CurVicon.pose );
             CurVicon = ReadVicon( fVicon );
         }
 
-        if( fVicon.eof( ) || fImu.eof( ) ) {
+        if( fImu.eof( ) ) {
             cerr << "Ran out of IMU and/or Vicon readings!" << endl;
             break;
         }
