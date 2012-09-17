@@ -58,7 +58,19 @@ ImuData_t ReadImu( ifstream& File )
             >> data.gyro(0) >> data.gyro(1) >> data.gyro(2);
 
     // acceleration is given in Gs, therefore convert to m/s2
-    data.gyro = data.gyro * 9.81;
+    data.accel = data.accel * IMU_GRAVITY_CONST;
+
+    data.accel(0) = -data.accel(0);
+    data.accel(1) = -data.accel(1);
+    data.gyro(0) = -data.gyro(0);
+    data.gyro(1) = -data.gyro(1);
+
+//    data.accel(0) = 0;
+//    data.accel(1) = 0;
+//    data.accel(2) = -IMU_GRAVITY_CONST;
+//    data.gyro(0) = 0;
+//    data.gyro(1) = 0;
+//    data.gyro.setZero();
 
     return data;
 
@@ -78,6 +90,7 @@ int main(int argc, char** argv)
     std::string sImuFile    = cl.follow( "IMU.txt", 1, "-imu" );
     std::string sOutputFile = cl.follow( "Output.txt", 1, "-out" );
     int         nFilterSize = cl.follow( 10, 1, "-fwin" );
+    double      dStart      = cl.follow( 0.0, 1, "-stime" );
 
     // create a GUI window
     pangolin::CreateGlutWindowAndBind("FuseIV", 1200, 600);
@@ -101,8 +114,13 @@ int main(int argc, char** argv)
 
     // create a side panel
     pangolin::CreatePanel("ui").SetBounds(0,1,0,pangolin::Attach::Pix(300));
-    pangolin::Var<unsigned int> nImgIdx("ui.Image ID", 0);
-    pangolin::Var<unsigned int> nBlur("ui.Blur",1,0,5);
+    pangolin::Var<float>        ui_fTime("ui.Time", 0.0);
+    pangolin::Var<float>        ui_fVelX("ui.Velocity X", 0.0);
+    pangolin::Var<float>        ui_fVelY("ui.Velocity Y", 0.0);
+    pangolin::Var<float>        ui_fVelZ("ui.Velocity Z", 0.0);
+    pangolin::Var<float>        ui_fAccelX("ui.Acceleration X", 0.0);
+    pangolin::Var<float>        ui_fAccelY("ui.Acceleration Y", 0.0);
+    pangolin::Var<float>        ui_fAccelZ("ui.Acceleration Z", 0.0);
 
     // create a view container
     pangolin::View& guiContainer = pangolin::CreateDisplay()
@@ -114,13 +132,21 @@ int main(int argc, char** argv)
 
     // draw grid and path on 3D window
     SceneGraph::GLGrid  glGrid;
-    GLPath              glPath;
+    GLPath              glViconPath;
+    GLPath              glFilteredPath;
     SceneGraph::GLAxis  glAxis;
     glGraph.AddChild( &glGrid );
-    glGraph.AddChild( &glPath );
+    glGraph.AddChild( &glViconPath );
+    glGraph.AddChild( &glFilteredPath );
+    glFilteredPath.SetLineColor( 1.0, 0.0, 0.0 );
     glGraph.AddChild( &glAxis );
 
     // keyboard callbacks
+    bool guiStep = false;
+    bool guiRunning = false;
+
+    pangolin::RegisterKeyPressCallback(' ',[&guiRunning](){ guiRunning = !guiRunning; });
+    pangolin::RegisterKeyPressCallback(pangolin::PANGO_SPECIAL + GLUT_KEY_RIGHT,[&guiStep](){ guiStep = true; });
 
     // data files
     ifstream fVicon, fImu;
@@ -153,51 +179,107 @@ int main(int argc, char** argv)
     // Main Loop
     //
 
-    vector< Eigen::Vector6d > vPoses;
+    PoseParameter   CurPose;
 
     ViconData_t     CurVicon, NextVicon;
     ImuData_t       CurImu, NextImu;
     double          CurStereo;
+    double          dStartTime;
 
     // initialize sensor fusion
     CurVicon = ReadVicon( fVicon );
     CurImu = ReadImu( fImu );
 
+    // skip Vicon frames if a start time was passed through param list
+    dStartTime = CurVicon.system_time + dStart;
+    while( CurVicon.system_time <  dStartTime ) {
+        CurVicon = ReadVicon( fVicon );
+    }
+
+    // print some info
+    printf( "First Vicon data @ %10.5f\n", CurVicon.system_time );
+    printf( "First IMU data @ %10.5f\n", CurImu.system_time );
+    cout << "======================================================================================" << endl;
+
+
+    // this alignment is probably BROKEN?
+
+    // align Vicon to first IMU time
+    while( CurVicon.system_time < CurImu.system_time ) {
+        //printf( "Discarding Vicon data @ %10.5f\n", CurVicon.system_time );
+        CurVicon = ReadVicon( fVicon );
+    }
+
+    cout << "======================================================================================" << endl;
+    printf( "Current Vicon data @ %10.5f\n", CurVicon.system_time );
+    printf( "Current IMU data @ %10.5f\n", CurImu.system_time );
+    cout << "======================================================================================" << endl;
+
     // align IMU to Vicon's time
     while( CurImu.system_time < CurVicon.system_time ) {
+        //printf( "Discarding IMU data @ %10.5f\n", CurImu.system_time );
         CurImu = ReadImu( fImu );
     }
 
-    SeFu.ResetCurrentPose( CurVicon.pose, CurImu.accel, Eigen::Vector2d::Zero() );
+    dStartTime = CurVicon.system_time;
+    SeFu.ResetCurrentPose( CurVicon.pose, Eigen::Vector3d::Zero() , Eigen::Vector2d::Zero() );
+    SeFu.RegisterGlobalPose( CurVicon.pose, CurVicon.system_time - dStartTime );
 
     while( !pangolin::ShouldQuit() ) {
 
-        // read stereo timestamp
-        // push IMU poses and Vicon poses until they are about to skip stereo timestamp
+        if( guiRunning || pangolin::Pushed(guiStep) ) {
 
-
-
-        //SeFu.RegisterImuPose();
-        if( )
-        if( fVicon.eof( ) == false ) {
-            glPath.PushPose( CurVicon.pose );
+            // read new vicon pose
             CurVicon = ReadVicon( fVicon );
-        }
+            if( fVicon.eof( ) ) {
+                cerr << "Ran out Vicon readings!" << endl;
+                break;
+            }
 
-        if( fImu.eof( ) ) {
-            cerr << "Ran out of IMU and/or Vicon readings!" << endl;
-            break;
-        }
+            // push IMU readings between previous pose and new pose
+            while( CurImu.system_time < CurVicon.system_time ) {
+                SeFu.RegisterImuPose( CurImu.accel, CurImu.gyro, CurImu.system_time - dStartTime );
+                cout << SeFu._GetGravityVector(SeFu.GetCurrentPose().m_dG).transpose() << endl;
+                CurImu = ReadImu( fImu );
+                if( fImu.eof( ) ) {
+                    cerr << "Ran out of IMU readings!" << endl;
+                    break;
+                }
+            }
 
+            // now that all previous IMU data has been pushed, push in the new global pose
+            SeFu.RegisterGlobalPose( CurVicon.pose, CurVicon.system_time - dStartTime );
+
+            // get filtered pose back
+            CurPose = SeFu.GetCurrentPose();
+
+            // write filtered pose to file
+            fOut << CurPose.m_dPose.transpose() << endl;
+
+            // update gui poses
+            glViconPath.PushPose( CurVicon.pose );
+            glFilteredPath.PushPose( CurPose.m_dPose );
+        }
 
         ///------------------------------------------------------------------------------------------------------------
 
+        // update gui variables
+        ui_fTime = CurVicon.system_time - dStartTime;
 
-        // update and render stuff
+        ui_fVelX = CurPose.m_dV(0);
+        ui_fVelY = CurPose.m_dV(1);
+        ui_fVelZ = CurPose.m_dV(2);
+
+        ui_fAccelX = CurImu.accel(0) + CurPose.m_dG(0);
+        ui_fAccelY = CurImu.accel(1) + CurPose.m_dG(1);
+        ui_fAccelZ = CurImu.accel(2) + CurPose.m_dG(2);
+
+        // render stuff
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
         glColor4f( 1, 1, 1, 1);
 
         pangolin::FinishGlutFrame();
+
     }
 
     // close data files

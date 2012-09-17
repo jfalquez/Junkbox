@@ -39,6 +39,7 @@ class SensorFusion
 
 public:
     SensorFusion(const int nFilterSize);
+    void RegisterImuPose( Eigen::Vector3d accel, Eigen::Vector3d gyro, double time );
     void RegisterImuPose(double accelX, double accelY, double accelZ, double gyroX, double gyroY, double gyroZ, double time);
     void RegisterGlobalPose(Eigen::Vector6d dPose, double time);
     PoseParameter GetCurrentPose() { return m_CurrentPose; }

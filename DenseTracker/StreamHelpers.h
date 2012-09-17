@@ -9,6 +9,7 @@
 // Overloading Eigen for CVars
 namespace CVarUtils
 {
+    ////////////////////////////////////////////////////////////////////////////
     inline std::ostream& operator<<( std::ostream& Stream, Eigen::Matrix<int,1,Eigen::Dynamic>& Mat )
     {
         unsigned int nRows = Mat.rows();
@@ -120,5 +121,32 @@ namespace CVarUtils
 
 
 }
+
+
+////////////////////////////////////////////////////////////////////////////
+// Overloading GUI
+std::ostream& operator<< (std::ostream& os, const Eigen::Vector6d& v)
+{
+    os << "( " << std::fixed << std::setprecision(2) << std::showpos << v(0) << ", " << v(1) << ", " << v(2) << ", " << v(3) << ", " << v(4) << ", " << v(5) << " )";
+    return os;
+}
+
+////////////////////////////////////////////////////////////////////////////
+std::istream& operator>> (std::istream& is, Eigen::Vector6d& v)
+{
+  is >> v(0);
+  is >> v(1);
+  is >> v(2);
+  is >> v(3);
+  is >> v(4);
+  is >> v(5);
+  return is;
+}
+
+
+
+
+
+
 
 #endif

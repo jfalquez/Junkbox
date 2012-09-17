@@ -9,13 +9,11 @@
 #include <Mvlpp/Mvl.h>
 #include <boost/bind.hpp>
 #include <CVars/CVar.h>
-#include "ParseArgs.h"
+#include "ParseCamArgs.h"
 #include "StreamHelpers.h"
 #include "GLPath.h"
 
 using namespace std;
-
-#define     DEPTH_MAP       1
 
 const int   MAX_LEVELS = 5;
 
@@ -29,24 +27,6 @@ Eigen::Matrix<int,1,Eigen::Dynamic>& g_vPyrFullMask = CVarUtils::CreateCVar( "Tr
 Eigen::Vector6d& g_vMotionModel = CVarUtils::CreateCVar( "Tracker.MotionModel", Eigen::Vector6d(), "Motion model used to discard bad estimates." );
 unsigned int& g_nPoseDisplay = CVarUtils::CreateCVar("Gui.PoseDisplay", 5u, "Number of axis to draw for poses." );
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-std::ostream& operator<< (std::ostream& os, const Eigen::Vector6d& v)
-{
-    os << "( " << fixed << setprecision(2) << showpos << v(0) << ", " << v(1) << ", " << v(2) << ", " << v(3) << ", " << v(4) << ", " << v(5) << " )";
-    return os;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-std::istream& operator>> (std::istream& is, Eigen::Vector6d& v)
-{
-  is >> v(0);
-  is >> v(1);
-  is >> v(2);
-  is >> v(3);
-  is >> v(4);
-  is >> v(5);
-  return is;
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 struct PNode {
@@ -107,12 +87,19 @@ int main(int argc, char** argv)
     g_vPyrFullMask << 1, 1, 1, 1, 0;
     g_vMotionModel << 0.3, 0.2, 0.05, 0.01, 0.01, 0.7;
 
-    // parse parameters
-    CameraDevice* pCam = ParseArgs( argc, argv );
+    // parse camera parameters
+    GetPot cl( argc, argv );
+    CameraDevice* pCam = ParseCamArgs( &cl );
+
+    // check if -depth option was specified
+    // this means that the keyframe images are depth maps instead of disparity maps
+    bool            bIsDepth;
+    bIsDepth = cl.search( "-depth" );
 
     // read camera model file
-    std::string sCamModFileName = pCam->GetProperty( "CamModelFile", "rcmod.xml" );
-    CameraModelPyramid CamModel( sCamModFileName );
+    std::string sSourceDir      = cl.follow( ".", 1, "-sdir"  );
+    std::string sCamModFileName = cl.follow( "rcmod.xml", 1, "-rcmod" );
+    CameraModelPyramid CamModel( sSourceDir + "/" + sCamModFileName );
     CamModel.PopulatePyramid(MAX_LEVELS);
 
     // vector of images captured
@@ -124,6 +111,83 @@ int main(int argc, char** argv)
     // image properties
     const unsigned int nImgWidth = vImages[1].Image.cols;
     const unsigned int nImgHeight = vImages[0].Image.rows;
+
+
+    // pre-load model as a PoseNode Graph
+    vector<PNode> PoseVector;
+    {
+        cout << "Loading pose-graph..." << endl;
+
+        // set up filereader for keyframes
+        CameraDevice Cam;
+        Cam.SetProperty("DataSourceDir", "./Keyframes" );
+        Cam.SetProperty("Channel-0", "Left.*" );
+        Cam.SetProperty("Channel-1", "Depth.*" );
+        Cam.SetProperty("NumChannels", 2 );
+
+        // init driver
+        if( !Cam.InitDriver( "FileReader" ) ) {
+                std::cerr << "Invalid input device to load poses." << std::endl;
+                exit(0);
+        }
+
+        // pose file
+        ifstream pFile;
+        pFile.open( "Keyframes/Keyframes.txt" );
+        if( pFile.is_open() == false ) {
+            cerr << "Pose file not found." << endl;
+            exit(-1);
+        }
+
+        // data containers
+        Eigen::Vector6d             ReadPose;
+        vector< rpg::ImageWrapper > vImgs;
+
+        if( pFile.is_open( ) ) {
+            // iterate through pose file
+            while( 1 ) {
+                // read pose
+                pFile >> ReadPose(0) >> ReadPose(1) >> ReadPose(2) >> ReadPose(3) >> ReadPose(4) >> ReadPose(5);
+
+                if( pFile.eof( ) ) {
+                    break;
+                }
+
+                // read images
+                Cam.Capture( vImgs );
+
+                // store data
+                PNode tPNode;
+                tPNode.AbsPose = mvl::Cart2T(ReadPose);
+                tPNode.Image = vImgs[0].Image;
+
+                tPNode.CenterDepth = vImgs[1].Image.at<float>( nImgHeight/2, nImgWidth/2 );
+
+                // if image is depth map, convert to disparity map
+                if( bIsDepth ) {
+                    Eigen::Matrix3d             K = CamModel.K(0);
+                    const float                 fBaseline = CamModel.GetPose()( 1, 3 );
+                    for( int ii = 0; ii < nImgHeight; ii++ ) {
+                        for( int jj = 0; jj < nImgWidth; jj++ ) {
+                            vImgs[1].Image.at<float>(ii,jj) = K(0,0) * fBaseline / vImgs[1].Image.at<float>(ii,jj);
+                        }
+                    }
+                }
+
+                tPNode.Disparity = vImgs[1].Image;
+
+                PoseVector.push_back(tPNode);
+            }
+        } else {
+            std::cout << "Error opening pose file!" << std::endl;
+        }
+        pFile.close( );
+        std::cout << "Loaded " << PoseVector.size() << " poses from keyframe file." << std::endl;
+    }
+
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
     // create a GUI window
     pangolin::CreateGlutWindowAndBind("Dense Tracker",1280,720);
@@ -247,6 +311,10 @@ int main(int argc, char** argv)
     guiContainer[1].SetDrawFunction(boost::ref(DrawDebugImg));
     guiContainer[2].SetDrawFunction(boost::ref(DrawDisparity));
 
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
     // Pose variables
     Eigen::Matrix4d T_wk;                                       // keyframe pose in world reference frame
     Eigen::Matrix4d T_wp;                                       // previous pose in world reference frame
@@ -286,79 +354,6 @@ int main(int argc, char** argv)
     pangolin::RegisterKeyPressCallback(pangolin::PANGO_CTRL + 'r', boost::bind( _HardReset, &T_kc, &T_wk, &T_rv, &guiSetKeyframe, &glPath ) );
     pangolin::RegisterKeyPressCallback('r',[&T_kc](){ T_kc = Eigen::Matrix4d::Identity(); });
 
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////
-    // pre-load model as a PoseNode Graph
-    // eventually get some of these hardcoded values from command line
-    vector<PNode> PoseVector;
-    {
-        // set up filereader
-        CameraDevice Cam;
-        Cam.SetProperty("DataSourceDir", "./Keyframes" );
-        Cam.SetProperty("Channel-0", "Left.*" );
-        Cam.SetProperty("Channel-1", "Depth.*" );
-        Cam.SetProperty("NumChannels", 2 );
-
-        // init driver
-        if( !Cam.InitDriver( "FileReader" ) ) {
-                std::cerr << "Invalid input device to load poses." << std::endl;
-                exit(0);
-        }
-
-        // pose file
-        ifstream pFile;
-        pFile.open( "Keyframes/Keyframes.txt" );
-        if( pFile.is_open() == false ) {
-            cerr << "Pose file not found." << endl;
-            exit(-1);
-        }
-
-        // data containers
-        Eigen::Vector6d             ReadPose;
-        vector< rpg::ImageWrapper > vImgs;
-
-        if( pFile.is_open( ) ) {
-            // iterate through pose file
-            while( 1 ) {
-                // read pose
-                pFile >> ReadPose(0) >> ReadPose(1) >> ReadPose(2) >> ReadPose(3) >> ReadPose(4) >> ReadPose(5);
-
-                if( pFile.eof( ) ) {
-                    break;
-                }
-
-                // read images
-                Cam.Capture( vImgs );
-
-                // store data
-                PNode tPNode;
-                tPNode.AbsPose = mvl::Cart2T(ReadPose);
-                tPNode.Image = vImgs[0].Image;
-
-                tPNode.CenterDepth = vImgs[1].Image.at<float>( nImgHeight/2, nImgWidth/2 );
-
-#if DEPTH_MAP
-{
-    Eigen::Matrix3d             K = CamModel.K(0);
-    const float                 fBaseline = CamModel.GetPose()( 1, 3 );
-    for( int ii = 0; ii < nImgHeight; ii++ ) {
-        for( int jj = 0; jj < nImgWidth; jj++ ) {
-            vImgs[1].Image.at<float>(ii,jj) = K(0,0) * fBaseline / vImgs[1].Image.at<float>(ii,jj);
-        }
-    }
-}
-#endif
-
-                tPNode.Disparity = vImgs[1].Image;
-
-                PoseVector.push_back(tPNode);
-            }
-        } else {
-            std::cout << "Error opening pose file!" << std::endl;
-        }
-        pFile.close( );
-        std::cout << "Loaded " << PoseVector.size() << " poses from keyframe file." << std::endl;
-    }
 
     // keyframe index
     unsigned int    nKeyIdx     = 0;

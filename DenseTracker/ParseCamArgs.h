@@ -31,26 +31,27 @@ const char USAGE[] =
 
 
 // //////////////////////////////////////////////////////////////////////
-CameraDevice* ParseArgs(
-        int    argc,
-        char** argv
+CameraDevice* ParseCamArgs(
+        GetPot* cl
         )
 {
-    CameraDevice* pCam = new CameraDevice;;
-    GetPot cl( argc, argv );
+    if( cl->search( 3, "--help", "-help", "-h" ) ) {
+        std::cout << USAGE << std::endl;
+        exit( 0 );
+    }
 
-    // for file reader
-    std::string sDeviceDriver     = cl.follow( "FileReader", 1, "-idev" );
-    std::string sLeftCameraModel  = cl.follow( "lcmod.xml", 1, "-lcmod" );
-    std::string sRightCameraModel = cl.follow( "rcmod.xml", 1, "-rcmod" );
-    std::string sLeftFileRegex    = cl.follow( "Left.*pgm", 1, "-lfile" );
-    std::string sRightFileRegex   = cl.follow( "Right.*pgm", 1, "-rfile" );
-    std::string sDepthFileRegex   = cl.follow( "", 1, "-dfile" );
-    std::string sSourceDir        = cl.follow( ".", 1, "-sdir"  );
+    CameraDevice* pCam = new CameraDevice;
 
-    // store camera model file name
-    pCam->SetProperty("CamModelFile", sSourceDir + "/" + sRightCameraModel );
+    // default parameters
+    std::string sDeviceDriver     = cl->follow( "FileReader", 1, "-idev" );
+    std::string sLeftCameraModel  = cl->follow( "lcmod.xml", 1, "-lcmod" );
+    std::string sRightCameraModel = cl->follow( "rcmod.xml", 1, "-rcmod" );
+    std::string sLeftFileRegex    = cl->follow( "Left.*pgm", 1, "-lfile" );
+    std::string sRightFileRegex   = cl->follow( "Right.*pgm", 1, "-rfile" );
+    std::string sSourceDir        = cl->follow( ".", 1, "-sdir"  );
 
+
+    // //////////////////////////////////////////////////////////////////////
     if( sDeviceDriver == "Bumblebee2" ) {
         if( sLeftCameraModel.empty() || sRightCameraModel.empty() ) {
             std::cerr << "One or more camera model files is missing!\n" << std::endl;
@@ -62,6 +63,7 @@ CameraDevice* ParseArgs(
         pCam->SetProperty("CamModel-R",    sRightCameraModel );
     }
 
+    // //////////////////////////////////////////////////////////////////////
     if( sDeviceDriver == "FileReader" ) {
         if( sLeftCameraModel.empty() || sRightCameraModel.empty() ) {
             std::cerr << "One or more camera model files is missing!\n" << std::endl;
@@ -76,14 +78,10 @@ CameraDevice* ParseArgs(
         pCam->SetProperty("DataSourceDir", sSourceDir );
         pCam->SetProperty("Channel-0",     sLeftFileRegex );
         pCam->SetProperty("Channel-1",     sRightFileRegex );
-
-        if( sDepthFileRegex.empty() ) {
-            pCam->SetProperty("NumChannels", 2 );
-        } else {
-            pCam->SetProperty("Channel-2",     sDepthFileRegex );
-            pCam->SetProperty("NumChannels", 3 );
-        }
+        pCam->SetProperty("NumChannels", 2 );
     }
+
+
 
     // init driver
     if( !pCam->InitDriver( sDeviceDriver ) ) {

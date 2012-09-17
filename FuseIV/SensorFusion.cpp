@@ -19,6 +19,13 @@ PoseData SensorFusion::GetGlobalPose( double dTime )
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
+void SensorFusion::RegisterImuPose( Eigen::Vector3d accel, Eigen::Vector3d gyro, double time )
+{
+    RegisterImuPose( accel(0), accel(1), accel(2), gyro(0), gyro(1), gyro(2), time );
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////
 void SensorFusion::RegisterImuPose(double accelX,double accelY,double accelZ,double gyroX,double gyroY,double gyroZ, double time)
 {
     boost::mutex::scoped_lock lock(m_ImuLock);
@@ -245,7 +252,7 @@ double SensorFusion::_OptimizePoses()
 
     //add the deltas to the initial gravity and velocity
     startParam.m_dV -= deltas.head(INITIAL_VEL_TERMS);
-    startParam.m_dG -= deltas.block<INITIAL_ACCEL_TERMS,1>(INITIAL_VEL_TERMS,0);
+    startParam.m_dG -= deltas.block<INITIAL_ACCEL_TERMS,1>(INITIAL_VEL_TERMS,0) * 0.01 ;
 
     Eigen::Vector3d g = _GetGravityVector(startParam.m_dG);
 

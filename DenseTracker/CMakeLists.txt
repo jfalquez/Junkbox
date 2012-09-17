@@ -24,7 +24,7 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
 ENDIF()
 
 list(APPEND HDRS
-    ParseArgs.h
+    ParseCamArgs.h
     StreamHelpers.h
     GLPath.h
 )
@@ -34,9 +34,9 @@ list(APPEND SRCS
 )
 
 
-add_executable( DTrackCUDA ${HDRS} ${SRCS} )
+add_executable( DTrack ${HDRS} ${SRCS} )
 
-target_link_libraries( DTrackCUDA
+target_link_libraries( DTrack
                         ${Pangolin_LIBRARIES}
                         ${SceneGraph_LIBRARIES}
                         ${Kangaroo_LIBRARIES}
