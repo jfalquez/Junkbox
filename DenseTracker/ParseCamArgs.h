@@ -5,8 +5,8 @@
  * Created on August 14, 2012, 11:54 AM
  */
 
-#ifndef PARSEARGS_H
-#define PARSEARGS_H
+#ifndef PARSECAMARGS_H
+#define PARSECAMARGS_H
 
 #include <RPG/Utils/GetPot>
 #include <RPG/Devices/Camera/CameraDevice.h>
@@ -49,6 +49,7 @@ CameraDevice* ParseCamArgs(
     std::string sLeftFileRegex    = cl->follow( "Left.*pgm", 1, "-lfile" );
     std::string sRightFileRegex   = cl->follow( "Right.*pgm", 1, "-rfile" );
     std::string sSourceDir        = cl->follow( ".", 1, "-sdir"  );
+    unsigned int nStartFrame      = cl->follow( 0, 1, "-sf"  );
 
 
     // //////////////////////////////////////////////////////////////////////
@@ -75,10 +76,11 @@ CameraDevice* ParseCamArgs(
             std::cerr << USAGE;
             exit(0);
         }
-        pCam->SetProperty("DataSourceDir", sSourceDir );
-        pCam->SetProperty("Channel-0",     sLeftFileRegex );
-        pCam->SetProperty("Channel-1",     sRightFileRegex );
-        pCam->SetProperty("NumChannels", 2 );
+        pCam->SetProperty( "DataSourceDir", sSourceDir );
+        pCam->SetProperty( "Channel-0",     sLeftFileRegex );
+        pCam->SetProperty( "Channel-1",     sRightFileRegex );
+        pCam->SetProperty( "NumChannels",   2 );
+        pCam->SetProperty( "StartFrame",    nStartFrame);
     }
 
 
@@ -90,4 +92,4 @@ CameraDevice* ParseCamArgs(
     }
     return pCam;
 }
-#endif   /* PARSEARGS_H */
+#endif   /* PARSECAMARGS_H */

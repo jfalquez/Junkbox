@@ -15,7 +15,7 @@
 
 using namespace std;
 
-struct PNode {
+struct Keyframe_t {
     Eigen::Vector6d RelPose;
     Eigen::Vector6d AbsPose;
     cv::Mat         Image;
@@ -223,7 +223,7 @@ int main(int argc, char** argv)
 
     // pre-load model as a PoseNode Graph
     // eventually get some of these hardcoded values from command line
-    vector<PNode> PoseVector;
+    vector<Keyframe_t> PoseVector;
     {
         // set up filereader
         CameraDevice Cam;
@@ -263,7 +263,7 @@ int main(int argc, char** argv)
                 Cam.Capture( vImgs );
 
                 // store data
-                PNode tPNode;
+                Keyframe_t tPNode;
                 tPNode.RelPose = RelPose;
                 tPNode.AbsPose = mvl::T2Cart( AbsPose );
                 tPNode.Image = vImgs[0].Image;

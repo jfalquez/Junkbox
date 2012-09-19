@@ -24,7 +24,9 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
 ENDIF()
 
 list(APPEND HDRS
+    Common.h
     ParseCamArgs.h
+    Keyframes.h
     StreamHelpers.h
     GLPath.h
 )
