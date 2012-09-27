@@ -5,7 +5,6 @@
 
 #define MAT4_COL_MAJOR_DATA(m) (Eigen::Matrix<double,4,4,Eigen::ColMajor>(m).data())
 
-extern unsigned int& g_nPoseDisplay;
 
 /////////////////////////////////////////////////////////////////////////////
 // Code to render the vehicle path
@@ -15,6 +14,19 @@ public:
     GLPath()
     {
         m_bInitGLComplete = false;
+        m_fLineColor(0) = 1.0;
+        m_fLineColor(1) = 1.0;
+        m_fLineColor(2) = 0.0;
+        m_fLineColor(3) = 1.0;
+        m_fPointColor(0) = 1.0;
+        m_fPointColor(1) = 0.0;
+        m_fPointColor(2) = 0.0;
+        m_fPointColor(3) = 1.0;
+        m_fPointSize = 0.0;
+        m_nPoseDisplay = 1;
+        m_bDrawAxis = true;
+        m_bDrawLines = true;
+        m_bDrawPoints = true;
         m_dBaseFrame = Eigen::Matrix4d::Identity();
     }
 
@@ -38,50 +50,69 @@ public:
             }
         }
 
-		glPushAttrib(GL_ENABLE_BIT);
+        glPushAttrib(GL_ENABLE_BIT);
 
         // draw at origin
         glPushMatrix();
         glMultMatrixd( MAT4_COL_MAJOR_DATA( m_dBaseFrame ) );
         glCallList( m_nDrawListId );
 
-		glDisable( GL_LIGHTING );
-		glEnable( GL_DEPTH_TEST );
+        glDisable( GL_LIGHTING );
+        glEnable( GL_DEPTH_TEST );
 
         glEnable(GL_LINE_SMOOTH);
 
         glLineWidth(1);
-		int start = 0;
-		if( g_nPoseDisplay != 0 ) {
-			if( m_vPoses.size() > g_nPoseDisplay ) {
-				start = m_vPoses.size() - g_nPoseDisplay;
-			}
-		}
-        for( int ii = 0; ii < (int)m_vPoses.size(); ii++ ) {
-            glMultMatrixd( MAT4_COL_MAJOR_DATA( m_vPoses[ii] ) );
-			if( ii >= start ) {
-				glCallList( m_nDrawListId );
-			}
+
+        if( m_bDrawAxis ) {
+            int start = 0;
+            if( m_nPoseDisplay != 0 ) {
+                if( m_vPoses.size() > m_nPoseDisplay ) {
+                    start = m_vPoses.size() - m_nPoseDisplay;
+                }
+            }
+            for( int ii = 0; ii < (int)m_vPoses.size(); ii++ ) {
+                glPushMatrix();
+                glMultMatrixd( MAT4_COL_MAJOR_DATA( m_vPoses[ii] ) );
+                if( ii >= start ) {
+                    glCallList( m_nDrawListId );
+                }
+                glPopMatrix();
+            }
         }
-		glPopMatrix();
 
-		glPushMatrix();
-		glMultMatrixd( MAT4_COL_MAJOR_DATA( m_dBaseFrame ) );
-        glEnable(GL_LINE_SMOOTH);
-        glLineWidth(1);
-		glColor3f( 1.0, 1.0, 0.0 );
+        if( m_bDrawPoints ) {
+            glPointSize( m_fPointSize );
+            glEnable( GL_POINT_SMOOTH );
+            glEnable( GL_BLEND );
+            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+            glColor4f( m_fPointColor(0), m_fPointColor(1), m_fPointColor(2), m_fPointColor(3) );
+            glBegin( GL_POINTS );
+            for( int ii = 0; ii < (int)m_vPoses.size(); ii++ ) {
+                glVertex3f( m_vPoses[ii](0,3), m_vPoses[ii](1,3), m_vPoses[ii](2,3) );
+            }
+            glEnd();
+        }
 
-		Eigen::Matrix4d Twv;
-		Twv = Eigen::Matrix4d::Identity();
-
-		glBegin(GL_LINE_STRIP);
-		for( int ii = 0; ii < (int)m_vPoses.size(); ii++ ) {
-			Twv = Twv * m_vPoses[ii];
-			glVertex3d( Twv(0,3), Twv(1,3), Twv(2,3) );
-		}
-		glEnd();
         glPopMatrix();
-		glPopAttrib();
+
+        if( m_bDrawLines ) {
+            glPushMatrix();
+            glMultMatrixd( MAT4_COL_MAJOR_DATA( m_dBaseFrame ) );
+            glEnable(GL_LINE_SMOOTH);
+            glLineWidth(1);
+//            glColor4f( m_fLineColor(0), m_fLineColor(1), m_fLineColor(2), m_fLineColor(3) );
+
+            glBegin(GL_LINE_STRIP);
+            for( int ii = 0; ii < (int)m_vPoses.size(); ii++ ) {
+                glColor4f( m_fLineColor(0), m_fLineColor(1), m_fLineColor(2), m_fLineColor(3) );
+                glVertex3d( m_vPoses[ii](0,3), m_vPoses[ii](1,3), m_vPoses[ii](2,3) );
+            }
+            glEnd();
+            glPopMatrix();
+        }
+
+        glPopAttrib();
     }
 
     void InitReset()
@@ -91,27 +122,64 @@ public:
 
     std::vector< Eigen::Matrix4d >& GetPathRef()
     {
-    	return m_vPoses;
+        return m_vPoses;
     }
 
     void PushPose( Eigen::Matrix4d dPose )
     {
-    	m_vPoses.push_back( dPose );
+        m_vPoses.push_back( dPose );
     }
 
-	void PushPose( Eigen::Vector6d dPose )
+    void PushPose( Eigen::Vector6d dPose )
     {
-		Eigen::Matrix4d T;
-		T = mvl::Cart2T(dPose);
-    	m_vPoses.push_back( T );
+        Eigen::Matrix4d T;
+        T = mvl::Cart2T(dPose);
+        m_vPoses.push_back( T );
     }
 
-    void SetRotation( const Eigen::Vector3d& dR )
+    void SetLineColor( float R, float G, float B, float A = 1.0 )
     {
-        // convert from degrees to radians
-        Eigen::Vector3d dRR = dR * 0.0174532925;
+        m_fLineColor(0) = R;
+        m_fLineColor(1) = G;
+        m_fLineColor(2) = B;
+        m_fLineColor(3) = A;
+    }
 
-    	m_dBaseFrame.block<3,3>(0,0) = mvl::Cart2R( dRR );
+    void SetPointColor( float R, float G, float B, float A = 1.0 )
+    {
+        m_fPointColor(0) = R;
+        m_fPointColor(1) = G;
+        m_fPointColor(2) = B;
+        m_fPointColor(3) = A;
+    }
+
+    void SetPoseDisplay( unsigned int Num )
+    {
+        m_nPoseDisplay = Num;
+    }
+
+    void SetPointSize( float Size )
+    {
+        m_fPointSize = Size;
+    }
+
+    void DrawLines( bool Val )
+    {
+        m_bDrawLines = Val;
+    }
+
+    void DrawPoints( bool Val )
+    {
+        m_bDrawPoints = Val;
+    }
+
+    void DrawAxis( bool Val )
+    {
+        m_bDrawAxis = Val;
+    }
+
+    std::vector< float >& GetPointBlendRef() {
+        return m_vPointBlend;
     }
 
 
@@ -152,11 +220,18 @@ private:
     }
 
 private:
+    bool                            m_bDrawLines;
+    bool                            m_bDrawAxis;
+    bool                            m_bDrawPoints;
     GLuint                          m_nDrawListId;
+    float                           m_fPointSize;
+    unsigned int                    m_nPoseDisplay;
     bool                            m_bInitGLComplete;
     Eigen::Matrix4d                 m_dBaseFrame;
+    Eigen::Vector4f                 m_fLineColor;
+    Eigen::Vector4f                 m_fPointColor;
     std::vector< Eigen::Matrix4d >  m_vPoses;
+    std::vector< float >            m_vPointBlend;
 };
 
 #endif
-

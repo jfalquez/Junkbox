@@ -127,7 +127,7 @@ namespace CVarUtils
 // Overloading GUI
 std::ostream& operator<< (std::ostream& os, const Eigen::Vector6d& v)
 {
-    os << "( " << std::fixed << std::setprecision(2) << std::showpos << v(0) << ", " << v(1) << ", " << v(2) << ", " << v(3) << ", " << v(4) << ", " << v(5) << " )";
+    os << "[ " << std::fixed << std::setprecision(2) << std::showpos << v(0) << ", " << v(1) << ", " << v(2) << ", " << v(3) << ", " << v(4) << ", " << v(5) << " ]";
     return os;
 }
 

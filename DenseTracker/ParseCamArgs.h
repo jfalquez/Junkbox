@@ -81,6 +81,7 @@ CameraDevice* ParseCamArgs(
         pCam->SetProperty( "Channel-1",     sRightFileRegex );
         pCam->SetProperty( "NumChannels",   2 );
         pCam->SetProperty( "StartFrame",    nStartFrame);
+        pCam->SetProperty( "Loop",          true);
     }
 
 

@@ -12,11 +12,12 @@
 #include "ParseCamArgs.h"
 #include "StreamHelpers.h"
 #include "GLPath.h"
+#include "GLPyrPath.h"
 #include "Keyframes.h"
 
 using namespace std;
 
-
+#define GROUND_TRUTH
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -40,16 +41,28 @@ void _HardReset( Eigen::Matrix4d* T_pc,
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char** argv)
 {
-    // initialize some CVars and global variables
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Init
     InitPermutationMatrices();
 
-    // initialize number of iterations to perform at each pyramid level
+    // initialize max number of iterations to perform at each pyramid level
     // level 0 is finest (ie. biggest image)
-    g_vPyrCycles.resize( MAX_PYR_LEVELS );
-    g_vPyrCycles << 1, 2, 3, 4, 5;
+    g_vPyrMaxIters.resize( MAX_PYR_LEVELS );
+    g_vPyrMaxIters.setZero();
+    g_vPyrMaxIters << 1, 2, 3, 4, 5;
+
+    // initialize if full estimate should be performed at a particular level
+    // 1: full estimate          0: just rotation
     g_vPyrFullMask.resize( MAX_PYR_LEVELS );
+    g_vPyrFullMask.setZero();
     g_vPyrFullMask << 1, 1, 1, 1, 0;
+
+    // initialize motion model
     g_vMotionModel << 0.3, 0.2, 0.05, 0.01, 0.01, 0.7;
+
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
     // parse camera parameters
     GetPot cl( argc, argv );
@@ -83,7 +96,7 @@ int main(int argc, char** argv)
 
 
     // create a GUI window
-    pangolin::CreateGlutWindowAndBind("Dense Tracker",1280,720);
+    pangolin::CreateGlutWindowAndBind( "Dense Tracker", 1280, 720 );
     glewInit();
     cudaGLSetGLDevice(0);
     SceneGraph::GLSceneGraph::ApplyPreferredGlSettings();
@@ -104,13 +117,24 @@ int main(int argc, char** argv)
 
     // create a side panel
     pangolin::CreatePanel("ui").SetBounds(0,1,0,pangolin::Attach::Pix(300));
+    pangolin::Var<unsigned int>     ui_nRate("ui.Rate");
     pangolin::Var<float>            ui_fSqErr("ui.Mean Square Error");
     pangolin::Var<unsigned int>     ui_nImgIdx("ui.Image ID", 0);
     pangolin::Var<Eigen::Vector6d>  ui_CurPose("ui.Pose");
+#ifdef GROUND_TRUTH
+    pangolin::Var<Eigen::Vector6d>  ui_ErrorPose("ui.Error");
+#endif
     pangolin::Var<unsigned int>     ui_nKeyIdx("ui.Key ID", 0);
     pangolin::Var<Eigen::Vector6d>  ui_KeyPose("ui.Key");
     pangolin::Var<Eigen::Vector6d>  ui_DeltaPose("ui.Delta");
     pangolin::Var<float>            ui_CenterPixelDepth("ui.Center Pixel Depth");
+    pangolin::Var<int>              ui_nPyrLevel("ui.Pyramid Level",0,0,MAX_PYR_LEVELS-1);
+    pangolin::Var<bool>             ui_bRefineKeyframes("ui.Refine Keyframes", true, true);
+    pangolin::Var<unsigned int>     ui_nNumRefinements("ui.Number of Refinements", 0);
+    pangolin::Var<bool>             ui_btnRelocalize("ui.Relocalize",false,false);
+    pangolin::Var<bool>             ui_bBreakEarly("ui.Break Early", false, true);
+    pangolin::Var<float>            ui_fErrorThreshold("ui.Error Threshold",0.8,0,2);
+    pangolin::Var<unsigned int>     ui_nNumIters("ui.Number of Iterations", 0);
     pangolin::Var<unsigned int>     ui_nBlur("ui.Blur",1,0,5);
     pangolin::Var<float>            ui_fNormC("ui.Norm C",50,0,100);
     pangolin::Var<bool>             ui_bDiscardMaxMin("ui.Discard Max-Min Pix Values", true, true);
@@ -119,24 +143,55 @@ int main(int argc, char** argv)
     pangolin::Var<float>            ui_gs("ui.-- Spatial",1, 1E-3, 5);
     pangolin::Var<float>            ui_gr("ui.-- Depth Range",0.5, 1E-3, 10);
     pangolin::Var<float>            ui_gc("ui.-- Color Range",10, 1E-3, 20);
-    pangolin::Var<float>            ui_fMinPts("ui.Min Points Estimate Threshold",0.30,0,1);
+    pangolin::Var<float>            ui_fMinPts("ui.Min Points Estimate Threshold",0.33,0,1);
     pangolin::Var<bool>             ui_bUseGlobalMotionModel("ui.Use Global Motion Model", false, true);
-    pangolin::Var<int>              ui_nPyrLevel("ui.Pyramid Level",0,0,MAX_PYR_LEVELS-1);
 
+    // init image index of start frame provided through console
+    unsigned int nStartFrame      = cl.follow( 0, 1, "-sf"  );
+    ui_nImgIdx = nStartFrame;
+
+#ifdef GROUND_TRUTH
+    vector< Eigen::Vector6d >       vTruePoses;
+    {
+        // load ground truth poses if available
+        string sGroundTruthFile = cl.follow( "Poses.txt", 1, "-gt" );
+
+        ifstream pFile;
+        pFile.open( sSourceDir + "/" + sGroundTruthFile );
+        if( pFile.is_open() == false ) {
+            cerr << "Error opening ground truth pose file!" << endl;
+        } else {
+
+            Eigen::Vector6d                 Pose;
+
+            while( true ) {
+                // read pose
+                pFile >> Pose(0) >> Pose(1) >> Pose(2) >> Pose(3) >> Pose(4) >> Pose(5);
+
+                if( pFile.eof( ) ) {
+                    break;
+                }
+                vTruePoses.push_back( Pose );
+            }
+
+            pFile.close( );
+        }
+    }
+#endif
 
     // create a view container
     pangolin::View& guiContainer = pangolin::CreateDisplay()
             .SetBounds(0,1,pangolin::Attach::Pix(300),1)
             .SetLayout(pangolin::LayoutEqual);
-    const unsigned int nNumConts = 3;
-    for( unsigned int ii = 0; ii <  nNumConts; ii ++ ) {
+    const unsigned int nNumConts = 4;
+    for( unsigned int ii = 0; ii < nNumConts; ii ++ ) {
         pangolin::View& v = pangolin::CreateDisplay();
         v.SetAspect((double)nImgWidth/nImgHeight);
         guiContainer.AddDisplay(v);
     }
 
     // add 3d view to container
-    guiContainer.AddDisplay(glView3D);
+    guiContainer.AddDisplay( glView3D );
 
     // draw grid on 3D window
     SceneGraph::GLGrid glGrid;
@@ -146,14 +201,18 @@ int main(int argc, char** argv)
     SceneGraph::GLAxis glCurPose;
     SceneGraph::GLAxis glPrevPose;
     SceneGraph::GLAxis glKeyPose;
+    glPrevPose.SetLineWidth( 2.0 );
+    glKeyPose.SetLineWidth( 3.0 );
     glGraph.AddChild( &glCurPose );
-//    glGraph.AddChild( &glPrevPose );
+    glGraph.AddChild( &glPrevPose );
     glGraph.AddChild( &glKeyPose );
 
 
     // gl path
     GLPath glPath;
-//    glGraph.AddChild(&glPath);
+    GLPyrPath glPyrPath( MAX_PYR_LEVELS );
+//    glGraph.AddChild( &glPath );
+    glGraph.AddChild(&glPyrPath);
 
     // initialize vbo's
     vector < pangolin::GlBufferCudaPtr* >      vVBO;
@@ -166,60 +225,61 @@ int main(int argc, char** argv)
     glVBO.resize( MAX_PYR_LEVELS );
 
     for( int ii = 0; ii < MAX_PYR_LEVELS; ii++ ) {
-        const unsigned              w = nImgWidth >> ii;
-        const unsigned              h = nImgHeight >> ii;
+        const unsigned              PyrLvlWidth = nImgWidth >> ii;
+        const unsigned              PyrLvlHeight = nImgHeight >> ii;
 
-        vVBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlArrayBuffer, w, h, GL_FLOAT, 4,
+        vVBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlArrayBuffer, PyrLvlWidth, PyrLvlHeight, GL_FLOAT, 4,
                                        cudaGraphicsMapFlagsWriteDiscard, GL_STREAM_DRAW );
-        vCBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlArrayBuffer, w, h, GL_UNSIGNED_BYTE, 4,
+        vCBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlArrayBuffer, PyrLvlWidth, PyrLvlHeight, GL_UNSIGNED_BYTE, 4,
                                        cudaGraphicsMapFlagsWriteDiscard, GL_STREAM_DRAW );
-        vIBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlElementArrayBuffer, w, h, GL_UNSIGNED_INT, 2 );
+        vIBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlElementArrayBuffer, PyrLvlWidth, PyrLvlHeight, GL_UNSIGNED_INT, 2 );
+
+        // Generate (IBO) Index Buffer Object
+        {
+            pangolin::CudaScopedMappedPtr var( *(vIBO[ ii]) );
+            Gpu::Image< uint2 >           dIbo( (uint2*)*var, PyrLvlWidth, PyrLvlHeight );
+            Gpu::GenerateTriangleStripIndexBuffer( dIbo );
+        }
 
         // add vbo to scenegraph
         glVBO[ii] = new SceneGraph::GLVbo( vVBO[ii], vIBO[ii], vCBO[ii] );
         glKeyPose.AddChild( glVBO[ii] );
-
     }
 
     // gpu variables
     Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     dLeftPyr(nImgWidth, nImgHeight);
     Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     dRightPyr(nImgWidth, nImgHeight);
     Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     dKeyPyr(nImgWidth, nImgHeight);
-    Gpu::Image< float, Gpu::TargetDevice, Gpu::Manage >                             dKeyDepth( nImgWidth, nImgHeight );
     Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           dKeyDepthPyr( nImgWidth, nImgHeight );
     Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           dKeyDepthPyrTmp( nImgWidth, nImgHeight );
     Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           dKeyDepthPyrNormalized( nImgWidth, nImgHeight );
     Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     dBlurTmp1( nImgWidth, nImgHeight );
     Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     dBlurTmp2( nImgWidth, nImgHeight );
     Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     dWorkspace( nImgWidth*sizeof(Gpu::LeastSquaresSystem<float,6>), nImgHeight );
-    Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>                              dDebug(nImgWidth, nImgHeight);
+    Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>                              dDebug( nImgWidth, nImgHeight );
 
-    pangolin::ActivateDrawPyramid< unsigned char, MAX_PYR_LEVELS >      DrawLeftImg(dLeftPyr,GL_LUMINANCE8,false,true);
-    pangolin::ActivateDrawImage< float4 >                               DrawDebugImg(dDebug,GL_RGBA32F_ARB,false,true);
-    pangolin::ActivateDrawPyramid< float, MAX_PYR_LEVELS >              DrawDisparity(dKeyDepthPyrNormalized,GL_LUMINANCE32F_ARB,false,true);
+    pangolin::ActivateDrawPyramid< unsigned char, MAX_PYR_LEVELS >      DrawLeftImg( dLeftPyr, GL_LUMINANCE8, false, true );
+    pangolin::ActivateDrawPyramid< unsigned char, MAX_PYR_LEVELS >      DrawKeyImg( dKeyPyr, GL_LUMINANCE8, false, true );
+    pangolin::ActivateDrawImage< float4 >                               DrawDebugImg( dDebug, GL_RGBA32F_ARB, false, true );
+    pangolin::ActivateDrawPyramid< float, MAX_PYR_LEVELS >              DrawDepth( dKeyDepthPyrNormalized, GL_LUMINANCE32F_ARB, false, true );
 
     // add images to the container
     guiContainer[0].SetDrawFunction(boost::ref( DrawLeftImg ));
-    guiContainer[1].SetDrawFunction(boost::ref( DrawDebugImg ));
-    guiContainer[2].SetDrawFunction(boost::ref( DrawDisparity ));
+    guiContainer[1].SetDrawFunction(boost::ref( DrawKeyImg ));
+    guiContainer[2].SetDrawFunction(boost::ref( DrawDebugImg ));
+    guiContainer[3].SetDrawFunction(boost::ref( DrawDepth ));
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
     // Pose variables
-    Eigen::Matrix4d T_wk;                                       // keyframe pose in world reference frame
-    Eigen::Matrix4d T_wp;                                       // previous pose in world reference frame
-    Eigen::Matrix4d T_wc;                                       // current pose in world reference frame
-    Eigen::Matrix4d T_kc = Eigen::Matrix4d::Identity();         // current pose relative to keyframe
-    Eigen::Matrix4d T_pc = Eigen::Matrix4d::Identity();         // current pose relative to previous pose
-    Eigen::Matrix4d T_pc_prev = Eigen::Matrix4d::Identity();    // previous pose update (use if motion model is enabled)
-
-    // Start camera with robot identity
-    T_wk = /*T_wr*/ Eigen::Matrix4d::Identity() * g_Trv;
-    T_wp = /*T_wr*/ Eigen::Matrix4d::Identity() * g_Trv;
-    T_wc = /*T_wr*/ Eigen::Matrix4d::Identity() * g_Trv;
-    glPath.PushPose( g_Trv );
+    Eigen::Matrix4d T_wk;                   // keyframe pose in world reference frame
+    Eigen::Matrix4d T_wp;                   // previous pose in world reference frame
+    Eigen::Matrix4d T_wc;                   // current pose in world reference frame
+    Eigen::Matrix4d T_kc;                   // current pose relative to keyframe
+    Eigen::Matrix4d T_pc;                   // current pose relative to previous pose
+    Eigen::Matrix4d T_pc_prev;              // previous pose update (use if motion model is enabled)
 
     // decimate live image
     dLeftPyr[0].MemcpyFromHost( vImages[0].Image.data, nImgWidth );
@@ -235,16 +295,21 @@ int main(int argc, char** argv)
 
     // keyframe index
     cout << "Estimating initial keyframe..." << endl;
+    double dT = mvl::Tic();
     unsigned int    nKeyIdx = FindBestKeyframe( vKeyframes, ThumbImage );
-    cout << "... best guess was Keyframe# " << nKeyIdx << "." << endl;
+    float           fBestKeyScore = vKeyframes[nKeyIdx].Score;
+    cout << "-- Best guess was # " << nKeyIdx << ". ( " << mvl::TocMS(dT) << " ms )" << endl;
 
-    // initialize pose -- estimated
+    // initialize poses
     T_wk = /*T_wr*/ vKeyframes[nKeyIdx].Pose * g_Trv;
+    T_kc = Eigen::Matrix4d::Identity();
     T_wc = T_wk;
+    T_pc = Eigen::Matrix4d::Identity();
+    T_wp = T_wc;
 
     // set up first keyframe
     dLeftPyr[0].MemcpyFromHost( vKeyframes[nKeyIdx].Image.data, nImgWidth );
-    Gpu::Image< float, Gpu::TargetHost > hDepth( (float*)vKeyframes[nKeyIdx].Depth.data, nImgWidth, nImgHeight );
+    dKeyDepthPyr[0].MemcpyFromHost( vKeyframes[nKeyIdx].Depth.data );
 
     // blur & decimate image
     for (int ii = 0; ii < ui_nBlur; ++ii) {
@@ -254,8 +319,6 @@ int main(int argc, char** argv)
     dKeyPyr.CopyFrom(dLeftPyr);
 
     // downsample depth map
-    dKeyDepth.CopyFrom( hDepth );
-    dKeyDepthPyr[0].CopyFrom( dKeyDepth );
     Gpu::BoxReduce< float, MAX_PYR_LEVELS, float >( dKeyDepthPyr );
 
 
@@ -263,17 +326,29 @@ int main(int argc, char** argv)
 
 
     // control variables
-    bool guiRunning = false;
-    bool guiSetKeyframe = false;
-    bool guiGo = false;
-    bool bNewCapture = false;
+    bool            guiRunning      = false;
+    bool            guiSetKeyframe  = false;
+    bool            guiGo           = false;
+    bool            bNewCapture     = false;
+    bool            bShowKeyframes  = true;
+
 
     // keyboard callbacks
-    pangolin::RegisterKeyPressCallback(' ',[&guiRunning](){ guiRunning = !guiRunning; });
-    pangolin::RegisterKeyPressCallback('k',[&guiSetKeyframe](){ guiSetKeyframe = true; });
-    pangolin::RegisterKeyPressCallback(pangolin::PANGO_SPECIAL + GLUT_KEY_RIGHT,[&guiGo](){ guiGo = true; });
+    pangolin::RegisterKeyPressCallback(' ', [&guiRunning](){ guiRunning = !guiRunning; });
+    pangolin::RegisterKeyPressCallback('k', [&guiSetKeyframe](){ guiSetKeyframe = true; });
+    pangolin::RegisterKeyPressCallback(pangolin::PANGO_SPECIAL + GLUT_KEY_RIGHT, [&guiGo](){ guiGo = true; });
     pangolin::RegisterKeyPressCallback(pangolin::PANGO_CTRL + 'r', boost::bind( _HardReset, &T_kc, &T_wk, &g_Trv, &guiSetKeyframe, &glPath ) );
     pangolin::RegisterKeyPressCallback('r',[&T_kc](){ T_kc = Eigen::Matrix4d::Identity(); });
+    pangolin::RegisterKeyPressCallback('~', [&guiContainer](){ static bool showpanel = true; showpanel = !showpanel;
+                                        if(showpanel) { guiContainer.SetBounds(0,1,pangolin::Attach::Pix(300), 1); } else
+                                        { guiContainer.SetBounds(0,1,0, 1); } pangolin::Display("ui").Show(showpanel); } );
+    pangolin::RegisterKeyPressCallback('1', [&guiContainer](){ guiContainer[0].ToggleShow(); });
+    pangolin::RegisterKeyPressCallback('2', [&guiContainer](){ guiContainer[1].ToggleShow(); });
+    pangolin::RegisterKeyPressCallback('3', [&guiContainer](){ guiContainer[2].ToggleShow(); });
+    pangolin::RegisterKeyPressCallback('4', [&guiContainer](){ guiContainer[3].ToggleShow(); });
+    pangolin::RegisterKeyPressCallback('5', [&bShowKeyframes](){ bShowKeyframes = !bShowKeyframes; });
+    pangolin::RegisterKeyPressCallback('6', [&glCurPose,&glPrevPose,&glKeyPose](){ glCurPose.SetVisible( !glCurPose.IsVisible() );
+                                        glPrevPose.SetVisible( !glPrevPose.IsVisible() ); glKeyPose.SetVisible( !glKeyPose.IsVisible() ); });
 
 
     // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -281,172 +356,250 @@ int main(int argc, char** argv)
     //
     while( !pangolin::ShouldQuit() ) {
 
+        // rate counter
+        dT = mvl::Tic();
+
         // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Search for Keyframe
+        // Initialize....
         //
 
+        T_wc = T_wp;
         nKeyIdx = FindClosestKeyframe( vKeyframes, T_wc );
+        glPyrPath.InitReset();
 
-        ui_nKeyIdx = nKeyIdx;
+        unsigned int    nIters = 0;         // number of iterations used to compute estimate
+        for( unsigned int nNumRefinements = 1; nNumRefinements < 10; nNumRefinements++ ) {
 
+            // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Load Keyframe
+            //
 
-        while( true ) {
+//                _LoadKeyframe( PoseVector, nKeyIdx, dKeyPyr, dKeyDisp, T_wk, T_kc );
 
-        // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Load Keyframe
-        //
-
-//            _LoadKeyframe( PoseVector, nKeyIdx, dKeyPyr, dKeyDisp, T_wk, T_kc );
-
-        // update keyframe image
-        dKeyPyr[0].MemcpyFromHost(vKeyframes[nKeyIdx].Image.data,nImgWidth);
-        // blur & decimate image
-        for (int ii = 0; ii < ui_nBlur; ++ii) {
-            Gpu::Blur( dKeyPyr[0], dBlurTmp1 );
-        }
-        Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( dKeyPyr, dBlurTmp1, dBlurTmp2 );
-
-        // update keyframe depth map
-        Gpu::Image< float, Gpu::TargetHost > hDepth( (float*)vKeyframes[nKeyIdx].Depth.data, nImgWidth, nImgHeight );
-        dKeyDepth.CopyFrom( hDepth );
-
-        // update keyframe's pose (in vision frame)
-        T_wk = vKeyframes[nKeyIdx].Pose * g_Trv;
-
-        // initialize T_kc from our current global position and that of the keyframe
-        T_kc = mvl::TInv( T_wk ) * T_wc;
-
-
-
-        // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Generate VBO
-        //
-
-        // cross-bilateral filter the downsampled depth maps
-        dKeyDepthPyr[0].CopyFrom( dKeyDepth );
-        Gpu::BoxReduce< float, MAX_PYR_LEVELS, float >( dKeyDepthPyr );
-        if( ui_bBilateralFiltDepth == true ) {
-            dKeyDepthPyrTmp[0].CopyFrom( dKeyDepthPyr[0] );
-            for(int ii = 1; ii < MAX_PYR_LEVELS; ii++ ) {
-                Gpu::BilateralFilter<float,float,unsigned char>(dKeyDepthPyrTmp[ii],dKeyDepthPyr[ii],dLeftPyr[ii],ui_gs,ui_gr,ui_gc,ui_nBilateralWinSize);
+            // update keyframe image
+            dKeyPyr[0].MemcpyFromHost( vKeyframes[nKeyIdx].Image.data, nImgWidth );
+            // blur & decimate image
+            for( int ii = 0; ii < ui_nBlur; ii++ ) {
+                Gpu::Blur( dKeyPyr[0], dBlurTmp1 );
             }
-            dKeyDepthPyr.CopyFrom(dKeyDepthPyrTmp);
-        }
+            Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( dKeyPyr, dBlurTmp1, dBlurTmp2 );
 
-        const unsigned              PyrW = nImgWidth >> ui_nPyrLevel;
-        const unsigned              PyrH = nImgHeight >> ui_nPyrLevel;
+            // update keyframe depth map
+            dKeyDepthPyr[0].MemcpyFromHost( vKeyframes[nKeyIdx].Depth.data );
 
-        // Update (VBO) Vertex Buffer Object
-        {
+            // update keyframe's pose (in vision frame)
+            T_wk = vKeyframes[nKeyIdx].Pose * g_Trv;
 
-            Eigen::Matrix3d                 K = CamModel.K( ui_nPyrLevel );
-            const float                     fBaseline = (1 << ui_nPyrLevel) * CamModel.GetPose()( 1, 3 );
-            pangolin::CudaScopedMappedPtr   var( *(vVBO[ ui_nPyrLevel]) );
-            Gpu::Image< float4 >            dVbo( (float4*)*var, PyrW, PyrH );
-            Gpu::DisparityImageToVbo( dVbo, dKeyDepthPyr[ ui_nPyrLevel ], fBaseline, K( 0, 0 ), K( 1, 1 ), K( 0, 2 ), K( 1, 2 ) );
-        }
-
-        // Update (CBO) Colored Buffered Object for display
-        {
-            pangolin::CudaScopedMappedPtr var( *(vCBO[ ui_nPyrLevel]) );
-            Gpu::Image< uchar4 >          dCbo( (uchar4*)*var, PyrW, PyrH );
-            Gpu::ConvertImage< uchar4, unsigned char >( dCbo, dKeyPyr[ ui_nPyrLevel ] );
-        }
-
-        // set all VBOs invisible
-        for( int ii = 0; ii < MAX_PYR_LEVELS; ii ++ ) {
-            glVBO[ii]->SetVisible(false);
-        }
-        glVBO[ ui_nPyrLevel ]->SetVisible(true);
+            // initialize T_kc from our current global position and that of the keyframe
+            T_kc = mvl::TInv( T_wk ) * T_wc;
 
 
 
-        // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Localization
-        //
+            // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Generate VBO
+            //
 
-        unsigned int nObs;                  // number of observations
-        for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
-            for(int ii = 0; ii < g_vPyrCycles[PyrLvl]; ii++ ) {
-                const unsigned              w = nImgWidth >> PyrLvl;
-                const unsigned              h = nImgHeight >> PyrLvl;
+            // cross-bilateral filter the downsampled depth maps
+            Gpu::BoxReduce< float, MAX_PYR_LEVELS, float >( dKeyDepthPyr );
+            if( ui_bBilateralFiltDepth == true ) {
+                dKeyDepthPyrTmp[0].CopyFrom( dKeyDepthPyr[0] );
+                for(int ii = 1; ii < MAX_PYR_LEVELS; ii++ ) {
+                    Gpu::BilateralFilter<float,float,unsigned char>( dKeyDepthPyrTmp[ii], dKeyDepthPyr[ii], dLeftPyr[ii],
+                                                                     ui_gs, ui_gr, ui_gc, ui_nBilateralWinSize );
+                }
+                dKeyDepthPyr.CopyFrom(dKeyDepthPyrTmp);
+            }
 
-                Eigen::Matrix3d             K = CamModel.K(PyrLvl);
-                Sophus::SE3                 sT_pc = Sophus::SE3( T_kc );
-                Eigen::Matrix<double,3,4>   KTcp = K * sT_pc.inverse().matrix3x4();
-                const float                 fBaseline = (1 << PyrLvl) * CamModel.GetPose()( 1, 3 );
+            const unsigned              CurPyrLvlW = nImgWidth >> ui_nPyrLevel;
+            const unsigned              CurPyrLvlH = nImgHeight >> ui_nPyrLevel;
 
-                // build system
-                Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthESM(dLeftPyr[PyrLvl],dKeyPyr[PyrLvl],
-                                                                                        dKeyDepthPyr[PyrLvl],KTcp,ui_fNormC,fBaseline,
-                                                                                        K(0,0),K(1,1),K(0,2),K(1,2),
-                                                                                        dWorkspace,dDebug.SubImage(w,h),ui_bDiscardMaxMin);
+            // Update (VBO) Vertex Buffer Object
+            {
+                Eigen::Matrix3d                 K = CamModel.K( ui_nPyrLevel );
+                pangolin::CudaScopedMappedPtr   var( *(vVBO[ ui_nPyrLevel]) );
+                Gpu::Image< float4 >            dVbo( (float4*)*var, CurPyrLvlW, CurPyrLvlH );
+                Gpu::DepthToVbo( dVbo, dKeyDepthPyr[ ui_nPyrLevel ], K( 0, 0 ), K( 1, 1 ), K( 0, 2 ), K( 1, 2 ) );
+            }
 
-                Eigen::Matrix<double,6,6>   LHS = LSS.JTJ;
-                Eigen::Vector6d             RHS = LSS.JTy;
+            // Update (CBO) Colored Buffered Object
+            {
+                pangolin::CudaScopedMappedPtr var( *(vCBO[ ui_nPyrLevel]) );
+                Gpu::Image< uchar4 >          dCbo( (uchar4*)*var, CurPyrLvlW, CurPyrLvlH );
+                Gpu::ConvertImage< uchar4, unsigned char >( dCbo, dKeyPyr[ ui_nPyrLevel ] );
+            }
 
-                // solve system
-                Eigen::Vector6d             X;
+            // set all VBOs invisible
+            for( int ii = 0; ii < MAX_PYR_LEVELS; ii++ ) {
+                glVBO[ii]->SetVisible(false);
+            }
+            glVBO[ ui_nPyrLevel ]->SetVisible(true);
 
-                // check if we are solving only for rotation, or full estimate
-                if( g_vPyrFullMask(PyrLvl) != 0 ) {
-                    Eigen::FullPivLU<Eigen::Matrix<double,6,6> >    lu_JTJ(LHS);
 
-                    // check degenerate system
-                    if( lu_JTJ.rank() < 6 ) {
-                        cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << endl;
+
+            // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Localization
+            //
+
+            double          dError;             // mean square error
+            unsigned int    nObs;               // number of observations
+            for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
+                dError = 0;
+                for(int ii = 0; ii < g_vPyrMaxIters[PyrLvl]; ii++ ) {
+                    const unsigned              PyrLvlWidth = nImgWidth >> PyrLvl;
+                    const unsigned              PyrLvlHeight = nImgHeight >> PyrLvl;
+
+                    Eigen::Matrix3d             K = CamModel.K( PyrLvl );
+                    Sophus::SE3                 sT_kc = Sophus::SE3( T_kc );
+                    Eigen::Matrix<double,3,4>   KTck = K * sT_kc.inverse().matrix3x4();
+
+                    // build system
+                    Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthESM( dLeftPyr[PyrLvl], dKeyPyr[PyrLvl],
+                                                                                            dKeyDepthPyr[PyrLvl], KTck, ui_fNormC,
+                                                                                            K(0,0), K(1,1), K(0,2), K(1,2), dWorkspace,
+                                                                                            dDebug.SubImage(PyrLvlWidth, PyrLvlHeight),
+                                                                                            ui_bDiscardMaxMin );
+
+                    Eigen::Matrix<double,6,6>   LHS = LSS.JTJ;
+                    Eigen::Vector6d             RHS = LSS.JTy;
+
+                    // solve system
+                    Eigen::Vector6d             X;
+
+                    // check if we are solving only for rotation, or full estimate
+                    if( g_vPyrFullMask(PyrLvl) != 0 ) {
+                        Eigen::FullPivLU<Eigen::Matrix<double,6,6> >    lu_JTJ(LHS);
+
+                        // check degenerate system
+                        if( lu_JTJ.rank() < 6 ) {
+                            cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << endl;
+                            continue;
+                        }
+
+                        X = - (lu_JTJ.solve(RHS));
+                    } else {
+                        // extract rotation information only
+                        Eigen::Matrix<double,3,3>                       rLHS = LHS.block<3,3>(3,3);
+                        Eigen::Vector3d                                 rRHS = RHS.tail(3);
+                        Eigen::FullPivLU< Eigen::Matrix<double,3,3> >   lu_JTJ(rLHS);
+
+                        // check degenerate system
+                        if( lu_JTJ.rank() < 3 ) {
+                            cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << endl;
+                            continue;
+                        }
+
+                        Eigen::Vector3d rX;
+                        rX = - (lu_JTJ.solve(rRHS));
+
+                        // pack solution
+                        X.setZero();
+                        X.tail(3) = rX;
+                    }
+
+                    // if we have too few observations, discard estimate
+                    if( (float)LSS.obs < ui_fMinPts * (float)( PyrLvlWidth * PyrLvlHeight ) ) {
+                        cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Too few pixels!" << endl;
                         continue;
                     }
 
-                    X = - (lu_JTJ.solve(RHS));
-                } else {
-                    // extract rotation information only
-                    Eigen::Matrix<double,3,3>                       rLHS = LHS.block<3,3>(3,3);
-                    Eigen::Vector3d                                 rRHS = RHS.tail(3);
-                    Eigen::FullPivLU<Eigen::Matrix<double,3,3> >    lu_JTJ(rLHS);
+                    // everything seems fine... apply update
+                    T_kc = (T_kc.inverse() * Sophus::SE3::exp(X).matrix()).inverse();
 
-                    // check degenerate system
-                    if( lu_JTJ.rank() < 3 ) {
-                        cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << endl;
-                        continue;
+                    // store update on GLObject
+                    glPyrPath.PushPose( PyrLvl, T_wk * T_kc * g_Tvr );
+
+                    double dNewError = LSS.sqErr / LSS.obs;
+
+                    // only show error of last level so the GUI doesn't go too crazy
+                    if( PyrLvl == 0 ) {
+                        nObs = LSS.obs;
+                        ui_fSqErr =  dNewError;
                     }
 
-                    Eigen::Vector3d rX;
-                    rX = - (lu_JTJ.solve(rRHS));
+                    // if error decreases too slowly, break out of this level
+                    if( ( fabs( dNewError - dError ) < ui_fErrorThreshold ) && ui_bBreakEarly ) {
+                        dError = dNewError;
+                        break;
+                    }
 
-                    // pack solution
-                    X.setZero();
-                    X.tail(3) = rX;
-                }
+                    // update error
+                    dError = dNewError;
 
-                // if we have too few observations, discard estimate
-                if( (float)LSS.obs / (float)( w * h ) < ui_fMinPts ) {
-                    cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Too few pixels!" << endl;
-                    continue;
-                }
-
-                // everything seems fine... apply update
-                T_kc = (T_kc.inverse() * Sophus::SE3::exp(X).matrix()).inverse();
-
-                // only store nObs of last level
-                if( PyrLvl == 0 ) {
-                    nObs = LSS.obs;
-                    ui_fSqErr =  LSS.sqErr / LSS.obs;
+                    // increment number of iterations
+                    nIters ++;
                 }
             }
+
+            // update number of keyframe refinement steps
+            ui_nNumRefinements = nNumRefinements;
+
+            // update pose if we have a good number of observations
+            if( /*nObs > ((nImgHeight * nImgWidth) * ui_fMinPts)*/ /*dError > 10.0*/ true ) {
+                T_wc = T_wk * T_kc;
+
+                // find closest keyframe given this new pose
+                unsigned int nNewKeyframe = FindClosestKeyframe( vKeyframes, T_wc );
+
+                // if the keyframe is the same we just localized against, then break
+                if( nNewKeyframe == nKeyIdx || !ui_bRefineKeyframes ) {
+                    break;
+                }
+
+                // ... otherwise, keep going!
+                nKeyIdx = nNewKeyframe;
+            } else {
+                // otherwise, call relocalizer
+                cerr << "warning: I think I am lost! Calling relocalizer..." << endl;
+
+                // copy coarsest live image to ThumbImage
+                dLeftPyr[0].MemcpyFromHost( vImages[0].Image.data, nImgWidth );
+
+                // reduce and blur rest of pyramid
+                Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( dLeftPyr, dBlurTmp1, dBlurTmp2 );
+
+                // copy image to Thumbnail
+                dLeftPyr[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
+
+                // call relocalizer!
+                nKeyIdx = FindBestKeyframe( vKeyframes, ThumbImage );
+                fBestKeyScore = vKeyframes[nKeyIdx].Score;
+                cerr << "-- Best guess was # " << nKeyIdx << "." << endl;
+
+                // initialize pose with best keyframe
+                T_wk = /*T_wr*/ vKeyframes[nKeyIdx].Pose * g_Trv;
+                T_wc = T_wk;
+                T_kc = Eigen::Matrix4d::Identity();
+            }
+
         }
 
-        // update pose
-        T_wc = T_wk * T_kc;
+        // calculate new T_pc
+        T_pc = mvl::TInv(T_wp) * T_wc;
 
-        unsigned int nNewKeyframe = FindClosestKeyframe( vKeyframes, T_wc );
+        // relocalize if requested
+        if( pangolin::Pushed( ui_btnRelocalize ) ) {
+            cerr << "warning: I think I am lost! Calling relocalizer..." << endl;
 
-        if( nNewKeyframe == nKeyIdx ) {
-            break;
-        }
+            // copy coarsest live image to ThumbImage
+            dLeftPyr[0].MemcpyFromHost( vImages[0].Image.data, nImgWidth );
 
-        nKeyIdx = nNewKeyframe;
+            // reduce and blur rest of pyramid
+            Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( dLeftPyr, dBlurTmp1, dBlurTmp2 );
 
+            // copy image to Thumbnail
+            dLeftPyr[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
+
+            // call relocalizer!
+            nKeyIdx = FindBestKeyframe( vKeyframes, ThumbImage );
+            fBestKeyScore = vKeyframes[nKeyIdx].Score;
+            cerr << "-- Best guess was # " << nKeyIdx << "." << endl;
+
+            // initialize pose with best keyframe
+            T_wk = /*T_wr*/ vKeyframes[nKeyIdx].Pose * g_Trv;
+            T_kc = Eigen::Matrix4d::Identity();
+            T_wc = T_wk;
+            T_pc = Eigen::Matrix4d::Identity();
+            T_wp = T_wc;
         }
 
 
@@ -477,11 +630,14 @@ int main(int argc, char** argv)
             */
 
             // accept estimate
-            T_pc = mvl::TInv(T_wp) * T_wc;
             T_wp = T_wc;
+            T_pc = Eigen::Matrix4d::Identity();
 
             // capture an image
-            pCam->Capture( vImages );
+            if( pCam->Capture( vImages ) == false ) {
+                cerr << "Error capturing images. Did I ran out of them?" << endl;
+                exit(0);
+            }
             unsigned int Idx = ui_nImgIdx;
             Idx++;
             ui_nImgIdx = Idx;
@@ -489,13 +645,13 @@ int main(int argc, char** argv)
         }
 
         // upload images
-        dLeftPyr[0].MemcpyFromHost(vImages[0].Image.data,nImgWidth);
-        dRightPyr[0].MemcpyFromHost(vImages[1].Image.data,nImgWidth);
+        dLeftPyr[0].MemcpyFromHost( vImages[0].Image.data, nImgWidth );
+        dRightPyr[0].MemcpyFromHost( vImages[1].Image.data, nImgWidth );
 
         // blur bottom image
-        for (int ii = 0; ii < ui_nBlur; ++ii) {
-            Gpu::Blur(dLeftPyr[0], dBlurTmp1);
-            Gpu::Blur(dRightPyr[0], dBlurTmp1);
+        for( int ii = 0; ii < ui_nBlur; ii++ ) {
+            Gpu::Blur( dLeftPyr[0], dBlurTmp1 );
+            Gpu::Blur( dRightPyr[0], dBlurTmp1 );
         }
 
         // reduce and blur rest of pyramid
@@ -511,26 +667,50 @@ int main(int argc, char** argv)
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
         glColor4f( 1, 1, 1, 1);
 
+        // render keyframes
+        if( bShowKeyframes ) {
+            glView3D.Activate( glState );
+            RenderKeyframes( vKeyframes, fBestKeyScore * 2.0 );
+        }
+
+        // display rate
+        ui_nRate = 1.0 / mvl::Toc(dT);
+
+#ifdef GROUND_TRUTH
+        if( ui_nImgIdx < vTruePoses.size() ) {
+            ui_ErrorPose = mvl::T2Cart( (T_wc * g_Tvr)) - vTruePoses[ui_nImgIdx];
+        }
+#endif
+
+        // update number of iterations
+        ui_nNumIters = nIters;
+
+        // current keyframe index
+        ui_nKeyIdx = nKeyIdx;
+
         // display center pixel's depth info
         ui_CenterPixelDepth = vKeyframes[nKeyIdx].Depth.at<float>( nImgHeight/2, nImgWidth/2 );
 
         // draw left image
         DrawLeftImg.SetLevel(ui_nPyrLevel);
 
+        // draw key image
+        DrawKeyImg.SetLevel(ui_nPyrLevel);
+
         // normalize and draw disparity
         dKeyDepthPyrNormalized[ui_nPyrLevel].CopyFrom(dKeyDepthPyr[ui_nPyrLevel]);
         float fMaxDepth = *max_element( vKeyframes[nKeyIdx].Depth.begin<float>(), vKeyframes[nKeyIdx].Depth.end<float>() );
         nppiDivC_32f_C1IR( fMaxDepth, dKeyDepthPyrNormalized[ui_nPyrLevel].ptr, dKeyDepthPyrNormalized[ui_nPyrLevel].pitch,
                            dKeyDepthPyrNormalized[ui_nPyrLevel].Size() );
-        DrawDisparity.SetLevel(ui_nPyrLevel);
+        DrawDepth.SetLevel(ui_nPyrLevel);
 
         // update poses
-        glCurPose.SetPose(T_wc);
-        glPrevPose.SetPose(T_wp);
-        glKeyPose.SetPose(T_wk);
+        glCurPose.SetPose( T_wc );
+        glPrevPose.SetPose( T_wp );
+        glKeyPose.SetPose( T_wk );
         ui_CurPose = mvl::T2Cart( T_wc * g_Tvr );
         ui_KeyPose = mvl::T2Cart( T_wk * g_Tvr );
-        ui_DeltaPose = mvl::T2Cart( g_Trv * T_kc * g_Tvr );
+        ui_DeltaPose = mvl::T2Cart( g_Trv * T_pc * g_Tvr );
 
         pangolin::FinishGlutFrame();
 

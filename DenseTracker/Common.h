@@ -6,7 +6,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Global Variables
 
-const int   MAX_PYR_LEVELS = 5;
+const int   MAX_PYR_LEVELS = 6;
 
 Eigen::Matrix4d g_Tvr = Eigen::Matrix4d::Identity();    // robotic to vision transform
 Eigen::Matrix4d g_Trv = Eigen::Matrix4d::Identity();    // vision to robotic transform
@@ -22,8 +22,9 @@ unsigned int&                           g_nThumbFiltSize = CVarUtils::CreateCVar
 double&                                 g_dThumbFiltS   = CVarUtils::CreateCVar( "Keys.Thumbs.FilterSpatial", 1e-3, "Filter spatial component." );
 double&                                 g_dThumbFiltD   = CVarUtils::CreateCVar( "Keys.Thumbs.FilterDepth", 1e-3, "Filter depth component." );
 double&                                 g_dThumbFiltC   = CVarUtils::CreateCVar( "Keys.Thumbs.FilterColor", 1e-3, "Filter color component." );
-Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrCycles    = CVarUtils::CreateCVar( "Tracker.PyrCycles", Eigen::Matrix<int,1,Eigen::Dynamic>(),
-                                                                                 "Number of cycles per pyramid level." );
+double&                                 g_dErrorThreshold = CVarUtils::CreateCVar( "Tracker.ErrorThreshold", 0.1, "Threshold to breka out of pyramid loop." );
+Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrMaxIters  = CVarUtils::CreateCVar( "Tracker.PyrMaxIters", Eigen::Matrix<int,1,Eigen::Dynamic>(),
+                                                                                 "Maximum number of iterations per pyramid level." );
 Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrFullMask  = CVarUtils::CreateCVar( "Tracker.PyrFullMask", Eigen::Matrix<int,1,Eigen::Dynamic>(),
                                                                                  "Set 1 for full estimate, 0 for rotation only estimates." );
 Eigen::Vector6d&                        g_vMotionModel  = CVarUtils::CreateCVar( "Tracker.MotionModel", Eigen::Vector6d(),
