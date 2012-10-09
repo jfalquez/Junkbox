@@ -25,7 +25,8 @@ ENDIF()
 
 list(APPEND HDRS
     Common.h
-    ParseCamArgs.h
+    GpuHelpers.h
+    InitCamera.h
     Keyframes.h
     StreamHelpers.h
     GLPath.h

@@ -1,8 +1,3 @@
-#include <vector>
-
-#include <cv.h>
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
 
 #include <RPG/Devices/Camera/CameraDevice.h>
 
@@ -12,41 +7,46 @@
 int main( int argc, char** argv )
 {
 
-	CameraDevice Cam;
+    CameraDevice Cam;
 
-	// set properties.. if any
-	//Cam.SetProperty("NumImages", 2);
-	//Cam.SetProperty("ImageWidth", 640);
-	//Cam.SetProperty("ImageHeight", 480);
+    // set properties.. if any
+    //Cam.SetProperty("NumImages", 2);
+    //Cam.SetProperty("ImageWidth", 640);
+    //Cam.SetProperty("ImageHeight", 480);
 
-	// init driver
-	if( !Cam.InitDriver( "Webcam" ) ) {
-		std::cout << "Invalid input device." << std::endl;
-		return -1;
-	}
+    Cam.SetProperty( "NumNodes", 1 );
+    Cam.SetProperty( "Node-0", "localhost:5556" );
 
-	std::cout << "Success." << std::endl;
+    // init driver
+    if( !Cam.InitDriver( "NodeCam" ) ) {
+        std::cout << "Invalid input device." << std::endl;
+        return -1;
+    }
 
-	// container for images
-	std::vector< rpg::ImageWrapper > vImages;
+    std::cout << "Success." << std::endl;
 
-	// create GUI windows
-	cv::namedWindow( "Image 1", CV_WINDOW_AUTOSIZE );
-	//cv::namedWindow( "Image 2", CV_WINDOW_AUTOSIZE );
+    // container for images
+    std::vector< rpg::ImageWrapper > vImages;
+
+    // create GUI windows
+    cv::namedWindow( "Image 1", CV_WINDOW_AUTOSIZE );
+    //cv::namedWindow( "Image 2", CV_WINDOW_AUTOSIZE );
 
 
-	while(1) {
-		if( !Cam.Capture(vImages) ) {
-			std::cout << "Error getting images." << std::endl;
-		}
+    while(1) {
+        if( !Cam.Capture(vImages) ) {
+            std::cout << "Error getting images." << std::endl;
+        }
 
-		cv::imshow("Image 1", vImages[0].Image);
-		//cv::imshow("Image 2", vImages[1]);
+        std::cout << "Captured..." << std::endl;
 
-		char c;
-		c = cv::waitKey(2);
-		if (c == 27) break;
+//        cv::imshow( "Image 1", vImages[0].Image );
+        //cv::imshow("Image 2", vImages[1]);
 
-	}
-	return 0;
+        char c;
+        c = cv::waitKey(2);
+        if (c == 27) break;
+
+    }
+    return 0;
 }
