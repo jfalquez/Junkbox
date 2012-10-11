@@ -19,7 +19,7 @@ int main( int argc, char** argv )
     Cam.SetProperty( "Node-0", "192.168.1.4:5556" );
 
     // init driver
-    if( !Cam.InitDriver( "NodeCam" ) ) {
+    if( !Cam.InitDriver( "Kinect" ) ) {
         std::cout << "Invalid input device." << std::endl;
         return -1;
     }
@@ -48,7 +48,7 @@ int main( int argc, char** argv )
         cv::imshow( "Image 2", vImages[1].Image );
 
         char c;
-//        c = cv::waitKey(2);
+        c = cv::waitKey(1);
         if (c == 27) break;
 
         nFrames++;
