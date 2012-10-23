@@ -18,7 +18,7 @@
 
 using namespace std;
 
-#define GROUND_TRUTH
+//#define GROUND_TRUTH
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void _HardReset( Eigen::Matrix4d* T_pc,
@@ -234,8 +234,8 @@ int main(int argc, char** argv)
     SceneGraph::GLAxis glCurPose;
     SceneGraph::GLAxis glPrevPose;
     SceneGraph::GLAxis glKeyPose;
-    glPrevPose.SetLineWidth( 2.0 );
-    glKeyPose.SetLineWidth( 3.0 );
+    glPrevPose.SetScale( 2.0 );
+    glKeyPose.SetScale( 3.0 );
     glGraph.AddChild( &glCurPose );
     glGraph.AddChild( &glPrevPose );
     glGraph.AddChild( &glKeyPose );
@@ -595,6 +595,7 @@ int main(int argc, char** argv)
         }
 
 //        cv::imshow("TN",vKeyframes[nKeyIdx].ThumbImage);
+//        cv::imshow("TN",ThumbImage);
 //        cv::waitKey(1);
 
 

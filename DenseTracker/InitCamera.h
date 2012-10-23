@@ -90,7 +90,7 @@ CameraDevice* InitCamera(
 
     // //////////////////////////////////////////////////////////////////////
     if( sDeviceDriver == "Kinect" ) {
-
+        g_bHaveDepth = true;
     }
 
     // check if -disp option was specified

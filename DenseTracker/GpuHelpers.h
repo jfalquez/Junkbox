@@ -76,15 +76,14 @@ inline void GenerateThumbnail(
     const unsigned int nPyrLvl = (log( nImageWidth / nThumbWidth ) / 0.301) - 1;
     assert( nPyrLvl <= MAX_PYRAMID_LEVEL );
 
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::DontManage > Img1;
-    Img1 = Wksp.SplitAlignedImage<unsigned char>( nImageWidth, nImageHeight );
-
     Gpu::Pyramid< unsigned char, MAX_PYRAMID_LEVEL, Gpu::TargetDevice, Gpu::DontManage > Pyr;
     Pyr.AllocateFromImage( nImageWidth, nImageHeight, Wksp );
 
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::DontManage > Img1;
+    Img1 = Wksp.SplitAlignedImage<unsigned char>( nImageWidth, nImageHeight );
+
     Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::DontManage > Img2;
     Img2 = Wksp.SplitAlignedImage<unsigned char>( nImageWidth, nImageHeight );
-
 
     // load image to GPU
     Pyr[0].MemcpyFromHost( Image.data, nImageWidth );

@@ -6,7 +6,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Global Variables
 
-const int               MAX_PYR_LEVELS = 6;
+const int               MAX_PYR_LEVELS = 5;
 
 
 Eigen::Matrix4d         g_Tvr = Eigen::Matrix4d::Identity();    // robotic to vision transform
