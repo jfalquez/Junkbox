@@ -1,3 +1,4 @@
+#include <RPG/Utils/InitCam.h>
 #include <RPG/Utils/TicToc.h>
 #include <RPG/Devices/Camera/CameraDevice.h>
 
@@ -9,20 +10,7 @@ int main( int argc, char** argv )
 
     CameraDevice Cam;
 
-    // set properties.. if any
-    //Cam.SetProperty("NumImages", 2);
-    //Cam.SetProperty("ImageWidth", 640);
-    //Cam.SetProperty("ImageHeight", 480);
-
-    Cam.SetProperty( "NumNodes", 1 );
-//    Cam.SetProperty( "Node-0", "localhost:5556" );
-    Cam.SetProperty( "Node-0", "192.168.1.4:5556" );
-
-    // init driver
-    if( !Cam.InitDriver( "Kinect" ) ) {
-        std::cout << "Invalid input device." << std::endl;
-        return -1;
-    }
+    rpg::InitCam( Cam, argc, argv );
 
     // container for images
     std::vector< rpg::ImageWrapper > vImages;
@@ -42,9 +30,6 @@ int main( int argc, char** argv )
         }
 
         cv::imshow( "Image 1", vImages[0].Image );
-        std::string NodeName = vImages[0].Map.GetProperty("NodeName");
-        double Timestamp = vImages[0].Map.GetProperty<double>("CameraTime");
-//        printf("%s %f\n", NodeName.c_str(), Timestamp );
         cv::imshow( "Image 2", vImages[1].Image );
 
         char c;
