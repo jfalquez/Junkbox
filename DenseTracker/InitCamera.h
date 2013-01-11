@@ -47,6 +47,7 @@ CameraDevice* InitCamera(
     // default parameters
     std::string sDeviceDriver     = cl->follow( "FileReader", 1, "-idev" );
     std::string sSourceDir        = cl->follow( ".", 1, "-sdir"  );
+    std::string sCameraModel      = cl->follow( "cmod.xml", 1, "-cmod" );
     std::string sLeftCameraModel  = cl->follow( "lcmod.xml", 1, "-lcmod" );
     std::string sRightCameraModel = cl->follow( "rcmod.xml", 1, "-rcmod" );
     std::string sLeftFileRegex    = cl->follow( "Left.*pgm", 1, "-lfile" );
@@ -78,19 +79,35 @@ CameraDevice* InitCamera(
         pCam->SetProperty( "Loop",          true);
 
         // check if second image is RGB or Depth
+        pCam->SetProperty( "CamModFileName", sSourceDir + "/" + sRightCameraModel );
         if( sDepthFileRegex.empty() ) {
             pCam->SetProperty( "Channel-1",    sRightFileRegex );
-            pCam->SetProperty( "CamModFileName", sSourceDir + "/" + sRightCameraModel );
         } else {
             g_bHaveDepth = true;
             pCam->SetProperty("Channel-1",     sDepthFileRegex );
             pCam->SetProperty( "CamModFileName", sSourceDir + "/" + sLeftCameraModel );
         }
+        g_fDepthScale = 1000.0;
     }
 
     // //////////////////////////////////////////////////////////////////////
     if( sDeviceDriver == "Kinect" ) {
         g_bHaveDepth = true;
+        g_fDepthScale = 1000.0;
+        pCam->SetProperty( "CamModFileName", sSourceDir + "/" + sCameraModel );
+        bool        bGetDepth         = !cl->search( "-no-depth" );
+        bool        bGetRGB           = !cl->search( "-no-rgb" );
+        bool        bGetIr            = cl->search( "-with-ir" );
+        bool        bAlignDepth       = cl->search( "-align-depth" );
+        unsigned int    nFPS                = cl->follow( 30, 1, "-fps"  );
+        std::string     sResolution         = cl->follow( "VGA", 1, "-res"  ); // follow format of XGA, SVGA, VGA, QVGA, QQVGA, etc.
+
+        pCam->SetProperty( "GetRGB", bGetRGB );
+        pCam->SetProperty( "GetDepth", bGetDepth );
+        pCam->SetProperty( "GetIr", bGetIr );
+        pCam->SetProperty( "AlignDepth", bAlignDepth );
+        pCam->SetProperty( "FPS", nFPS );
+        pCam->SetProperty( "Resolution", sResolution );
     }
 
     // check if -disp option was specified
@@ -99,10 +116,12 @@ CameraDevice* InitCamera(
 
 
     // init driver
+    std::cout << "Initializing camera driver...." << std::endl;
     if( !pCam->InitDriver( sDeviceDriver ) ) {
             std::cerr << "Invalid input device." << std::endl;
             exit(0);
     }
+    std::cout << "... driver for '" << sDeviceDriver <<"' initialized successfully." << std::endl;
     return pCam;
 }
 #endif   /* INITCAMERA_H */

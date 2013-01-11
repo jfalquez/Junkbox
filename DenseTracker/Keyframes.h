@@ -16,9 +16,7 @@ struct Keyframe_t {
     cv::Mat             Depth;
     cv::Mat             ThumbImage;
     cv::Mat             ThumbDepth;
-    float               ImageScore;
-    float               DepthScore;
-    float               DistanceScore;
+    float               ThumbScore;
 };
 
 
@@ -54,7 +52,7 @@ inline void RenderKeyframes(
     glPointSize( 5.0 );
     glBegin( GL_POINTS );
     for( int ii = 0; ii < (int)vKeyframes.size(); ii++ ) {
-        if( vKeyframes[ii].ImageScore < fThreshold ) {
+        if( vKeyframes[ii].ThumbScore < fThreshold ) {
             glColor4f( 1.0, 1.0, 1.0, 1.0 );
         } else {
             glColor4f( 1.0, 0.0, 0.0, 0.6 );
@@ -96,26 +94,30 @@ inline unsigned int FindClosestKeyframe(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Search through nearby (potentially all) keyframes for best matching against given thumbnail
-unsigned int FindBestKeyframe(
+inline unsigned int FindBestKeyframe(
         std::vector< Keyframe_t >&          vKeyframes,         //< Input: Vector of keyframes
-        const cv::Mat&                      Image,              //< Input: Decimated greyscale image
-        unsigned int                        nKeyIdx = 0         //< Input: Keyframe ID hint.
+        const cv::Mat&                      ThumbImage,         //< Input: Decimated greyscale image
+        const cv::Mat&                      ThumbDepth          //< Input: Decimated depth image
         )
 {
-    // assume that if hint is 0, no hint was given
-    if( nKeyIdx == 0 ) {
+    // get GUI variables
+    pangolin::Var<float>            ui_fRelocalizationRatio("ui.Reloc Luminance:Depth Ratio");
 
-    } else {
-
-    }
+    float fLumContrib   = ui_fRelocalizationRatio;
+    float fDepthContrib = 1.0 - fLumContrib;
 
     unsigned int nBestIdx = 0;
-    vKeyframes[0].ImageScore = ScoreImages(Image, vKeyframes[0].ThumbImage);
-    float fBestScore = vKeyframes[0].ImageScore;
+
+    float ImageScore = ScoreImages( ThumbImage, vKeyframes[0].ThumbImage );
+    float DepthScore = ScoreImages( ThumbDepth, vKeyframes[0].ThumbDepth );
+    vKeyframes[0].ThumbScore = ( fLumContrib * ImageScore ) + ( fDepthContrib * DepthScore );
+    float fBestScore     = vKeyframes[0].ThumbScore;
     for( int ii = 1; ii < vKeyframes.size(); ii++ ) {
-        vKeyframes[ii].ImageScore = ScoreImages(Image, vKeyframes[ii].ThumbImage);
-        if( vKeyframes[ii].ImageScore < fBestScore ) {
-            fBestScore = vKeyframes[ii].ImageScore;
+        ImageScore = ScoreImages( ThumbImage, vKeyframes[ii].ThumbImage );
+        DepthScore = ScoreImages( ThumbDepth, vKeyframes[ii].ThumbDepth );
+        vKeyframes[ii].ThumbScore = ( fLumContrib * ImageScore ) + ( fDepthContrib * DepthScore );
+        if( vKeyframes[ii].ThumbScore < fBestScore ) {
+            fBestScore = vKeyframes[ii].ThumbScore;
             nBestIdx = ii;
         }
     }
@@ -129,15 +131,13 @@ unsigned int FindBestKeyframe(
 // Create a new keyframe
 Keyframe_t CreateKeyframe(
         GpuVars_t&                              dVars,              //< Input: GPU Workspace
-        const CameraModelPyramid&               CamModel,           //< Input: Camera Model Pyramid
-        const std::vector< rpg::ImageWrapper >& vImgs,              //< Input: Images
-        const Eigen::Matrix4d&                  Pose,               //< Input: Global Pose of this Keyframe
-        bool                                    HaveDepth = true,   //< Input: True if camera provides depth maps via vImgs[1]
-        bool                                    Disparity = false   //< Input: True if depth information are disparities instead of depth
+        const cv::Mat&                          Image,              //< Input: Grey Image
+        const cv::Mat&                          Depth,              //< Input: Depth Image
+        const Eigen::Matrix4d&                  Pose                //< Input: Global Pose of this Keyframe
         )
 {
-    const unsigned int nImgHeight   = CamModel.Height();
-    const unsigned int nImgWidth    = CamModel.Width();
+    const unsigned int nImgHeight   = Image.rows;
+    const unsigned int nImgWidth    = Image.cols;
     const unsigned int nThumbHeight = nImgHeight >> MAX_PYR_LEVELS-1;
     const unsigned int nThumbWidth  = nImgWidth >> MAX_PYR_LEVELS-1;
 
@@ -149,58 +149,20 @@ Keyframe_t CreateKeyframe(
 
     //------------------------------------------- RGB Data
 
-    dVars.uTmpPyr1[0].MemcpyFromHost( vImgs[0].Image.data );
-
-    // downsample greyscale image
-    Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( dVars.uTmpPyr1, dVars.uTmp1, dVars.uTmp1 );
-
-    // copy greyscale images
-    KF.Image        = vImgs[0].Image;
+    KF.Image        = Image;
     KF.ThumbImage   = cv::Mat( nThumbHeight, nThumbWidth, CV_8UC1 );
-    dVars.uTmpPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( KF.ThumbImage.data );
 
-    GenerateThumbnail( dVars, vImgs[0].Image, KF.ThumbImage );
-
+    GenerateThumbnail( dVars, Image, KF.ThumbImage );
 
 
     //------------------------------------------- Depth Data
 
-    // second image is either an RGB image from stereo, or a depth map
-    // if camera provides depth maps use it...
-    if( HaveDepth ) {
-        dVars.fTmpPyr1[0].MemcpyFromHost( vImgs[1].Image.data );
-    } else {
-        // ... otherwise calculate depth map
-        // do stuff, and eventually copy map to 'fTmpPyr1'
-    }
-
-    // if image are disparities, convert to depth map
-    if( g_bDisparityMaps ) {
-        Eigen::Matrix3d             K = CamModel.K(0);
-        const float                 fBaseline = CamModel.GetPose()( 1, 3 );
-
-        Gpu::Disp2Depth( dVars.fTmpPyr1[0], dVars.fTmpPyr1[0], K(0,0), fBaseline );
-    }
-
-    // downsample depth map
-    Gpu::BoxReduce< float, MAX_PYR_LEVELS, float >( dVars.fTmpPyr1 );
-
-
-    // cross-bilateral filter the downsampled depth maps
-    if( g_bBiFilterThumbs == true ) {
-        dVars.fTmpPyr2[0].CopyFrom( dVars.fTmpPyr1[0] );
-        for(int ii = 1; ii < MAX_PYR_LEVELS; ii++ ) {
-            Gpu::BilateralFilter< float, float, unsigned char >( dVars.fTmpPyr2[ii], dVars.fTmpPyr1[ii], dVars.uTmpPyr1[ii],
-                                                               g_dThumbFiltS, g_dThumbFiltD, g_dThumbFiltC, g_nThumbFiltSize );
-        }
-        dVars.fTmpPyr1.CopyFrom( dVars.fTmpPyr2 );
-    }
-
-    // copy depth map
-    KF.Depth        = cv::Mat( nImgHeight, nImgWidth, CV_32FC1 );
+    KF.Depth        = Depth;
     KF.ThumbDepth   = cv::Mat( nThumbHeight, nThumbWidth, CV_32FC1 );
-    dVars.fTmpPyr1[0].MemcpyToHost( KF.Depth.data );
-    dVars.fTmpPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( KF.ThumbDepth.data );
+
+    GenerateDepthThumbnail( dVars, Depth, KF.ThumbDepth );
+
+
 
     return KF;
 }
@@ -314,12 +276,6 @@ void LoadKeyframesFromFile(
 
     std::cout << "Loading keyframes..." << std::endl;
 
-    // get camera model file
-    std::string sSourceDir      = cl->follow( ".", 1, "-sdir"  );
-    std::string sCamModFileName = cl->follow( "rcmod.xml", 1, "-rcmod" );
-    CameraModelPyramid CamModel( sSourceDir + "/" + sCamModFileName );
-    CamModel.PopulatePyramid(MAX_PYR_LEVELS);
-
     if( g_bDisparityMaps == true ) {
         std::cout << "-- Reading images as disparities." << std::endl;
     }
@@ -360,7 +316,7 @@ void LoadKeyframesFromFile(
             exit(-1);
         }
 
-        vKeyframes.push_back( CreateKeyframe( dVars, CamModel, vImgs, mvl::Cart2T(Pose), true ) );
+        vKeyframes.push_back( CreateKeyframe( dVars, vImgs[0].Image, vImgs[1].Image, mvl::Cart2T(Pose) ) );
     }
 
     pFile.close( );
@@ -371,7 +327,7 @@ void LoadKeyframesFromFile(
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Upload Keyframe data to GPU variables
 void UploadKeyframe(
-        const Keyframe_t&       Keyframe,         //< Input: Vector of keyframes
+        const Keyframe_t&       Keyframe,         //< Input: Keyframe
         GpuVars_t&              dVars             //< Input/Output: GPU Workspace
         )
 {
@@ -384,12 +340,13 @@ void UploadKeyframe(
     pangolin::Var<float>            ui_gc("ui.-- Color Range");
 
     // update keyframe image
-    dVars.KeyPyr[0].MemcpyFromHost( Keyframe.Image.data );
+    dVars.KeyGreyPyr[0].MemcpyFromHost( Keyframe.Image.data );
 
     for( int ii = 0; ii < ui_nBlur; ii++ ) {
-        Gpu::Blur( dVars.KeyPyr[0], dVars.uTmp1 );
+        Gpu::Blur( dVars.KeyGreyPyr[0], dVars.uTmp1 );
     }
-    Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( dVars.KeyPyr, dVars.uTmp1, dVars.uTmp2 );
+    Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( dVars.KeyGreyPyr, dVars.uTmp1, dVars.uTmp2 );
+
 
     // update keyframe depth map
     dVars.KeyDepthPyr[0].MemcpyFromHost( Keyframe.Depth.data );
@@ -399,7 +356,7 @@ void UploadKeyframe(
     if( ui_bBilateralFiltDepth == true ) {
         dVars.fTmpPyr1[0].CopyFrom( dVars.KeyDepthPyr[0] );
         for(int ii = 1; ii < MAX_PYR_LEVELS; ii++ ) {
-            Gpu::BilateralFilter<float,float,unsigned char>( dVars.fTmpPyr1[ii], dVars.KeyDepthPyr[ii], dVars.LeftPyr[ii],
+            Gpu::BilateralFilter<float,float,unsigned char>( dVars.fTmpPyr1[ii], dVars.KeyDepthPyr[ii], dVars.GreyPyr[ii],
                                                              ui_gs, ui_gr, ui_gc, ui_nBilateralWinSize );
         }
         dVars.KeyDepthPyr.CopyFrom(dVars.fTmpPyr1);

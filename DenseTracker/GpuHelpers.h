@@ -8,9 +8,8 @@
 struct GpuVars_t
 {
     GpuVars_t( unsigned int nImgHeight, unsigned int nImgWidth ) :
-        LeftPyr( nImgWidth, nImgHeight ),
-        RightPyr( nImgWidth, nImgHeight ),
-        KeyPyr( nImgWidth, nImgHeight ),
+        GreyPyr( nImgWidth, nImgHeight ),
+        KeyGreyPyr( nImgWidth, nImgHeight ),
         KeyDepthPyr( nImgWidth, nImgHeight ),
         KeyDepthPyrNormalized( nImgWidth, nImgHeight ),
         Workspace( nImgWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), nImgHeight ),
@@ -23,9 +22,8 @@ struct GpuVars_t
     { }
 
     // member variables
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   LeftPyr;
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   RightPyr;
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   KeyPyr;
+    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   GreyPyr;
+    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   KeyGreyPyr;
     Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           KeyDepthPyr;
     Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           KeyDepthPyrNormalized;
     Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     Workspace;
@@ -162,7 +160,7 @@ void Disp2Depth(
 
 /* */
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void GenerateThumbnail(
+inline void GenerateThumbnail(
         GpuVars_t&                      dVars,              //< Input: GPU Workspace
         const cv::Mat&                  Image,              //< Input: Original image
         cv::Mat&                        ThumbImage          //< Output: Thumbnail image
@@ -173,6 +171,52 @@ void GenerateThumbnail(
     Gpu::BlurReduce< unsigned char, MAX_PYR_LEVELS, unsigned int >( dVars.uTmpPyr1, dVars.uTmp1, dVars.uTmp2 );
     dVars.uTmpPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+inline void GenerateDepthThumbnail(
+        GpuVars_t&                      dVars,              //< Input: GPU Workspace
+        const cv::Mat&                  Image,              //< Input: Original image
+        cv::Mat&                        ThumbImage          //< Output: Thumbnail image
+        )
+{
+    // upload depth image
+    dVars.fTmpPyr1[0].MemcpyFromHost( Image.data );
+
+    // downsample depth map
+    Gpu::BoxReduce< float, MAX_PYR_LEVELS, float >( dVars.fTmpPyr1 );
+
+
+    // cross-bilateral filter the downsampled depth maps
+    if( g_bBiFilterThumbs == true ) {
+        dVars.fTmpPyr2[0].CopyFrom( dVars.fTmpPyr1[0] );
+        for(int ii = 1; ii < MAX_PYR_LEVELS; ii++ ) {
+            Gpu::BilateralFilter< float, float, unsigned char >( dVars.fTmpPyr2[ii], dVars.fTmpPyr1[ii], dVars.uTmpPyr1[ii],
+                                                               g_dThumbFiltS, g_dThumbFiltD, g_dThumbFiltC, g_nThumbFiltSize );
+        }
+        dVars.fTmpPyr1.CopyFrom( dVars.fTmpPyr2 );
+    }
+
+    dVars.fTmpPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void Disp2Depth(
+        GpuVars_t&                      dVars,              //< Input: GPU Workspace
+        cv::Mat&                        Image,              //< Input/Output: Disparity image, Depth image.
+        float                           fu,                 //< Input: Focal length
+        float                           baseline            //< Input: Baseline
+        )
+{
+    Gpu::Image< float, Gpu::TargetDevice, Gpu::Manage >& dImage = dVars.fTmpPyr1[0];
+
+    dImage.MemcpyFromHost( Image.data );
+
+    Gpu::Disp2Depth( dImage, dImage, fu, baseline );
+
+    dImage.MemcpyToHost( Image.data );
+}
+
+
 /* */
 
 #endif // GPU_HELPERS_H
