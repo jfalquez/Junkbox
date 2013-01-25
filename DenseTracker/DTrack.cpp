@@ -184,6 +184,8 @@ int main(int argc, char** argv)
     g_vPyrMaxIters << 2, 3, 4, 5, 5;
 //    g_vPyrMaxIters << 1, 2, 3;
 
+
+
     // initialize if full estimate should be performed at a particular level
     // 1: full estimate          0: just rotation
     g_vPyrFullMask.resize( MAX_PYR_LEVELS );
