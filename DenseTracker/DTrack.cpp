@@ -8,6 +8,7 @@
 #include <RPG/Devices.h>
 #include <Mvlpp/Mvl.h>
 #include <boost/bind.hpp>
+
 #include "Common.h"
 #include "GpuHelpers.h"
 #include "InitCamera.h"
@@ -19,6 +20,11 @@
 using namespace std;
 
 //#define GROUND_TRUTH
+#define SENSOR_FUSION
+
+#ifdef SENSOR_FUSION
+#include <SensorFusion.h>
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void _HardReset( Eigen::Matrix4d* T_pc,
@@ -299,6 +305,7 @@ int main(int argc, char** argv)
     pangolin::Var<bool>             ui_btnNewKeyframe("ui.New Keyframe",false,false);
     pangolin::Var<bool>             ui_bAutoKeyframes("ui.Auto Generate Keyframes", false, true);
     pangolin::Var<float>            ui_fKeyframePtsThreshold("ui.Auto Keyframe Pts Threshold",0.75,0,1);
+    pangolin::Var<bool>             ui_bUseIMU("ui.UseIMU", true, true);
     pangolin::Var<bool>             ui_bRefineKeyframes("ui.Refine Keyframes", true, true);
     pangolin::Var<unsigned int>     ui_nNumRefinements("ui.Number of Refinements", 0);
     pangolin::Var<bool>             ui_btnRelocalize("ui.Relocalize",false,false);
@@ -493,6 +500,17 @@ int main(int argc, char** argv)
     T_wp = T_wc;
 
 
+#ifdef SENSOR_FUSION
+    // IMU directory location
+    // the files must be accel.txt and timestamp.txt
+    string sIMUDir      = cl.follow( "./imu", 1, "-imu"  );
+    const unsigned int nFilterSize = 10;
+    Fusion::SensorFusion ImuFusion( nFilterSize );
+
+    // initiate IMU reading thread
+#endif
+
+
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -537,7 +555,12 @@ int main(int argc, char** argv)
         // Initialize....
         //
 
+        // Use IMU to seed initial estimate
         T_wc = T_wp;
+        T_wc =
+
+
+        // Base on IMU's estimate, find closest keyframe and do ESM
         nKeyIdx = FindClosestKeyframe( vKeyframes, T_wc );
         glPyrPath.InitReset();
 
