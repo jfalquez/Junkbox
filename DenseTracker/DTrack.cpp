@@ -1,5 +1,6 @@
 #include <pangolin/pangolin.h>
 #include <pangolin/glcuda.h>
+#include <pangolin/glvbo.h>
 #include <kangaroo/kangaroo.h>
 #include <sophus/se3.h>
 #include <kangaroo/../applications/common/ImageSelect.h>
@@ -283,7 +284,7 @@ int main(int argc, char** argv)
     pangolin::View glView3D;
 
     // We set the views location on screen and add a handler
-    glView3D.SetHandler( new SceneGraph::HandlerSceneGraph( glGraph, glState, pangolin::AxisNegZ ) );
+    glView3D.SetHandler( new SceneGraph::HandlerSceneGraph( glGraph, glState, pangolin::AxisNone) );
     glView3D.SetDrawFunction( SceneGraph::ActivateDrawFunctor( glGraph, glState ) );
     glView3D.SetAspect( 640.0 / 480.0 );
 
@@ -401,7 +402,7 @@ int main(int argc, char** argv)
     vVBO.resize( MAX_PYR_LEVELS );
     vector < pangolin::GlBufferCudaPtr* >      vCBO;
     vCBO.resize( MAX_PYR_LEVELS );
-    vector < pangolin::GlBufferCudaPtr* >      vIBO;
+    vector < pangolin::GlBuffer* >      vIBO;
     vIBO.resize( MAX_PYR_LEVELS );
     vector < SceneGraph::GLObject* >           glVBO;
     glVBO.resize( MAX_PYR_LEVELS );
@@ -410,18 +411,12 @@ int main(int argc, char** argv)
         const unsigned              PyrLvlWidth = nImgWidth >> ii;
         const unsigned              PyrLvlHeight = nImgHeight >> ii;
 
-        vVBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlArrayBuffer, PyrLvlWidth, PyrLvlHeight, GL_FLOAT, 4,
+        vVBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlArrayBuffer, PyrLvlWidth*PyrLvlHeight, GL_FLOAT, 4,
                                        cudaGraphicsMapFlagsWriteDiscard, GL_STREAM_DRAW );
-        vCBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlArrayBuffer, PyrLvlWidth, PyrLvlHeight, GL_UNSIGNED_BYTE, 4,
+        vCBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlArrayBuffer, PyrLvlWidth*PyrLvlHeight, GL_UNSIGNED_BYTE, 4,
                                        cudaGraphicsMapFlagsWriteDiscard, GL_STREAM_DRAW );
-        vIBO[ii] = new pangolin::GlBufferCudaPtr( pangolin::GlElementArrayBuffer, PyrLvlWidth, PyrLvlHeight, GL_UNSIGNED_INT, 2 );
-
-        // Generate (IBO) Index Buffer Object
-        {
-            pangolin::CudaScopedMappedPtr var( *(vIBO[ ii]) );
-            Gpu::Image< uint2 >           dIbo( (uint2*)*var, PyrLvlWidth, PyrLvlHeight );
-            Gpu::GenerateTriangleStripIndexBuffer( dIbo );
-        }
+        vIBO[ii] = new pangolin::GlBuffer();
+        pangolin::MakeTriangleStripIboForVbo(*vIBO[ii], PyrLvlWidth, PyrLvlHeight );
 
         // add vbo to scenegraph
         glVBO[ii] = new SceneGraph::GLVbo( vVBO[ii], vIBO[ii], vCBO[ii] );
@@ -817,6 +812,8 @@ int main(int argc, char** argv)
         // update and render stuff
         glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
         glColor4f( 1, 1, 1, 1);
+
+        glState.Follow( T_wc );
 
         // render keyframes
         if( bShowKeyframes ) {
