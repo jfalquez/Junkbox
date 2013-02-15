@@ -20,7 +20,7 @@
 using namespace std;
 
 //#define GROUND_TRUTH
-#define SENSOR_FUSION
+//#define SENSOR_FUSION
 
 #ifdef SENSOR_FUSION
 #include <SensorFusion.h>
@@ -557,7 +557,7 @@ int main(int argc, char** argv)
 
         // Use IMU to seed initial estimate
         T_wc = T_wp;
-        T_wc =
+        //T_wc =
 
 
         // Base on IMU's estimate, find closest keyframe and do ESM
