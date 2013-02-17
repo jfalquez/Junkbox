@@ -19,6 +19,7 @@ bool                    g_bHaveDepth = false;                   // true if depth
 // Global CVARS
 
 bool&                                   g_bDisparityMaps  = CVarUtils::CreateCVar( "Cam.DisparityMaps", false, "True if camera gives disparity maps instead of depth maps." );
+bool&                                   g_bAligned  = CVarUtils::CreateCVar( "Cam.Aligned", false, "True if color and depth cameras are aligned." );
 float&                                  g_fDepthScale   = CVarUtils::CreateCVar( "Cam.DepthScale", 1.0f, "Scale of depth information provided by camera. Depth should be meters." );
 bool&                                   g_bBiFilterThumbs = CVarUtils::CreateCVar( "Keys.Thumbs.FilterOn", true,
                                                                                    "True if cross-bilateral filter is to be applied to the thumbnail depth map." );

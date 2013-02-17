@@ -128,7 +128,6 @@ void UnpackImages(
     //------------------------------------------------------------------------------
     // assuming vImages[1] is either depth/disp or another color-grey image
 
-    //Depth = vImages[1].Image;
     Depth = vImages[1].Image.clone();
 
     // check if second image is type '8 unsigned char'
@@ -187,7 +186,6 @@ int main(int argc, char** argv)
     // level 0 is finest (ie. biggest image)
     g_vPyrMaxIters.resize( MAX_PYR_LEVELS );
     g_vPyrMaxIters.setZero();
-//    g_vPyrMaxIters << 1, 1, 2, 3, 4, 5, 0;
     g_vPyrMaxIters << 2, 3, 4, 5, 5;
 //    g_vPyrMaxIters << 1, 2, 3;
 
@@ -197,7 +195,6 @@ int main(int argc, char** argv)
     // 1: full estimate          0: just rotation
     g_vPyrFullMask.resize( MAX_PYR_LEVELS );
     g_vPyrFullMask.setZero();
-//    g_vPyrFullMask << 1, 1, 1, 1, 0, 0, 0;
     g_vPyrFullMask << 1, 1, 1, 1, 0;
 //    g_vPyrFullMask << 1, 1, 1;
 
@@ -211,6 +208,14 @@ int main(int argc, char** argv)
     // init camera based on command line args
     GetPot cl( argc, argv );
     CameraDevice* pCam = InitCamera( &cl );
+
+    // color to depth calibration.. if aligned, T_cd = I4
+    Sophus::SE3 Tcd;
+    if( g_bAligned == false ) {
+        const double baseline_m = pCam->GetProperty<double>("Depth0Baseline", 0) / 100;
+        Eigen::Vector3d c_d( baseline_m, 0, 0 );
+        Tcd = Sophus::SE3( Sophus::SO3(), c_d ).inverse();
+    }
 
     // read camera model file
     cout << "Loading camera model file..." << endl;
@@ -624,10 +629,10 @@ int main(int argc, char** argv)
 
                     // build system
                     Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthESM( dVars.GreyPyr[PyrLvl], dVars.KeyGreyPyr[PyrLvl],
-                                                                                            dVars.KeyDepthPyr[PyrLvl], KTck, fNormC,
+                                                                                            dVars.KeyDepthPyr[PyrLvl], Tcd.matrix3x4(), KTck, fNormC,
                                                                                             K(0,0), K(1,1), K(0,2), K(1,2), dVars.Workspace,
                                                                                             dVars.Debug.SubImage(PyrLvlWidth, PyrLvlHeight),
-                                                                                            ui_bDiscardMaxMin, 0.5, 10.0 );
+                                                                                            ui_bDiscardMaxMin, 0.3, 20.0 );
 
                     Eigen::Matrix<double,6,6>   LHS = LSS.JTJ;
                     Eigen::Vector6d             RHS = LSS.JTy;

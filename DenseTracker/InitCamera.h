@@ -87,6 +87,7 @@ CameraDevice* InitCamera(
             pCam->SetProperty("Channel-1",     sDepthFileRegex );
             pCam->SetProperty( "CamModFileName", sSourceDir + "/" + sLeftCameraModel );
         }
+        // USE THIS FOR KINECT FILES
         g_fDepthScale = 1000.0;
     }
 
@@ -113,6 +114,11 @@ CameraDevice* InitCamera(
     // check if -disp option was specified
     // this means that the images are disparities instead of depth maps
     g_bDisparityMaps = cl->search( "-disp" );
+
+
+    // check if -aligned option was specified
+    // this means that the depth and color images are aligned
+    g_bAligned = cl->search( "-aligned" );
 
 
     // init driver
