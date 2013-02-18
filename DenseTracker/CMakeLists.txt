@@ -19,7 +19,6 @@ include_directories( ${MVL_INCLUDE_DIRS} )
 include_directories( ${SENSORFUSION_INCLUDE_DIRS} )
 
 link_directories( ${Pangolin_LIBRARY_DIRS} )
-link_directories( ${Sophus_LIBRARY_DIRS} )
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
  SET(CMAKE_CXX_FLAGS "-std=c++11 -g")
@@ -45,7 +44,6 @@ target_link_libraries( DTrack
                         ${Pangolin_LIBRARIES}
                         ${SceneGraph_LIBRARIES}
                         ${Kangaroo_LIBRARIES}
-                        ${Sophus_LIBRARIES}
                         ${RPG_LIBRARIES}
                         ${MVL_LIBRARIES}
                         ${SENSORFUSION_LIBRARIES}

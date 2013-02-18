@@ -1,12 +1,14 @@
 #include <pangolin/pangolin.h>
 #include <pangolin/glcuda.h>
 #include <pangolin/glvbo.h>
+#include <sophus/se3.hpp>
 #include <kangaroo/kangaroo.h>
-#include <sophus/se3.h>
 #include <kangaroo/../applications/common/ImageSelect.h>
 #include <kangaroo/../applications/common/CameraModelPyramid.h>
 #include <SceneGraph/SceneGraph.h>
 #include <RPG/Devices.h>
+#include <RPG/Utils/InitCam.h>
+#include <RPG/Utils/InitIMU.h>
 #include <Mvlpp/Mvl.h>
 #include <boost/bind.hpp>
 
@@ -21,10 +23,14 @@
 using namespace std;
 
 //#define GROUND_TRUTH
-//#define SENSOR_FUSION
+#define SENSOR_FUSION
 
 #ifdef SENSOR_FUSION
 #include <SensorFusion.h>
+
+const unsigned int nImuFilterSize = 10;
+Fusion::SensorFusion ImuFusion( nImuFilterSize );
+
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -175,6 +181,17 @@ void UploadImage(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#ifdef SENSOR_FUSION
+void imuNewData(const IMUData& data )
+{
+    ImuFusion.RegisterImuPose( data.accel(0), data.accel(1), data.accel(2), data.gyro(0), data.gyro(1), data.gyro(2),
+                               data.timestamp_system, data.timestamp_system );
+}
+#endif
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char** argv)
 {
@@ -210,11 +227,11 @@ int main(int argc, char** argv)
     CameraDevice* pCam = InitCamera( &cl );
 
     // color to depth calibration.. if aligned, T_cd = I4
-    Sophus::SE3 Tcd;
+    Sophus::SE3d Tcd;
     if( g_bAligned == false ) {
         const double baseline_m = pCam->GetProperty<double>("Depth0Baseline", 0) / 100;
         Eigen::Vector3d c_d( baseline_m, 0, 0 );
-        Tcd = Sophus::SE3( Sophus::SO3(), c_d ).inverse();
+        Tcd = Sophus::SE3d( Sophus::SO3(), c_d ).inverse();
     }
 
     // read camera model file
@@ -222,6 +239,12 @@ int main(int argc, char** argv)
     CameraModelPyramid CamModel( pCam->GetProperty( "CamModFileName" ) );
     CamModel.PopulatePyramid(MAX_PYR_LEVELS);
     cout << "... Done!" << endl;
+
+#ifdef SENSOR_FUSION
+    IMUDevice IMU;
+    rpg::InitIMU( IMU, cl );
+    IMU.RegisterIMUDataCallback( imuNewData );
+#endif
 
     // vector of images captured
     vector< rpg::ImageWrapper > vImages;
@@ -234,6 +257,7 @@ int main(int argc, char** argv)
     cv::Mat                     DepthImage;
 
     // initial capture for image properties
+    // for the LIVE kinect this is a hack since the first images suck
     for( int ii = 0; ii < 5; ii++ ) {
         pCam->Capture( vImages );
     }
@@ -501,13 +525,7 @@ int main(int argc, char** argv)
 
 
 #ifdef SENSOR_FUSION
-    // IMU directory location
-    // the files must be accel.txt and timestamp.txt
-    string sIMUDir      = cl.follow( "./imu", 1, "-imu"  );
-    const unsigned int nFilterSize = 10;
-    Fusion::SensorFusion ImuFusion( nFilterSize );
-
-    // initiate IMU reading thread
+    ImuFusion.ResetCurrentPose( mvl::T2Cart( T_wc ), Eigen::Vector3d::Zero() , Eigen::Vector2d::Zero() );
 #endif
 
 
@@ -555,10 +573,12 @@ int main(int argc, char** argv)
         // Initialize....
         //
 
-        // Use IMU to seed initial estimate
         T_wc = T_wp;
-        //T_wc =
 
+#ifdef SENSOR_FUSION
+        // Use IMU to seed initial estimate
+        T_wc = mvl::Cart2T( ImuFusion.GetCurrentPose().m_dPose );
+#endif
 
         // Base on IMU's estimate, find closest keyframe and do ESM
         nKeyIdx = FindClosestKeyframe( vKeyframes, T_wc );
@@ -622,7 +642,7 @@ int main(int argc, char** argv)
                     const unsigned              PyrLvlHeight = nImgHeight >> PyrLvl;
 
                     Eigen::Matrix3d             K = CamModel.K( PyrLvl );
-                    Sophus::SE3                 sT_kc = Sophus::SE3( T_kc );
+                    Sophus::SE3d                sT_kc = Sophus::SE3d( T_kc );
                     Eigen::Matrix<double,3,4>   KTck = K * sT_kc.inverse().matrix3x4();
 
                     float fNormC = ui_fNormC * (1 << PyrLvl );
@@ -783,6 +803,12 @@ int main(int argc, char** argv)
             // accept estimate
             T_wp = T_wc;
             T_pc = Eigen::Matrix4d::Identity();
+
+#ifdef SENSOR_FUSION
+            ImuFusion.RegisterGlobalPose( mvl::T2Cart(T_wc), vImages[0].Map.GetProperty<double>("LoggerTime"),
+                                          vImages[0].Map.GetProperty<double>("LoggerTime") );
+#endif
+
 
             // capture an image
             if( pCam->Capture( vImages ) == false ) {
