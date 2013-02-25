@@ -53,11 +53,12 @@ void _HardReset( Eigen::Matrix4d* T_pc,
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Adjust mean and variance of Image1 brightness to be closer to Image2
 inline void BrightnessCorrectionImagePair(
-        unsigned char *pData1,
-        unsigned char *pData2,
+        unsigned char* pData1,
+        unsigned char* pData2,
         int nImageSize
         )
 {
+    unsigned char* pData1_Orig = pData1;
     const int     nSampleStep = 1;
     int           nSamples    = 0;
 
@@ -91,7 +92,7 @@ inline void BrightnessCorrectionImagePair(
     // normalize image
     float tmp;
     // reset pointer
-    pData1 = img1.data;
+    pData1 = pData1_Orig;
 
     int nMean1 = (int)fMean1;
     int nMean2 = (int)fMean2;
