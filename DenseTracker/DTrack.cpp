@@ -23,7 +23,7 @@
 using namespace std;
 
 //#define GROUND_TRUTH
-#define SENSOR_FUSION
+//#define SENSOR_FUSION
 
 #ifdef SENSOR_FUSION
 #include <SensorFusion.h>
@@ -58,6 +58,7 @@ inline void BrightnessCorrectionImagePair(
         int nImageSize
         )
 {
+    unsigned char* pData1_Orig = pData1;
     const int     nSampleStep = 1;
     int           nSamples    = 0;
 
@@ -91,7 +92,7 @@ inline void BrightnessCorrectionImagePair(
     // normalize image
     float tmp;
     // reset pointer
-    pData1 = img1.data;
+    pData1 = pData1_Orig;
 
     int nMean1 = (int)fMean1;
     int nMean2 = (int)fMean2;

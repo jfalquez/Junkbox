@@ -16,17 +16,20 @@ IF(CMAKE_COMPILER_IS_GNUCXX)
  SET(CMAKE_CXX_FLAGS "-std=c++11 -g")
 ENDIF()
 
-list(APPEND HDRS
-)
 
-list(APPEND SRCS
-    Calibrate.cpp
-)
-
-
-add_executable( Calibrate ${HDRS} ${SRCS} )
+# Calibrate
+add_executable( Calibrate Calibrate.cpp )
 
 target_link_libraries( Calibrate
+                        ${Pangolin_LIBRARIES}
+                        ${SceneGraph_LIBRARIES}
+                        ${RPG_LIBRARIES}
+                     )
+
+# Stereo Calibrate
+add_executable( StereoCalibrate StereoCalibrate.cpp )
+
+target_link_libraries( StereoCalibrate
                         ${Pangolin_LIBRARIES}
                         ${SceneGraph_LIBRARIES}
                         ${RPG_LIBRARIES}
