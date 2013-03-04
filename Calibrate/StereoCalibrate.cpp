@@ -22,6 +22,7 @@ int main(int argc, char** argv)
     int nBoardWidth     = 9;
     int nBoardHeight    = 6;
     int nBoardTotal     = nBoardWidth * nBoardHeight;           // total enclosed corners on the board
+    float fSquareSize   = 0.023;
     CvSize nBoardSize = cvSize( nBoardWidth, nBoardHeight );
 
     // camera stuff
@@ -41,7 +42,8 @@ int main(int argc, char** argv)
 
 
     // initialize camera
-    Cam1.InitDriver( "FireFly" );
+    Cam1.InitDriver( "Flycap" );
+
 
     Cam2.SetProperty( "GetRGB", false );
     Cam2.SetProperty( "GetDepth", false );
@@ -125,6 +127,28 @@ int main(int argc, char** argv)
         vObj.push_back( cv::Point3f( ii / nBoardWidth, ii % nBoardWidth, 0.0f));
     }
 
+//    cv::Mat             Intrinsics1 = cv::Mat( 3, 3, CV_32FC1 );
+    // K hint for Cam1
+    cv::Mat Intrinsics1 = (cv::Mat_<float>(3,3) << 522.2944442240872, 0, 318.6838191881208,
+                                                   0, 518.9897525108679, 247.8469145984651,
+                                                   0, 0, 1);
+    cv::Mat             Distortion1;
+
+
+//    cv::Mat             Intrinsics2 = cv::Mat( 3, 3, CV_32FC1 );
+    // K hint for Cam2
+    cv::Mat Intrinsics2 = (cv::Mat_<float>(3,3) << 579.3257324220499, 0, 319.2756869108347,
+                                                   0, 576.0530308640929, 238.578345871265,
+                                                   0, 0, 1);
+    cv::Mat             Distortion2;
+
+
+    cv::Mat   vRot;
+    cv::Mat   vTrans;
+    cv::Mat   vE;
+    cv::Mat   vF;
+
+
     while( !pangolin::ShouldQuit() ) {
 
         /// camera #1
@@ -165,7 +189,6 @@ int main(int argc, char** argv)
 
         bool bPatternFound = false;
 
-        /*
         // find for checkerboard pattern
         vector< cv::Point2f > vCorners1; // this will be filled by the detected corners
         vector< cv::Point2f > vCorners2; // this will be filled by the detected corners
@@ -183,19 +206,19 @@ int main(int argc, char** argv)
             if( bSnapshot ) {
                 cv::cornerSubPix( GreyImg1, vCorners1, cv::Size(11, 11), cv::Size(-1, -1),
                                cv::TermCriteria( CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1) );
-                cv::drawChessboardCorners( Image1, nBoardSize, cv::Mat(vCorners1), true );
+                cv::drawChessboardCorners( ColorImg1, nBoardSize, cv::Mat(vCorners1), true );
 
                 cv::cornerSubPix( GreyImg2, vCorners2, cv::Size(11, 11), cv::Size(-1, -1),
                                cv::TermCriteria( CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1) );
-                cv::drawChessboardCorners( Image2, nBoardSize, cv::Mat(vCorners2), true );
+                cv::drawChessboardCorners( ColorImg2, nBoardSize, cv::Mat(vCorners2), true );
 
                 nNumSnapshots++;
                 ui_nNumSnapshots = nNumSnapshots;
                 vObjectPts.push_back( vObj );
-                Snapshot1 = Image1;
+                Snapshot1 = ColorImg1;
                 vImagePts1.push_back( vCorners1 );
                 glSnapshot1.SetImage( Snapshot1.data, nImgWidth1, nImgHeight1, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE );
-                Snapshot2 = Image2;
+                Snapshot2 = ColorImg2;
                 vImagePts2.push_back( vCorners2 );
                 glSnapshot2.SetImage( Snapshot2.data, nImgWidth2, nImgHeight2, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE );
             }
@@ -209,12 +232,21 @@ int main(int argc, char** argv)
 
         if( pangolin::Pushed( ui_btnCalibrate ) ) {
             cout << "Calibrating..." << endl;
-//            double error = cv::stereoCalibrate( vObjectPts, vImagePts, ColorImg.size(), Intrinsics, Distortion, vRot, vTrans );
-//            ui_dCalError = error;
+            double error = cv::stereoCalibrate( vObjectPts, vImagePts1, vImagePts2,
+                                                Intrinsics1, Distortion1, Intrinsics2, Distortion2,
+                                                ColorImg1.size(), vRot, vTrans, vE, vF,
+                                                cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-6),
+                                                cv::CALIB_USE_INTRINSIC_GUESS | cv::CALIB_SAME_FOCAL_LENGTH );
+            ui_dCalError = error;
             cout << "... Done!" << endl << endl;
-//            cout << "Intrinsics = "<< endl << " "  << Intrinsics << endl << endl;
+            cout << "Intrinsics1 = "<< endl << " "  << Intrinsics1 << endl << endl;
+            cout << "Intrinsics2 = "<< endl << " "  << Intrinsics2 << endl << endl;
+            cout << "----------------------------------" << endl;
+            cout << "Translation = "<< endl << " "  << vTrans * fSquareSize << endl << endl;
+            cout << "Rotation = "<< endl << " "  << vRot << endl << endl;
+//             [-0.009325362943876125; -0.04070539569298045; -0.0268853648137168
         }
-        */
+
 
         //----------------------------------------------------------------------------------------
 

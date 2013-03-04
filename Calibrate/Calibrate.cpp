@@ -36,8 +36,8 @@ int main(int argc, char** argv)
     // initial capture to obtain image dimensions
     Cam.Capture( vImages );
 
-    const unsigned int nImgWidth = vImages[0].Image.cols / 2;
-    const unsigned int nImgHeight = vImages[0].Image.rows / 2;
+    const unsigned int nImgWidth = vImages[0].Image.cols;
+    const unsigned int nImgHeight = vImages[0].Image.rows;
     std::cout << "Image Dimensions: " << nImgWidth << " x " << nImgHeight << std::endl;
 
 
@@ -101,11 +101,14 @@ int main(int argc, char** argv)
 
         Cam.Capture( vImages );
 
+        //----- convert InfraRed to greyscale
+        vImages[0].Image.convertTo( GreyImg, CV_8UC1 );
+
         // which one is it?
 //        ColorImg = vImages[0].Image;
 //        cv::resize( vImages[0].Image, ColorImg, cv::Size(0,0), 0.5, 0.5 );
 //        GreyImg = vImages[0].Image;
-        cv::resize( vImages[0].Image, GreyImg, cv::Size(0,0), 0.5, 0.5 );
+//        cv::resize( vImages[0].Image, GreyImg, cv::Size(0,0), 0.5, 0.5 );
 
         //----- convert greyscale to RGB
         cv::cvtColor( GreyImg, ColorImg, CV_GRAY2RGB );
