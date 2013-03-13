@@ -1,20 +1,13 @@
-/*
-   \file TransformEdge.h defines an edge in a SlamMap and the associated Transform.
-
-   $Id$
- */
-
-
 #ifndef _TRANSFORM_EDGE_H_
 #define _TRANSFORM_EDGE_H_
 
-#include <Utils/MathTypes.h>
+#include <Eigen/Dense>
 
 class TransformEdge
 {
     public:
         //////////////////////////////////////////////////////////////////////////////////////////
-        TransformEdge( 
+        TransformEdge(
                 const unsigned int uStartId,//< Input: Frame ID of edge start
                 const unsigned int uEndId,  //< Input: Frame ID of edge end
                 Eigen::Matrix4d Tab = Eigen::Matrix4d::Identity() //< Input: optional transform
@@ -27,7 +20,7 @@ class TransformEdge
             m_uEndId = rRHS.m_uEndId;
             m_dTab = rRHS.m_dTab;
         }
-    
+
         //////////////////////////////////////////////////////
         TransformEdge& operator=( const TransformEdge& rRHS )
         {

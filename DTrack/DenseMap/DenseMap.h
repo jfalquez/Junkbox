@@ -4,13 +4,13 @@
 #include <map>
 #include <boost/shared_ptr.hpp>
 
-#include <DenseMap/ReferenceFrame.h>
-#include <DenseMap/TransformEdge.h>
+#include "ReferenceFrame.h"
+#include "TransformEdge.h"
 
 typedef boost::shared_ptr< ReferenceFrame >  FramePtr;
 typedef boost::shared_ptr< TransformEdge >   EdgePtr;
 
-class Map
+class DenseMap
 {
 public:
 
@@ -43,10 +43,6 @@ public:
     EdgePtr GetEdgePtr( unsigned int uEdgeId );
 
     ////////////////////////////////////////////////////////////////////////////////////////
-    // return reference to frame
-    FramePtr GetFramePtr( MeasurementId nId );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
     FramePtr GetFramePtr( unsigned int uFrameId );
 
     ////////////////////////////////////////////////////////////////////////////////////////
@@ -60,13 +56,6 @@ public:
                                   Eigen::Matrix4d& dTab );      //< Output: Found transform from parent to child
 
     ////////////////////////////////////////////////////////////////////////////////////////
-    // return reference to landmark
-    Eigen::Vector4d& LandmarkPos( MeasurementId nId );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    Eigen::Vector4d& LandmarkWorkRef( MeasurementId nId );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
     // set the transform between two frames:
     void SetRelativePose( int nStartId, int nEndId, Eigen::Matrix4d& Tab );
 
@@ -77,32 +66,6 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////
     /// Return smart pointer to frames "parent"
     FramePtr GetParentFramePtr( unsigned int uChildFrameId );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // Return reference in TargetMsr to measurement identified by SourceMsr but in a particular frame. True if found, false otherwise.
-    bool GetMeasurementInFrame( Measurement SourceMsr, unsigned int uFrameId, Measurement& TargetMsr );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // Return reference in Msr to measurement identified by a Frame Id and a local measurement index. True if found, false otherwise.
-    bool GetMeasurementInFrame( unsigned int uFrameId, unsigned int uMsrLocalIndex, Measurement& Msr);
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // Return reference to measuement based on measurement Id
-    bool GetMeasurement(
-            const MeasurementId& nId, //< Input:
-            Measurement& Msr  //< Output:
-            );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    void GetPtrsToLandmarks( std::vector<Landmark*>& rvpLandmarks );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // Return reference in Landmark corresponding to given measurement
-    Landmark& GetLandmarkRef( Measurement Msr );
-
-        ////////////////////////////////////////////////////////////////////////////////////////
-    // Return reference in Landmark corresponding to given measurement
-    Landmark& GetLandmarkRef( LandmarkId Id );
 
     ////////////////////////////////////////////////////////////////////////////////////////
     std::vector<EdgePtr>& GetEdges() {return m_vEdges;}
@@ -124,23 +87,6 @@ public:
     void ResetNodes();
 
     ////////////////////////////////////////////////////////////////////////////////////////
-    /// unrelated to sliding window -- just get
-    unsigned int   GetNodesInsideWindowBFS(
-            std::map<unsigned int, Eigen::Matrix4d>& absolutePoses,
-            std::map<LandmarkId, Landmark*>&         landmarks,
-            std::vector<unsigned int>&               constantPosesIds,
-            unsigned int                             nDepth = 10
-            );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    void GetNodesOutsideWindowBFS(
-            const unsigned int&                      uRootId,
-            std::vector<unsigned int>&               PosesIds,
-            std::map<unsigned int, Eigen::Matrix4d>& absolutePoses,
-            int                                      nDepth
-            );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
     void UpdateRelativeNodes(  std::map<unsigned int, Eigen::Matrix4d>& absolutePoses );
 
     ////////////////////////////////////////////////////////////////////////////////////////
@@ -148,7 +94,7 @@ public:
     // TODO for large copies, this could break the front end update speed.  Fix this by making
     // the copy process a separate thread and having it only copy for a fixed amount of time
     // until giving up control to the front end.
-    void CopyMapChanges( Map& rRHS )
+    void CopyMapChanges( DenseMap& rRHS )
     {
         //if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
         //    return; // nothing to do, map is up-to date

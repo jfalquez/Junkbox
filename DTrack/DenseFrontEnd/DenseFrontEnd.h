@@ -2,13 +2,15 @@
 #ifndef _DENSE_FRONT_END_H_
 #define _DENSE_FRONT_END_H_
 
-#include <map>
-#include <vector>
-#include <deque>
+#include <Eigen/Dense>
+#include <boost/thread.hpp>
+
+#include <RPG/Utils/ImageWrapper.h>
 
 #include <DenseMap/DenseMap.h>
 
-#include <RPG/Utils/ImageWrapper.h>
+#include "Timer.h"
+
 
 typedef std::vector< rpg::ImageWrapper >               CamImages;
 
@@ -21,9 +23,21 @@ typedef std::vector< rpg::ImageWrapper >               CamImages;
  * or if no map is given it will generate keyframes. It is RESPONSABILITY of the
  * application calling this method to PACK correctly the images for the FrontEnd!!
  *
+ * The PACKing must have:
+ * - Image1 as GREYSCALE CV_8UC1 format.
+ * - Image2 as DEPTH CV_32FC1 format in METERS.
+ *
  */
 
-//////////////////////////////////////////////////////////////////////////////////////////
+enum eTrackingState
+{
+    eTrackingGood = 1,
+    eTrackingPoor = 2,
+    eTrackingBad  = 4,
+    eTrackingFail = 8
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class DenseFrontEnd
 {
 
@@ -33,62 +47,58 @@ public:
 
     ~DenseFrontEnd();
 
+    // need to pass:
+    // K for greyscale camera.
+    // K for depth camera (in some cases these are the same).
+    // Tid = Transform between intensity sensor (greyscale) and depth sensor.
     bool Init(
-            const VehicleConfig&  Cfg,    //< Input: holds camera models etc.
-            CamImages&            frames, //< Input: captured rectified stereo-pair
-            Map*                  pMap,   //< Input: pointer to the map we should use
-            );
+            const CamImages&        vImages,    //< Input: Camera Capture
+            Eigen::Matrix3d         Ki,         //< Input: Intensity camera's intrinsics
+            Eigen::Matrix3d         Kd,         //< Input: Depth camera's intrinsics
+            Eigen::Matrix4d         Tid,        //< Input: Transform between intensity and depth camera
+            DenseMap*               pMap,       //< Input: Pointer to the map that should be used
+            Timer*                  pTimer      //< Input: Pointer to timer
+        );
 
-
-    bool Iterate(CamFrames& frames);
+    bool Iterate(
+            const CamImages&        vImages     //< Input: Camera Capture
+        );
 
     Eigen::Matrix4d GetCurrentPose();
 
-    std::map< std::string, float > SystemStatus();
+    bool TrackingBad()
+    {
+        return m_eTrackingState == eTrackingBad;
+    }
 
-
-    //////////////////////////////////////////////////////////////
-    /// Private member functions
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
-
-    void _Clear();
 
     void _SetCurTime( double dCurTime );
 
     // This function will localize a given frame against a reference frame
     bool _EstimateRelativePose( FramePtr pFrameA,
             FramePtr pFrameB,
-            Eigen::Matrix4d& Tab );
+            Eigen::Matrix4d& Tab
+        );
 
-    //////////////////////////////////////////////////////////////
-    /// Private member data
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
 
-    unsigned long int                  m_nFrameIndex;              // frame index counter
-    unsigned int                       m_nNumMITMatches;
-    unsigned int                       m_nNumTrackedLandmarks;
-    unsigned int                       m_nNumNewLandmarks;
-    double                             m_dCurTime;
-    double                             m_dTrackedFeat;
-    double                             m_dMeanReprojectionError;
-    double                             m_dEstDistanceTraveled;
-    double                             m_dMeanTrackLength;
-    double                             m_dInlierNoiseError;
-    double                             m_dLearningRate;
+    unsigned long int                   m_nFrameIndex;              // frame index counter
+    double                              m_dCurTime;
+    eTrackingState                      m_eTrackingState;
 
-    FramePtr                       m_pCurFrame;
-    FramePtr                       m_pPrevFrame;
+    FramePtr                            m_pCurFrame;
+    FramePtr                            m_pPrevFrame;
 
-    VehicleConfig                      m_VehicleConfig;            // holds configuration info about the robot
-    Map*                               m_pMap;                     // map
+    Timer*                              m_pTimer;
 
+    DenseMap*                           m_pMap;                     // map
 
-    Eigen::Matrix4d                    m_dGlobalPose;              // global pose for display w.r.t first frame
-    std::vector<Eigen::Vector6d>       m_vGroundTruth;
-    FeatureHandler                     m_vFeatureHandlers[NUM_CAMERAS]; // two because they run in separate threads!
-    boost::threadpool::pool*           m_pThreadPool0;
-    boost::threadpool::pool*           m_pThreadPool1;
-    boost::mutex                       m_Mutex;
+    Eigen::Matrix4d                     m_dGlobalPose;              // global pose for display w.r.t first frame
+    boost::mutex                        m_Mutex;
 };
 
 

@@ -225,6 +225,7 @@ int main(int argc, char** argv)
     Eigen::Matrix4d Tcd;
     if( g_bAligned == false ) {
         Tcd(0,4) = pCam->GetProperty<double>("Depth0Baseline", 0) / 100;
+        std::cout << "Baseline: " << Tcd(0,4) << std::endl;
     }
     /*
     Tcd <<  0.9992665017642554, -0.00796822821816846, 0.03745618494842504, -0.007875168421226117,

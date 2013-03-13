@@ -2,6 +2,7 @@ CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
 
 PROJECT( KinectLoop )
 
+FIND_PACKAGE( Eigen3 REQUIRED )
 FIND_PACKAGE( RPG REQUIRED )
 FIND_PACKAGE( Pangolin REQUIRED )
 FIND_PACKAGE( SceneGraph REQUIRED )
@@ -11,6 +12,8 @@ FIND_PACKAGE( Sophus REQUIRED )
 #FIND_PACKAGE( CeresSolver REQUIRED )
 #FIND_PACKAGE( SensorFusion REQUIRED )
 
+INCLUDE_DIRECTORIES( ${CMAKE_SOURCE_DIR} )
+INCLUDE_DIRECTORIES( ${EIGEN3_INCLUDE_DIR} )
 INCLUDE_DIRECTORIES( ${RPG_INCLUDE_DIRS} )
 INCLUDE_DIRECTORIES( ${Pangolin_INCLUDE_DIRS} )
 INCLUDE_DIRECTORIES( ${SceneGraph_INCLUDE_DIRS} )
@@ -44,8 +47,7 @@ ADD_EXECUTABLE( KinectLoop ${HDRS} ${SRCS} )
 
 TARGET_LINK_LIBRARIES( KinectLoop
                         DenseMap
-                        BackEnd
-                        FrontEnd
+                        DenseFrontEnd
                         ${RPG_LIBRARIES}
                         ${Pangolin_LIBRARIES}
                         ${SceneGraph_LIBRARIES}
@@ -54,5 +56,5 @@ TARGET_LINK_LIBRARIES( KinectLoop
                         ${Sophus_LIBRARIES}
 #                        ${CeresSolver_LIBRARIES}
 #                        ${SENSORFUSION_LIBRARIES}
-                     )                
+                     )
 

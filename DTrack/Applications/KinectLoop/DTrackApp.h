@@ -5,6 +5,7 @@
 //#include <opencv2/opencv.hpp>
 
 #include <RPG/Utils/InitCam.h>
+#include <Mvlpp/Mvl.h>
 #include <DenseFrontEnd/DenseFrontEnd.h>
 
 #include "Gui.h"
@@ -13,161 +14,157 @@ class DTrackApp
 {
     public:
 
-        /////////////////////////////////////////////////////////////////////////////
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         DTrackApp()
         {
             m_pFrontEnd = NULL;
             m_pMap = NULL;
+            m_pTimer = NULL;
         }
 
-        /////////////////////////////////////////////////////////////////////////////
-        bool InitResetCameras(
-                int argc,                       //< Input:
-                char** argv,                    //< Input:
-                CameraDevice& camera,           //< Output:
-                VehicleConfig& vconfig,         //< Output:
-                mvl::StereoRectification& srect //< Output:
-                )
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        bool InitResetCamera(
+                int         argc,                       //< Input:
+                char**      argv                        //< Input:
+            )
         {
-            // Initialize camera
-            if( !rpg::InitCam(camera,argc,argv) ){
+            // parse command line arguments
+            GetPot clArgs( argc, argv );
+
+            // initialize camera
+            if( !rpg::InitCam( m_Cam, clArgs ) ) {
                 return false;
             }
 
             // Initialize vehicle configuration
-            std::string src_dir    = camera.GetProperty( "DataSourceDir", "." );
-            std::string lcmod_file = camera.GetProperty( "CamModel-L", "" );
-            std::string rcmod_file = camera.GetProperty( "CamModel-R", "" );
+            std::string src_dir             = m_Cam.GetProperty( "DataSourceDir", "." );
+            std::string intensity_cmod_file = clArgs.follow( "cmod_i.xml", "-icmod" );
+            std::string depth_cmod_file     = clArgs.follow( "cmod_d.xml", "-dcmod" );
 
-            if( lcmod_file.empty() || rcmod_file.empty() ) {
-                std::cerr << "ERROR: Camera model not provided > Vehicle config not initialized!" << std::endl;
-                return false;
-            } else {
-                // load vehicle config (k matrix, pose)
-                mvl::CameraModel left_camera_model(  src_dir + "/" + lcmod_file );
-                mvl::CameraModel right_camera_model( src_dir + "/" + rcmod_file );
+            // load camera models (k matrix, pose)
+            mvl::CameraModel intensity_camera_model;
+            mvl::CameraModel depth_camera_model;
 
-                srect.Init(left_camera_model,right_camera_model);
-
-                vconfig.m_dIntrinsics[0]  = srect.GetRectK(0);
-                vconfig.m_dIntrinsics[1]  = srect.GetRectK(1);
-                vconfig.m_vSensorPoses[0] = srect.GetRectPose(0);
-                vconfig.m_vSensorPoses[1] = srect.GetRectPose(1);
-                mvl::Print( vconfig.m_dIntrinsics[0], "Left Cam Model" );
-                mvl::Print( vconfig.m_dIntrinsics[1], "Right Cam Model" );
-                mvl::Print( vconfig.m_vSensorPoses[0], "Left Sensor Pose" );
-                mvl::Print( vconfig.m_vSensorPoses[1], "Right Sensor Pose" );
+            if( !intensity_camera_model.Read( src_dir + "/" + intensity_cmod_file ) ) {
+                std::cerr << "ERROR: Failed to open intensity camera file." << std::endl;
+                exit(0);
             }
+            if( !depth_camera_model.Read( src_dir + "/" + depth_cmod_file ) ) {
+                std::cerr << "ERROR: Failed to open depth camera file." << std::endl;
+                exit(0);
+            }
+
+            m_Ki = intensity_camera_model.K();
+            m_Kd = depth_camera_model.K();
+            m_Tid = depth_camera_model.GetPose();
+
+            std::cout << "Intensity Cam Model: " << std::endl << m_Ki << std::endl << std::endl;
+            std::cout << "Depth Cam Model: " << std::endl << m_Kd << std::endl << std::endl;
+            std::cout << "Tid: " << std::endl << m_Tid << std::endl << std::endl;
+
             return true;
         }
 
 
-        /////////////////////////////////////////////////////////////////////////////
-        bool InitReset( int argc, char** argv )
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        bool InitReset(
+                int         argc,                       //< Input:
+                char**      argv                        //< Input:
+            )
         {
-            frames.clear();
-            rframes.clear();
-
-            // Initialize odometry engine with the first stero-pair
-            frames.resize(2);
-            rframes.resize(2);
-
-            // Initialize system
-            if( !InitResetCameras(argc,argv,camera,vconfig,srect) ){
+            // initialize system
+            if( !InitResetCamera( argc, argv ) ) {
                 exit(0);
             }
 
-            camera.Capture(frames);
-            srect.Rectify( frames[0].Image,frames[1].Image,rframes[0].Image,rframes[1].Image );
-            improc.DoStereoBrightnessCorrection( rframes[0].Image, rframes[1].Image );
+            m_vImages.clear();
+            m_Cam.Capture( m_vImages );
+            _UnpackImages( m_vImages );
 
-            if( m_pTimer ){
+            if( m_pTimer ) {
                 delete m_pTimer;
             }
             m_pTimer = new Timer;
 
-
-            if( m_pMap ){
+            if( m_pMap ) {
                 delete m_pMap;
             }
-            m_pMap = new Map;
+            m_pMap = new DenseMap;
 
-            if( m_pFrontEnd ){
+            if( m_pFrontEnd ) {
                 delete m_pFrontEnd;
             }
             m_pFrontEnd = new DenseFrontEnd;
-            m_pFrontEnd->Init( vconfig, rframes, m_pMap, m_pTimer );
+            m_pFrontEnd->Init( m_vImages, m_Ki, m_Kd, m_Tid, m_pMap, m_pTimer );
 
             return true;
         }
 
-        /////////////////////////////////////////////////////////////////////////////
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         void StepOnce( Gui& rGui )
         {
-            bool bRes = camera.Capture( frames );
-            if( bRes ){
-                m_pFrontEnd->Tic();
-                srect.Rectify( frames[0].Image, frames[1].Image, rframes[0].Image, rframes[1].Image );
-                improc.DoStereoBrightnessCorrection( rframes[0].Image, rframes[1].Image );
-                m_pFrontEnd->Iterate( rframes );
-                m_pFrontEnd->GetAnalytics( analytics );
-
-                // update the gui
-                rGui.SetVehicleConfig( vconfig );
-
-                rGui.CopyMapChanges( *m_pMap );
-
-                rGui.UpdateFrames( rframes[0].Image, rframes[1].Image );
-
-                rGui.UpdateKeypoints(
-                        m_pFrontEnd->GetCurrentKeypointsForDisplay(0),
-                        m_pFrontEnd->GetCurrentKeypointsForDisplay(1) );
-
-                rGui.UpdateActiveLandmarks( m_pFrontEnd->GetActiveLandmarks() );
-
-                m_pFrontEnd->Toc();
-                rGui.UpdateTimer( m_pTimer->GetWindowSize(), m_pTimer->GetNames(3), m_pTimer->GetTimes(3) );
-                rGui.UpdateAnalytics( analytics );
+            if( m_Cam.Capture( m_vImages ) ) {
+                _UnpackImages( m_vImages );
+//                m_pFrontEnd->Iterate( rframes );
 
                 if( m_pFrontEnd->TrackingBad() ){
                     rGui.SetState( PAUSED );
                 }
-            }else{
+            } else {
                 rGui.SetState( PAUSED );
             }
         }
 
-        /////////////////////////////////////////////////////////////////////////////
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         void UpdateGui( Gui& rGui )
         {
-            rGui.SetVehicleConfig( vconfig );
+//            rGui.CopyMapChanges( *m_pMap );
 
-            rGui.CopyMapChanges( *m_pMap );
+            rGui.UpdateImages( m_vImages[0].Image );
 
-            rGui.UpdateFrames( rframes[0].Image, rframes[1].Image );
+//            rGui.UpdateTimer( m_pTimer->GetWindowSize(), m_pTimer->GetNames(3), m_pTimer->GetTimes(3) );
 
-            rGui.UpdateKeypoints(
-                    m_pFrontEnd->GetCurrentKeypointsForDisplay(0),
-                    m_pFrontEnd->GetCurrentKeypointsForDisplay(1)
-                    );
-
-            rGui.UpdateTimer( m_pTimer->GetWindowSize(),
-                             m_pTimer->GetNames(3), m_pTimer->GetTimes(3) );
-
-            rGui.UpdateAnalytics( analytics );
-
-            rGui.UpdateActiveLandmarks( m_pFrontEnd->GetActiveLandmarks() );
         }
 
-        /////////////////////////////////////////////////////////////////////////////
-    private:
-        DenseFrontEnd*             m_pFrontEnd;
-        Map*                       m_pMap;
 
-        mvl::StereoRectification   srect;
-        CameraDevice               camera;
-        VehicleConfig              vconfig;
+    private:
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        void _UnpackImages(
+                CamImages&          vImages    //< Input/Output
+            )
+        {
+            // this converts images from the kinect to the expected format of DTrack
+            cv::Mat Tmp;
+
+            // convert RGB to GREYSCALE
+            cv::cvtColor( vImages[0].Image, vImages[0].Image, CV_RGB2GRAY, 1 );
+
+            // check if second image is provided, if so we assume it is the DEPTH image
+            if( vImages.size() > 1 ) {
+                // convert 16U to 32FC1
+                vImages[1].Image.convertTo( Tmp, CV_32FC1 );
+
+                // convert mm to m
+                Tmp = Tmp / 1000;
+
+                vImages[1].Image = Tmp;
+            }
+        }
+
+
+    private:
+
+        CameraDevice                m_Cam;          // camera handler
+        CamImages                   m_vImages;      // camera images
+        Eigen::Matrix3d             m_Ki;           // intensity (ie. greyscale) camera's intrinsics
+        Eigen::Matrix3d             m_Kd;           // depth camera's intrinsics
+        Eigen::Matrix4d             m_Tid;          // depth camera's pose w.r.t. the greyscale camera
+
+        DenseFrontEnd*              m_pFrontEnd;
+        DenseMap*                   m_pMap;
+        Timer*                      m_pTimer;
 };
 
 #endif
-

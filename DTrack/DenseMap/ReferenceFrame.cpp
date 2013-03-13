@@ -1,3 +1,5 @@
+#include <assert.h>
+
 #include "ReferenceFrame.h"
 
 ReferenceFrame::ReferenceFrame()
@@ -5,18 +7,17 @@ ReferenceFrame::ReferenceFrame()
                  m_uColor(0),
                  m_uDepth(0),
                  m_uParentEdgeId(NO_PARENT)
-{	
+{
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Set the ID of this frame.  SlamMap is responsible for all frames.
 void ReferenceFrame::SetId( unsigned int uId )
 {
     m_uId = uId;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void ReferenceFrame::SetTime( double dTime ) 
+void ReferenceFrame::SetTime( double dTime )
 {
     m_dSensorTime = dTime;
 }
@@ -59,50 +60,38 @@ void ReferenceFrame::SetBrokenLink()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::Id() 
+unsigned int ReferenceFrame::Id()
 {
     return m_uId;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::Color() 
+unsigned int ReferenceFrame::Color()
 {
     return m_uColor;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::Depth() 
+unsigned int ReferenceFrame::Depth()
 {
     return m_uDepth;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::NumNeighbors() 
+unsigned int ReferenceFrame::NumNeighbors()
 {
     return m_vNeighborEdgeIds.size();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::NumLandmarks() 
-{
-    return m_vLandmarks.size();
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::NumMeasurements() 
-{
-    return m_vMeasurements.size();
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::GetNeighborEdgeId( unsigned int uIdx ) 
+unsigned int ReferenceFrame::GetNeighborEdgeId( unsigned int uIdx )
 {
     assert(uIdx < m_vNeighborEdgeIds.size());
     return m_vNeighborEdgeIds[uIdx];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-double ReferenceFrame::Time() 
+double ReferenceFrame::Time()
 {
     return m_dSensorTime;
 }
@@ -117,64 +106,7 @@ void ReferenceFrame::AddNeighbor( unsigned int uEdgeId )
 /// HACK hand out reference to our private data
 std::vector<unsigned int>& ReferenceFrame::Neighbors()
 {
-    return m_vNeighborEdgeIds; 
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Return a reference to the vector of landmarks for this frame
-std::vector<Landmark>& ReferenceFrame::GetLandmarksVectorRef( )
-{
-    return m_vLandmarks;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Return a reference to the vector of measurements in a particular camera
-std::vector<Measurement>& ReferenceFrame::GetMeasurementsVectorRef() 
-{
-    return m_vMeasurements;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// Return the vector of measurements in a particular camera
-std::vector<Measurement> ReferenceFrame::GetMeasurementsVector() 
-{
-    return m_vMeasurements;
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-Eigen::Vector4d& ReferenceFrame::LandmarkPos( unsigned int uLandmarkIndex )
-{
-    assert( m_vLandmarks.size() > uLandmarkIndex );
-    return m_vLandmarks[ uLandmarkIndex ].Pos();
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-Eigen::Vector4d& ReferenceFrame::LandmarkWorkRef( unsigned int uLandmarkIndex )
-{
-    assert( m_vLandmarks.size() > uLandmarkIndex );
-    return m_vLandmarks[ uLandmarkIndex ].WorkRef();
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-Measurement& ReferenceFrame::GetMeasurement( unsigned int uMeasurementIndex )
-{
-    assert( m_vMeasurements.size() > uMeasurementIndex );
-    return m_vMeasurements[ uMeasurementIndex ];
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-Measurement& ReferenceFrame::GetMeasurement( MeasurementId& zId )
-{
-    assert( zId.m_nFrameId == m_uId );
-    return m_vMeasurements[ zId.m_nLocalIndex ];
-}
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
-Landmark&    ReferenceFrame::GetLandmark( unsigned int uLandmarkIndex )
-{
-    assert( m_vLandmarks.size() > uLandmarkIndex );
-    return m_vLandmarks[ uLandmarkIndex ];
+    return m_vNeighborEdgeIds;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
