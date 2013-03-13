@@ -1,6 +1,6 @@
 cmake_minimum_required( VERSION 2.8 )
 
-project( DTrack )
+project( DenseTracker )
 
 find_package( Pangolin REQUIRED )
 find_package( SceneGraph REQUIRED )
@@ -38,9 +38,9 @@ list(APPEND SRCS
 )
 
 
-add_executable( DTrack ${HDRS} ${SRCS} )
+add_executable( DenseTracker ${HDRS} ${SRCS} )
 
-target_link_libraries( DTrack
+target_link_libraries( DenseTracker
                         ${Pangolin_LIBRARIES}
                         ${SceneGraph_LIBRARIES}
                         ${Kangaroo_LIBRARIES}

@@ -102,12 +102,12 @@ int main(int argc, char** argv)
         Cam.Capture( vImages );
 
         //----- convert InfraRed to greyscale
-        vImages[0].Image.convertTo( GreyImg, CV_8UC1 );
+//        vImages[0].Image.convertTo( GreyImg, CV_8UC1 );
 
         // which one is it?
 //        ColorImg = vImages[0].Image;
 //        cv::resize( vImages[0].Image, ColorImg, cv::Size(0,0), 0.5, 0.5 );
-//        GreyImg = vImages[0].Image;
+        GreyImg = vImages[0].Image;
 //        cv::resize( vImages[0].Image, GreyImg, cv::Size(0,0), 0.5, 0.5 );
 
         //----- convert greyscale to RGB
@@ -154,9 +154,15 @@ int main(int argc, char** argv)
 
         if( pangolin::Pushed( ui_btnCalibrate ) ) {
             cout << "Calibrating..." << endl;
-            double error = cv::calibrateCamera( vObjectPts, vImagePts, ColorImg.size(), Intrinsics, Distortion, vRot, vTrans );
+            int Flags = 0;
+//            int Flags = cv::CALIB_ZERO_TANGENT_DIST | cv::CALIB_SAME_FOCAL_LENGTH | cv::CALIB_FIX_K1 | cv::CALIB_FIX_K2
+//                    | cv::CALIB_FIX_K3| cv::CALIB_FIX_K4 | cv::CALIB_FIX_K5 | cv::CALIB_FIX_K6;
+            cv::TermCriteria Criteria = cv::TermCriteria( cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 50, DBL_EPSILON );
+            double error = cv::calibrateCamera( vObjectPts, vImagePts, ColorImg.size(), Intrinsics,
+                                                Distortion, vRot, vTrans, Flags, Criteria );
             ui_dCalError = error;
-            cout << "... Done!" << endl << endl;
+            cout << "... Done! ( Error: " << error << " )" << endl << endl;
+            cout << "Distortion = "<< endl << " "  << Distortion << endl << endl;
             cout << "Intrinsics = "<< endl << " "  << Intrinsics << endl << endl;
         }
 

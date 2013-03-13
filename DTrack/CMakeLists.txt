@@ -1,50 +1,17 @@
-cmake_minimum_required( VERSION 2.8 )
+CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
 
-project( DTrack )
+PROJECT( DTrack )
 
-find_package( Pangolin REQUIRED )
-find_package( SceneGraph REQUIRED )
-find_package( Kangaroo REQUIRED )
-find_package( Sophus REQUIRED )
-find_package( RPG REQUIRED )
-find_package( MVL REQUIRED )
-find_package( SensorFusion REQUIRED )
+LIST( APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/CMakeModules/" )
 
-include_directories( ${Pangolin_INCLUDE_DIRS} )
-include_directories( ${SceneGraph_INCLUDE_DIRS} )
-include_directories( ${Kangaroo_INCLUDE_DIRS} )
-include_directories( ${Sophus_INCLUDE_DIR} )
-include_directories( ${RPG_INCLUDE_DIRS} )
-include_directories( ${MVL_INCLUDE_DIRS} )
-include_directories( ${SENSORFUSION_INCLUDE_DIRS} )
-
-link_directories( ${Pangolin_LIBRARY_DIRS} )
-
-IF(CMAKE_COMPILER_IS_GNUCXX)
- SET(CMAKE_CXX_FLAGS "-std=c++11 -g")
+# Overide with cmake -DCMAKE_BUILD_TYPE=Debug {dir}
+IF( NOT CMAKE_BUILD_TYPE )
+   MESSAGE("Build type not set (defaults to release)")
+   MESSAGE("-DCMAKE_BUILD_TYPE=Debug for debug")
+   SET( CMAKE_BUILD_TYPE Release )
 ENDIF()
 
-list(APPEND HDRS
-    Common.h
-    GpuHelpers.h
-    InitCamera.h
-    Keyframes.h
-    StreamHelpers.h
-    GLPath.h
-)
-
-list(APPEND SRCS
-    DTrack.cpp
-)
-
-
-add_executable( DTrack ${HDRS} ${SRCS} )
-
-target_link_libraries( DTrack
-                        ${Pangolin_LIBRARIES}
-                        ${SceneGraph_LIBRARIES}
-                        ${Kangaroo_LIBRARIES}
-                        ${RPG_LIBRARIES}
-                        ${MVL_LIBRARIES}
-                        ${SENSORFUSION_LIBRARIES}
-                     )
+ADD_SUBDIRECTORY( DenseMap )
+ADD_SUBDIRECTORY( DenseFrontEnd )
+#ADD_SUBDIRECTORY( DenseBackEnd )
+ADD_SUBDIRECTORY( Applications )

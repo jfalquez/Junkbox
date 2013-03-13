@@ -42,7 +42,10 @@ int main(int argc, char** argv)
 
 
     // initialize camera
-    Cam1.InitDriver( "Flycap" );
+//    Cam1.SetProperty( "Rectify", true );
+//    Cam1.SetProperty( "ForceGreyscale", true );
+//    Cam1.InitDriver( "Bumblebee2" );
+    Cam1.InitDriver( "FireFly" );
 
 
     Cam2.SetProperty( "GetRGB", false );
@@ -54,8 +57,8 @@ int main(int argc, char** argv)
     // initial capture to obtain image dimensions
     Cam1.Capture( vImages1 );
 
-    const unsigned int nImgWidth1 = vImages1[0].Image.cols / 2;
-    const unsigned int nImgHeight1 = vImages1[0].Image.rows / 2;
+    const unsigned int nImgWidth1 = vImages1[0].Image.cols;
+    const unsigned int nImgHeight1 = vImages1[0].Image.rows;
     std::cout << "Image #1 Dimensions: " << nImgWidth1 << " x " << nImgHeight1 << std::endl;
 
     Cam2.Capture( vImages2 );
@@ -129,10 +132,11 @@ int main(int argc, char** argv)
 
 //    cv::Mat             Intrinsics1 = cv::Mat( 3, 3, CV_32FC1 );
     // K hint for Cam1
-    cv::Mat Intrinsics1 = (cv::Mat_<float>(3,3) << 522.2944442240872, 0, 318.6838191881208,
-                                                   0, 518.9897525108679, 247.8469145984651,
-                                                   0, 0, 1);
-    cv::Mat             Distortion1;
+    cv::Mat Intrinsics1 = (cv::Mat_<float>(3,3) <<    655.0681058933573, 0, 329.3888800064832,
+                                                      0, 651.5601207003715, 249.7271121691255,
+                                                      0, 0, 1);
+//    cv::Mat             Distortion1;
+    cv::Mat Distortion1 = (cv::Mat_<float>(1,5) <<   -0.4309355351200019, 0.2749971654145275, 0.002517876773074356, -0.0003738676467441764, -0.1696187437955576);
 
 
 //    cv::Mat             Intrinsics2 = cv::Mat( 3, 3, CV_32FC1 );
@@ -155,10 +159,11 @@ int main(int argc, char** argv)
         Cam1.Capture( vImages1 );
 
         // which one is it?
-//        ColorImg = vImages1[0].Image;
-//        cv::resize( vImages1[0].Image, ColorImg, cv::Size(0,0), 0.5, 0.5 );
-//        GreyImg = vImages1[0].Image;
-        cv::resize( vImages1[0].Image, GreyImg1, cv::Size(0,0), 0.5, 0.5 );
+//        ColorImg1 = vImages1[0].Image;
+//        cv::resize( vImages1[0].Image, ColorImg1, cv::Size(0,0), 0.5, 0.5 );
+        cv::undistort( vImages1[0].Image, GreyImg1, Intrinsics1, Distortion1);
+//        GreyImg1 = vImages1[0].Image;
+//        cv::resize( vImages1[0].Image, GreyImg1, cv::Size(0,0), 0.5, 0.5 );
 
         //----- convert greyscale to RGB
         cv::cvtColor( GreyImg1, ColorImg1, CV_GRAY2RGB );
@@ -236,7 +241,7 @@ int main(int argc, char** argv)
                                                 Intrinsics1, Distortion1, Intrinsics2, Distortion2,
                                                 ColorImg1.size(), vRot, vTrans, vE, vF,
                                                 cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 1e-6),
-                                                cv::CALIB_USE_INTRINSIC_GUESS | cv::CALIB_SAME_FOCAL_LENGTH );
+                                                cv::CALIB_FIX_INTRINSIC );
             ui_dCalError = error;
             cout << "... Done!" << endl << endl;
             cout << "Intrinsics1 = "<< endl << " "  << Intrinsics1 << endl << endl;

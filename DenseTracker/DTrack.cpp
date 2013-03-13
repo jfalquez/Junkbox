@@ -222,17 +222,23 @@ int main(int argc, char** argv)
     CameraDevice* pCam = InitCamera( &cl );
 
     // color to depth calibration.. if aligned, T_cd = I4
-    Sophus::SE3d Tcd;
+    Eigen::Matrix4d Tcd;
     if( g_bAligned == false ) {
-        const double baseline_m = pCam->GetProperty<double>("Depth0Baseline", 0) / 100;
-        Eigen::Vector3d c_d( baseline_m, 0, 0 );
-        Tcd = Sophus::SE3d( Sophus::SO3(), c_d ).inverse();
+        Tcd(0,4) = pCam->GetProperty<double>("Depth0Baseline", 0) / 100;
     }
+    /*
+    Tcd <<  0.9992665017642554, -0.00796822821816846, 0.03745618494842504, -0.007875168421226117,
+            0.007999328442815506, 0.9999677733021591, -0.0006805156762577497, -0.03780141340682321,
+            -0.03744955535505597, 0.0009796408448271114, 0.999298039179265, 0.02700363094655044,
+            0, 0, 0, 1;
+    /* */
 
     // read camera model file
     cout << "Loading camera model file..." << endl;
-    CameraModelPyramid CamModel( pCam->GetProperty( "CamModFileName" ) );
-    CamModel.PopulatePyramid(MAX_PYR_LEVELS);
+    CameraModelPyramid CamModel_I( pCam->GetProperty( "CamModFileName" ) );
+    CameraModelPyramid CamModel_D( pCam->GetProperty( "CamModFileName" ) );
+    CamModel_I.PopulatePyramid(MAX_PYR_LEVELS);
+    CamModel_D.PopulatePyramid(MAX_PYR_LEVELS);
     cout << "... Done!" << endl;
 
 #ifdef SENSOR_FUSION
@@ -275,17 +281,17 @@ int main(int argc, char** argv)
 
     // convert disparity to depth map
     if( g_bDisparityMaps ) {
-        Disp2Depth( dVars, DepthImage, CamModel.K()(0,0), CamModel.GetPose()( 1, 3 ) );
+        Disp2Depth( dVars, DepthImage, CamModel_D.K()(0,0), CamModel_D.GetPose()( 1, 3 ) );
     }
 
     // print some info
     cout << "Initial Config ____________________________________________________" << endl;
-    cout << "-- Image Width: " << CamModel.Width() << endl;
-    cout << "-- Image Height: " << CamModel.Height() << endl;
+    cout << "-- Image Width: " << CamModel_I.Width() << endl;
+    cout << "-- Image Height: " << CamModel_I.Height() << endl;
     cout << "-- Thumbnails Width: " << nThumbWidth << endl;
     cout << "-- Thumbnails Height: " << nThumbHeight << endl;
     cout << "-- K Matrix: " << endl;
-    cout << CamModel.K() << endl;
+    cout << CamModel_I.K() << endl;
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -605,7 +611,7 @@ int main(int argc, char** argv)
 
             // Update (VBO) Vertex Buffer Object
             {
-                Eigen::Matrix3d                 K = CamModel.K( ui_nPyrLevel );
+                Eigen::Matrix3d                 K = CamModel_D.K( ui_nPyrLevel );
                 pangolin::CudaScopedMappedPtr   var( *(vVBO[ ui_nPyrLevel]) );
                 Gpu::Image< float4 >            dVbo( (float4*)*var, CurPyrLvlW, CurPyrLvlH );
                 Gpu::DepthToVbo( dVbo, dVars.KeyDepthPyr[ ui_nPyrLevel ], K( 0, 0 ), K( 1, 1 ), K( 0, 2 ), K( 1, 2 ) );
@@ -636,16 +642,18 @@ int main(int argc, char** argv)
                     const unsigned              PyrLvlWidth = nImgWidth >> PyrLvl;
                     const unsigned              PyrLvlHeight = nImgHeight >> PyrLvl;
 
-                    Eigen::Matrix3d             K = CamModel.K( PyrLvl );
+                    Eigen::Matrix3d             K_I = CamModel_I.K( PyrLvl );
+                    Eigen::Matrix3d             K_D = CamModel_D.K( PyrLvl );
                     Sophus::SE3d                sT_kc = Sophus::SE3d( T_kc );
-                    Eigen::Matrix<double,3,4>   KTck = K * sT_kc.inverse().matrix3x4();
+                    Sophus::SE3d                sTcd = Sophus::SE3d( Tcd );
+                    Eigen::Matrix<double,3,4>   KTck = K_I * sT_kc.inverse().matrix3x4();
 
                     float fNormC = ui_fNormC * (1 << PyrLvl );
 
                     // build system
                     Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthESM( dVars.GreyPyr[PyrLvl], dVars.KeyGreyPyr[PyrLvl],
-                                                                                            dVars.KeyDepthPyr[PyrLvl], Tcd.matrix3x4(), KTck, fNormC,
-                                                                                            K(0,0), K(1,1), K(0,2), K(1,2), dVars.Workspace,
+                                                                                            dVars.KeyDepthPyr[PyrLvl], sTcd.matrix3x4(), KTck, fNormC,
+                                                                                            K_D(0,0), K_D(1,1), K_D(0,2), K_D(1,2), dVars.Workspace,
                                                                                             dVars.Debug.SubImage(PyrLvlWidth, PyrLvlHeight),
                                                                                             ui_bDiscardMaxMin, 0.3, 20.0 );
 
@@ -774,7 +782,7 @@ int main(int argc, char** argv)
             cout << "Creating new keyframe (#" << nKeyIdx << ")." << endl;
             UnpackImages( vImages, GreyImage, DepthImage );
             if( g_bDisparityMaps ) {
-                Disp2Depth( dVars, DepthImage, CamModel.K()(0,0), CamModel.GetPose()( 1, 3 ) );
+                Disp2Depth( dVars, DepthImage, CamModel_D.K()(0,0), CamModel_D.GetPose()( 1, 3 ) );
             }
             vKeyframes.push_back( CreateKeyframe( dVars, GreyImage, DepthImage,
                                                   mvl::Cart2T(mvl::T2Cart(T_wc)) * g_Tvr ) );
@@ -819,7 +827,7 @@ int main(int argc, char** argv)
             }
 
             if( g_bDisparityMaps ) {
-                Disp2Depth( dVars, DepthImage, CamModel.K()(0,0), CamModel.GetPose()( 1, 3 ) );
+                Disp2Depth( dVars, DepthImage, CamModel_D.K()(0,0), CamModel_D.GetPose()( 1, 3 ) );
             }
 
             unsigned int Idx = ui_nImgIdx;
@@ -900,6 +908,7 @@ int main(int argc, char** argv)
         char            Index[10];
         for( int ii = 0; ii < vKeyframes.size(); ii++ ) {
             pFile << mvl::T2Cart( vKeyframes[ii].Pose ).transpose() << std::endl;
+            /*
             sprintf( Index, "%05d", ii );
             std::string ImgFile;
             ImgFile = Dir + "Image_" + Index + ".pgm";
@@ -913,6 +922,7 @@ int main(int argc, char** argv)
             pDFile << 4294967295 << std::endl;
             pDFile.write( (const char*)vKeyframes[ii].Depth.data, Size );
             pDFile.close();
+            */
         }
         pFile.close();
     }
