@@ -4,93 +4,104 @@
 #include <vector>
 #include <limits.h>
 
+#include <opencv.hpp>
+
 #define NO_PARENT INT_MAX
 
 class ReferenceFrame
 {
     public:
 
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         ReferenceFrame();
 
-        // copy constrctor
-        ReferenceFrame( const ReferenceFrame& rRHS )
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ReferenceFrame(
+                const ReferenceFrame&   rRHS        //< Input: Reference frame we are copying
+            )
         {
             _Copy(rRHS);
         }
 
-        ReferenceFrame& operator=( const ReferenceFrame& rRHS )
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ReferenceFrame& operator=(
+                const ReferenceFrame&   rRHS        //< Input: Reference frame we are copying
+            )
         {
-            if( this != &rRHS ){
+            if( this != &rRHS ) {
                 _Copy(rRHS);
             }
             return *this;
         }
 
-        void AddNeighbor( unsigned int uEdgeId );
 
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        void AddNeighbor(
+                unsigned int    uEdgeId     //< Input: Edge that links to the new neighbor
+            );
+
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Setters
-        void SetId( unsigned int uId );
-        void SetWhite();
-        void SetGrey();
-        void SetBlack();
-        void SetDepth( unsigned int uDepth );
-        void SetTime( double dTime );
-        void SetParentEdgeId( unsigned int uEdgeId );
-        void SetBrokenLink();
+        //
 
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        void SetId( unsigned int uId );
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        void SetTime( double dTime );
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        void SetImages(
+                const cv::Mat&      GreyImage,      //< Input: Greyscale image
+                const cv::Mat&      DepthImage      //< Input: Depth image
+            );
+
+        void SetParentEdgeId( unsigned int uEdgeId );
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Getters
+        //
+
         unsigned int Id();
-        unsigned int Color();
-        unsigned int Depth();
-        unsigned int NumNeighbors();
-        unsigned int NumLandmarks();
-        unsigned int NumMeasurements();
         double Time();
+        unsigned int NumNeighbors();
 
         unsigned int GetNeighborEdgeId( unsigned int uIdx );
 
         /// HACK hand out reference to our private data
         std::vector<unsigned int>& Neighbors();
 
-        /// Return edge to parent
+        // return edge to parent
         unsigned int ParentEdgeId();
 
-        // check if edge between this frame and the previous one is broken
-        bool IsBroken();
-        bool IsBlack();
-        bool IsWhite();
-        bool IsGrey();
-
-        void _Copy( const ReferenceFrame& rRHS )
-        {
-            m_bBrokenLink   = rRHS.m_bBrokenLink;
-            m_uColor        = rRHS.m_uColor;
-            m_uDepth        = rRHS.m_uDepth;
-            m_uId           = rRHS.m_uId;
-            m_uParentEdgeId = rRHS.m_uParentEdgeId;
-            m_dSensorTime   = rRHS.m_dSensorTime;
-
-            // TODO only need to copy this IFF there has been a change, which could be found via the timestamp
-            m_vNeighborEdgeIds.clear();
-            m_vNeighborEdgeIds.insert( m_vNeighborEdgeIds.begin(),
-                                       rRHS.m_vNeighborEdgeIds.begin(),
-                                       rRHS.m_vNeighborEdgeIds.end() );
-
-//            std::copy( rRHS.m_vNeighborEdgeIds.begin(), rRHS.m_vNeighborEdgeIds.end(), m_vNeighborEdgeIds.begin() );
-
-        }
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Checks
+        bool IsKeyframe();
 
 
     private:
 
-        bool                                   m_bBrokenLink;
-        unsigned int                           m_uColor;
-        unsigned int                           m_uDepth;
-        unsigned int                           m_uId;
-        unsigned int                           m_uParentEdgeId;     // for bfs
-        double                                 m_dSensorTime;       // Time measurements were made
-        std::vector<unsigned int>              m_vNeighborEdgeIds;  // for the co-vis graph
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        void _Copy(
+                const ReferenceFrame&       rRHS        //< Input: Reference frame we are copying
+            );
+
+
+    private:
+
+        double                                  m_dSensorTime;          // time measurements were made
+        unsigned int                            m_uId;                  // reference frame ID
+        unsigned int                            m_uParentEdgeId;        // for bfs
+        std::vector< unsigned int >             m_vNeighborEdgeIds;     // for the co-vis graph
+
+        cv::Mat                                 m_GreyImage;
+        cv::Mat                                 m_GreyThumb;
+
+        bool                                    m_bIsKeyframe;          // true if frame is a keyframe (ie. has depth information)
+        cv::Mat                                 m_DepthImage;
+        cv::Mat                                 m_DepthThumb;
+
 };
 
 #endif
-

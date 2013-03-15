@@ -1,9 +1,6 @@
 #ifndef _DTRACK_APP_
 #define _DTRACK_APP_
 
-//#include <boost/thread.hpp>
-//#include <opencv2/opencv.hpp>
-
 #include <RPG/Utils/InitCam.h>
 #include <Mvlpp/Mvl.h>
 #include <DenseFrontEnd/DenseFrontEnd.h>
@@ -22,9 +19,8 @@ class DTrackApp
             m_pTimer = NULL;
         }
 
-
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        bool InitResetCamera(
+        bool InitReset(
                 int         argc,                       //< Input:
                 char**      argv                        //< Input:
             )
@@ -34,52 +30,14 @@ class DTrackApp
 
             // initialize camera
             if( !rpg::InitCam( m_Cam, clArgs ) ) {
-                return false;
-            }
-
-            // Initialize vehicle configuration
-            std::string src_dir             = m_Cam.GetProperty( "DataSourceDir", "." );
-            std::string intensity_cmod_file = clArgs.follow( "cmod_i.xml", "-icmod" );
-            std::string depth_cmod_file     = clArgs.follow( "cmod_d.xml", "-dcmod" );
-
-            // load camera models (k matrix, pose)
-            mvl::CameraModel intensity_camera_model;
-            mvl::CameraModel depth_camera_model;
-
-            if( !intensity_camera_model.Read( src_dir + "/" + intensity_cmod_file ) ) {
-                std::cerr << "ERROR: Failed to open intensity camera file." << std::endl;
-                exit(0);
-            }
-            if( !depth_camera_model.Read( src_dir + "/" + depth_cmod_file ) ) {
-                std::cerr << "ERROR: Failed to open depth camera file." << std::endl;
                 exit(0);
             }
 
-            m_Ki = intensity_camera_model.K();
-            m_Kd = depth_camera_model.K();
-            m_Tid = depth_camera_model.GetPose();
-
-            std::cout << "Intensity Cam Model: " << std::endl << m_Ki << std::endl << std::endl;
-            std::cout << "Depth Cam Model: " << std::endl << m_Kd << std::endl << std::endl;
-            std::cout << "Tid: " << std::endl << m_Tid << std::endl << std::endl;
-
-            return true;
-        }
-
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        bool InitReset(
-                int         argc,                       //< Input:
-                char**      argv                        //< Input:
-            )
-        {
-            // initialize system
-            if( !InitResetCamera( argc, argv ) ) {
-                exit(0);
-            }
-
+            // capture check
             m_vImages.clear();
             m_Cam.Capture( m_vImages );
+
+            // prepare images as expected by the FrontEnd
             _UnpackImages( m_vImages );
 
             if( m_pTimer ) {
@@ -91,14 +49,26 @@ class DTrackApp
                 delete m_pMap;
             }
             m_pMap = new DenseMap;
+            // load map from files IFF user provided it!
+
+
+            // get camera configuration
+            std::string sSrcDir = m_Cam.GetProperty( "DataSourceDir", "." );
+
+            std::string sCModFile;
+
+            sCModFile = clArgs.follow( "cmod_i.xml", "-icmod" );
+            std::string sIntenCModFilename = sSrcDir + "/" + sCModFile;
+
+            sCModFile = clArgs.follow( "cmod_d.xml", "-dcmod" );
+            std::string sDepthCModFilename = sSrcDir + "/" + sCModFile;
+
 
             if( m_pFrontEnd ) {
                 delete m_pFrontEnd;
             }
             m_pFrontEnd = new DenseFrontEnd;
-            m_pFrontEnd->Init( m_vImages, m_Ki, m_Kd, m_Tid, m_pMap, m_pTimer );
-
-            return true;
+            return m_pFrontEnd->Init( sIntenCModFilename, sDepthCModFilename, m_vImages, m_pMap, m_pTimer );
         }
 
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -119,7 +89,7 @@ class DTrackApp
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         void UpdateGui( Gui& rGui )
         {
-//            rGui.CopyMapChanges( *m_pMap );
+            rGui.CopyMapChanges( *m_pMap );
 
             rGui.UpdateImages( m_vImages[0].Image );
 

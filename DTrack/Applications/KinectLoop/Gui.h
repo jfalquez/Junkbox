@@ -7,6 +7,8 @@
 #include <pangolin/pangolin.h>
 #include <SceneGraph/SceneGraph.h>
 
+#include <DenseMap/DenseMap.h>
+
 #include <GLObjects/GLPath.h>
 
 #include "GuiConfig.h"
@@ -27,7 +29,7 @@ class Gui
         void Init();
         void InitReset();
         void Run();
-//        void CopyMapChanges( Map& rMap );
+        void CopyMapChanges( DenseMap& rMap );
 
         // data updates
         void UpdateImages( const cv::Mat& LiveGrey );
@@ -73,8 +75,8 @@ class Gui
 
         bool                            m_bMapDirty;
 
-//        DenseMap*                         m_pChangesBufferMap;   // re-allocated on reset. for now.
-//        DenseMap*                         m_pRenderMap;          // re-allocated on reset. for now.
+        DenseMap*                       m_pRenderMap;          // re-allocated on reset. for now.
+        DenseMap*                       m_pChangesBufferMap;   // re-allocated on reset. for now.
 
         int                             m_nWindowWidth;
         int                             m_nWindowHeight;
@@ -101,12 +103,20 @@ class Gui
         boost::mutex                    m_Mutex;
 };
 
-/////////////////////////////////////////////////////////////////////////
+
+
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Implementation
-/////////////////////////////////////////////////////////////////////////
 Gui::Gui()
 {
-     Gui( "RPG Application", 640, 480 );
+     Gui( "DTrack Application", 640, 480 );
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -118,8 +128,8 @@ Gui::Gui( const std::string& sWindowName, const int nWidth, const int nHeight )
     m_nImageWidth        = 0;
     m_nImageHeight       = 0;
     m_bMapDirty          = false;
-//    m_pChangesBufferMap  = NULL;
-//    m_pRenderMap         = NULL;
+    m_pChangesBufferMap  = NULL;
+    m_pRenderMap         = NULL;
     State                = PLAYING;
 }
 
@@ -142,7 +152,7 @@ void Gui::Init()
 //    m_gl3dGraph.AddChild( &m_glPath );
 
     m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000) );
-    m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-6, 0, -10, 1, 0, 0, pangolin::AxisNegZ) );
+    m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-10, 0, -10, 30, 0, 0, pangolin::AxisNegZ) );
 
     m_View3d.SetBounds( 0.4, 1.0, pangolin::Attach::Pix(280), 1.0, 640.0f/480.0f );
     m_View3d.SetAspect( 640.0 / 480.0 );
@@ -153,21 +163,11 @@ void Gui::Init()
 
     // configure view container
     m_ViewContainer.SetBounds( 0, 0.4, pangolin::Attach::Pix(280), 1 );
-    m_ViewContainer.SetLayout( pangolin::LayoutEqual );
+    m_ViewContainer.SetLayout( pangolin::LayoutHorizontal );
     m_ViewContainer.AddDisplay( m_LiveGrey );
     m_ViewContainer.AddDisplay( m_KeyGrey );
     m_ViewContainer.AddDisplay( m_KeyDepth );
     m_ViewContainer.AddDisplay( m_Debug );
-
-    /*
-    const unsigned int nNumViews = 1;
-    for( unsigned int ii = 0; ii < nNumViews; ++ii ) {
-        pangolin::View& subView = pangolin::CreateDisplay();
-        pangoView.SetAspect((double)nImgWidth/nImgHeight);
-        m_ViewContainer.AddDisplay( subView );
-    }
-    */
-
 
 
     // add views to base window
@@ -181,11 +181,11 @@ void Gui::Init()
 void Gui::InitReset()
 {
     m_Mutex.lock();
-//    if( m_pChangesBufferMap ){ delete m_pChangesBufferMap; }
-//    if( m_pRenderMap )       { delete m_pRenderMap; }
+    if( m_pRenderMap )        { delete m_pRenderMap; }
+    if( m_pChangesBufferMap ) { delete m_pChangesBufferMap; }
 
-//    m_pChangesBufferMap = new Map; // this receives data from the front end
-//    m_pRenderMap        = new Map; // this is used by GLObjects
+    m_pRenderMap        = new DenseMap; // this is used by GLObjects
+    m_pChangesBufferMap = new DenseMap; // this receives data from the front end
     m_bMapDirty         = false;
     m_Mutex.unlock();
 
@@ -207,7 +207,10 @@ void Gui::Run()
          if( m_bMapDirty ) {
             // the map has changed update it before rendering again
             m_Mutex.lock();
-//            m_pRenderMap->CopyMapChanges( *m_pChangesBufferMap );
+            DenseMap* Tmp;
+            Tmp = m_pChangesBufferMap;
+            m_pChangesBufferMap = m_pRenderMap;
+            m_pRenderMap = Tmp;
             m_bMapDirty = false;
             m_Mutex.unlock();
          }
@@ -222,15 +225,13 @@ void Gui::Run()
     State = QUIT;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-/*
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::CopyMapChanges( DenseMap& rMap )
 {
     boost::mutex::scoped_lock lock(m_Mutex);
     m_pChangesBufferMap->CopyMapChanges( rMap );
     m_bMapDirty = true;
 }
-*/
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::UpdateImages( const cv::Mat& LiveGrey )

@@ -4,6 +4,8 @@
 #include <CVars/CVar.h>
 #include <Utils/CVarHelpers.h>
 
+const int   MAX_PYR_LEVELS = 5;
+
 class DenseFrontEndConfig
 {
 public:

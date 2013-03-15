@@ -8,6 +8,7 @@
 #include <RPG/Utils/ImageWrapper.h>
 
 #include <DenseMap/DenseMap.h>
+#include <Utils/CamModelPyramid.h>
 
 #include "Timer.h"
 
@@ -52,12 +53,11 @@ public:
     // K for depth camera (in some cases these are the same).
     // Tid = Transform between intensity sensor (greyscale) and depth sensor.
     bool Init(
-            const CamImages&        vImages,    //< Input: Camera Capture
-            Eigen::Matrix3d         Ki,         //< Input: Intensity camera's intrinsics
-            Eigen::Matrix3d         Kd,         //< Input: Depth camera's intrinsics
-            Eigen::Matrix4d         Tid,        //< Input: Transform between intensity and depth camera
-            DenseMap*               pMap,       //< Input: Pointer to the map that should be used
-            Timer*                  pTimer      //< Input: Pointer to timer
+            std::string             sIntenCModFilename, //< Input:
+            std::string             sDepthCModFilename, //< Input:
+            const CamImages&        vImages,            //< Input: Camera Capture
+            DenseMap*               pMap,               //< Input: Pointer to the map that should be used
+            Timer*                  pTimer              //< Input: Pointer to timer
         );
 
     bool Iterate(
@@ -86,19 +86,26 @@ private:
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
 
-    unsigned long int                   m_nFrameIndex;              // frame index counter
     double                              m_dCurTime;
+    unsigned long int                   m_nFrameIndex;              // frame index counter
     eTrackingState                      m_eTrackingState;
+
+    CameraModelPyramid                  m_CModPyrInten;
+    CameraModelPyramid                  m_CModPyrDepth;
+
+    Eigen::Matrix4d                     m_dGlobalPose;              // global pose for display w.r.t the map
+    DenseMap*                           m_pMap;                     // map use for estimating poses
+
+    Timer*                              m_pTimer;
+
+    boost::mutex                        m_Mutex;
+
 
     FramePtr                            m_pCurFrame;
     FramePtr                            m_pPrevFrame;
 
-    Timer*                              m_pTimer;
 
-    DenseMap*                           m_pMap;                     // map
 
-    Eigen::Matrix4d                     m_dGlobalPose;              // global pose for display w.r.t first frame
-    boost::mutex                        m_Mutex;
 };
 
 

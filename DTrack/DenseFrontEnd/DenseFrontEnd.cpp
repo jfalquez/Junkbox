@@ -25,25 +25,76 @@ DenseFrontEnd::~DenseFrontEnd()
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Given a camera, initialize and reset the slam engine
 bool DenseFrontEnd::Init(
-        const CamImages&        vImages,    //< Input: Camera Capture
-        Eigen::Matrix3d         Ki,         //< Input: Intensity camera's intrinsics
-        Eigen::Matrix3d         Kd,         //< Input: Depth camera's intrinsics
-        Eigen::Matrix4d         Tid,        //< Input: Transform between intensity and depth camera
-        DenseMap*               pMap,       //< Input: Pointer to the map that should be used
-        Timer*                  pTimer      //< Input: Pointer to timer
+        std::string             sIntenCModFilename, //< Input:
+        std::string             sDepthCModFilename, //< Input:
+        const CamImages&        vImages,            //< Input: Camera Capture
+        DenseMap*               pMap,               //< Input: Pointer to the map that should be used
+        Timer*                  pTimer              //< Input: Pointer to timer
     )
 {
     m_pMap = pMap;
+
     m_pTimer = pTimer;
     m_pTimer->SetWindowSize( 40 );
 
-    // store intrinsics
+    // get intrinsics
+    if( !m_CModPyrInten.Read( sIntenCModFilename ) ) {
+        return false;
+    }
 
-    // if MAP exists, try to find closes keyframe via thumbnails
+    if( !m_CModPyrDepth.Read( sDepthCModFilename ) ) {
+        return false;
+    }
 
-    // if MAP null or closes keyframe finder fails, create a new keyframe
-//    m_pCurFrame = m_pMap->NewFrame( mvl::Tic() );
-    m_dGlobalPose.setIdentity();
+    // print intrinsics information
+    std::cout << "Intensity Camera Intrinsics: " << std::endl;
+    std::cout << m_CModPyrInten.K() << std::endl << std::endl;
+    std::cout << "Depth Camera Intrinsics: " << std::endl;
+    std::cout << m_CModPyrDepth.K() << std::endl << std::endl;
+    std::cout << "Tid: " << std::endl;
+    std::cout << m_CModPyrDepth.GetPose() << std::endl << std::endl;
+
+    // sanity check
+    if( vImages[0].height() != m_CModPyrInten.Height() ) {
+        std::cerr << "warning: Camera model and captured image's height do not match. Are you using the correct CMod file?" << std::endl;
+    }
+    if( vImages[0].width() != m_CModPyrInten.Width() ) {
+        std::cerr << "warning: Camera model and captured image's width do not match. Are you using the correct CMod file?" << std::endl;
+    }
+
+    bool bNewFrame = false;
+
+    // check if MAP is preloaded with frames...
+    if( m_pMap->NumFrames() == 0 ) {
+
+        // nope, so set path base pose and global pose accordingly
+        m_pMap->SetPathBasePose( Eigen::Matrix4d::Identity() );
+        m_dGlobalPose.setIdentity();
+
+        // set flag to create new keyframe
+        bNewFrame = true;
+
+    } else {
+
+        //... cool, there is a map. Let's see if we can find a keyframe we can use...
+        // use thumbnails matching system to find closest keyframe
+        // run ESM to get estimate
+        // have some sort of condition that accepts or not the estimate (RMSE?)..
+        // if ACCEPT: fix global pose accordingly
+        // m_dBasePose = m_dGlobalPose = ESTIMATE;
+            // IF THRESHOLD FOR NEW KEYFRAME IS MET, DROP NEW KEYFRAME
+                //bDropNewFrame = true;
+
+        // if NOT ACCEPT, then drop new keyframe
+        // bDropNewFrame = true;
+
+    }
+
+    if( bNewFrame ) {
+        // TODO get this from the camera directly
+        double dSensorTime = mvl::Tic();
+        m_pMap->NewFrame( dSensorTime, vImages[0].Image, vImages[1].Image );
+    }
 
 
     return true;

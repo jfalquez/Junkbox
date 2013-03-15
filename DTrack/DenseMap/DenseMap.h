@@ -14,124 +14,128 @@ class DenseMap
 {
 public:
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    /// Allocate a new frame, but do not link it into the graph.
-    FramePtr NewFrame( double dTime );
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // allocate a new frame, but do not link it into the graph
+    FramePtr NewFrame(
+            double              dTime,              //< Input: Sensor time
+            const cv::Mat&      GreyImage,          //< Input: Greyscale image
+            const cv::Mat&      DepthImage          //< Input: Depth image
+        );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    void LinkFrames( FramePtr pA, FramePtr pB, Eigen::Matrix4d& Tab );
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // creates a new edge with the provided transform linking frame A to frame B
+    void LinkFrames(
+            FramePtr                    pA,         //< Input:
+            FramePtr                    pB,         //< Input:
+            const Eigen::Matrix4d&      Tab         //< Input:
+        );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // lookup the id
-    bool FindEdgeId( unsigned int  uStartId,
-                     unsigned int  uEndId,
-                     unsigned int& uEdgeId );  //< Output: global Id of edge
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // lookup the id of edge between start and end frame (if it exists)
+    bool FindEdgeId(
+            unsigned int        uStartId,       //< Input:
+            unsigned int        uEndId,         //< Input:
+            unsigned int&       uEdgeId         //< Output: Global ID of edge
+        );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    bool HasFrame( unsigned int uId );
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // true if ID of frame exists
+    bool FrameExists(
+            unsigned int    uId     //< Input:
+        );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    bool HasEdge( unsigned int uStartId, unsigned int uEndId );
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // true if there is an edge between start and end frame
+    bool EdgeExists(
+            unsigned int    uStartId,       //< Input:
+            unsigned int    uEndId          //< Input:
+        );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    FramePtr GetFirstFramePtr( );
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//    FramePtr GetFirstFramePtr( );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    EdgePtr GetEdgePtr( unsigned int uStartId, unsigned int uEndId );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // get pointer of edge given ID
     EdgePtr GetEdgePtr( unsigned int uEdgeId );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // get pointer of edge between start and end frame
+    EdgePtr GetEdgePtr( unsigned int uStartId, unsigned int uEndId );
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // get pointer of frame given ID
     FramePtr GetFramePtr( unsigned int uFrameId );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     unsigned int NumFrames() { return m_vFrames.size(); }
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     unsigned int NumEdges() { return m_vEdges.size(); }
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // set the transform between two frames
+    void SetRelativeTransform( int nStartId, int nEndId, Eigen::Matrix4d& Tab );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    bool GetTransformFromParent(  unsigned int uChildFrameId,   //< Input: Child ID we will find parent of
-                                  Eigen::Matrix4d& dTab );      //< Output: Found transform from parent to child
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // get the transform between two frames
+    bool GetRelativeTransform( int nStartId, int nEndId, Eigen::Matrix4d& Tab );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // set the transform between two frames:
-    void SetRelativePose( int nStartId, int nEndId, Eigen::Matrix4d& Tab );
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    bool GetTransformFromParent(
+            unsigned int        uChildFrameId,  //< Input: Child ID we will find parent of
+            Eigen::Matrix4d&    dTab            //< Output: Found transform from parent to child
+        );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    // get the transform between two frames:
-    bool GetRelativePose( int nStartId, int nEndId, Eigen::Matrix4d& Tab );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    /// Return smart pointer to frames "parent"
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // return smart pointer to frames "parent"
     FramePtr GetParentFramePtr( unsigned int uChildFrameId );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    std::vector<EdgePtr>& GetEdges() {return m_vEdges;}
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//    std::vector<EdgePtr>& GetEdges() { return m_vEdges; }
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    void GetPosesToDepth(
-         std::map<unsigned int, Eigen::Matrix4d>& Poses,
-         unsigned int nDepth = 10
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // adds path's base (global) pose -- normally identity if no prior map is provided
+    void SetPathBasePose(
+            const Eigen::Matrix4d&      Pose        //< Input: Base pose of path
         );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    void GetAbsolutePosesToDepth(
-         std::map<unsigned int, Eigen::Matrix4d>& Poses,       //<Input: Poses id and absolute transf. from origin
-         unsigned int                             nRootId,     //<Input: Node that will be the origin. [default: first pose]
-         int                                      nDepth = -1  //<Input: Grapth depth search from root [default: all nodes]
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // add new estimated relative transform to path list
+    void AddPathTransform(
+            const Eigen::Matrix4d&      Tab         //< Input: Relative transform
         );
 
-    ////////////////////////////////////////////////////////////////////////////////////////
-    void ResetNodes();
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    void UpdateRelativeNodes(  std::map<unsigned int, Eigen::Matrix4d>& absolutePoses );
-
-    ////////////////////////////////////////////////////////////////////////////////////////
-    /// Copy changes from RHS into this
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Copy changes from RHS into this
     // TODO for large copies, this could break the front end update speed.  Fix this by making
     // the copy process a separate thread and having it only copy for a fixed amount of time
     // until giving up control to the front end.
-    void CopyMapChanges( DenseMap& rRHS )
-    {
-        //if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
-        //    return; // nothing to do, map is up-to date
-        //}
+    void CopyMapChanges(
+            DenseMap&       rRHS        //< Input: Map to copy from
+        );
 
-        // make sure we're dealing with the same map?
-//        assert( m_nMapId == rRHS.m_nMapId );
-
-        // find data we need to update.  All we need to do here is search in the SLAM graph until
-        // we stop finding nodes (Landmarks or Frames) that have been modified since m_dLastModifiedTime
-//        _DFSCopy( )
-        // HACK TODO FIXME  -- just to get going, copy the last 100 frames as a quick hack
-        m_vEdges.resize( rRHS.m_vEdges.size() );
-        m_vFrames.resize( rRHS.m_vFrames.size() );
-
-        for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-100, 0 ); ii-- ){
-            m_vEdges[ii] = boost::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
-            //m_vEdges[ii] = rRHS.m_vEdges[ii]; // will do a deep copy
-        }
-
-        for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-100, 0 ); ii-- ){
-            m_vFrames[ii] = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
-            //m_vFrames[ii] = rRHS.m_vFrames[ii]; // will do a deep copy
-        }
-
-        m_dLastModifiedTime = rRHS.m_dLastModifiedTime;
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     void Print();
+
 
 private:
 
-    double                       m_dLastModifiedTime; // crucial that we keep this up-to date
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // updates the map's modified time -- to be called whenever a change occurs in the map
+    void _UpdateModifiedTime();
 
-    std::vector<FramePtr>    m_vFrames;
-    std::vector<EdgePtr>     m_vEdges;
+
+private:
+
+    double                              m_dLastModifiedTime;        // crucial that we keep this up-to date
+
+    std::vector< FramePtr >             m_vFrames;                  // list of map's reference frames
+    std::vector< EdgePtr >              m_vEdges;                   // list of map's edges
+
+    // this perhaps shouldn't be here, since it is not really part of the map
+    // but since the GUI already has a pointer to the map, it is easier for visualization
+    Eigen::Matrix4d                     m_dBasePose;                // base pose from which path starts
+    std::vector < Eigen::Matrix4d >     m_vPath;                    // vector of poses being estimated
 
 };
 
