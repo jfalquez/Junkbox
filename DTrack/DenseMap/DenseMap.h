@@ -25,7 +25,9 @@ public:
     FramePtr NewFrame(
             double              dTime,              //< Input: Sensor time
             const cv::Mat&      GreyImage,          //< Input: Greyscale image
-            const cv::Mat&      DepthImage          //< Input: Depth image
+            const cv::Mat&      DepthImage,         //< Input: Depth image
+            const cv::Mat&      GreyThumb,          //< Input: Greyscale thumbnail
+            const cv::Mat&      DepthThumb          //< Input: Depth thumbnail
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

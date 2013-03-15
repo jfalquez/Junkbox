@@ -5,42 +5,106 @@
 
 #include "DenseFrontEndConfig.h"
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class GpuVars_t
+{
+public:
+    GpuVars_t()
+    { }
+
+    GpuVars_t( unsigned int nImgWidth, unsigned int nImgHeight ) :
+        uImg1( nImgWidth, nImgHeight ),
+        uImg2( nImgWidth, nImgHeight ),
+        uPyr1( nImgWidth, nImgHeight ),
+        fPyr1( nImgWidth, nImgHeight ),
+        fPyr2( nImgWidth, nImgHeight )
+    { }
+
+    void Init( unsigned int nImgWidth, unsigned int nImgHeight )
+    {
+        uImg1 = Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >(nImgWidth, nImgHeight);
+        uImg2 = Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >(nImgWidth, nImgHeight);
+
+        uPyr1.Allocate( nImgWidth, nImgHeight );
+        fPyr1.Allocate( nImgWidth, nImgHeight );
+        fPyr2.Allocate( nImgWidth, nImgHeight );
+    }
+
+public:
+    // temporal auxilary variables (by type)
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     uImg1;
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     uImg2;
+
+    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   uPyr1;
+    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           fPyr1;
+    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           fPyr2;
+};
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// performs CUDA memory check and returns amount of free GPU memory
 unsigned int CheckMemoryCUDA();
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-struct GpuVars_t
+// generates a thumbnail given an input image - the thumbnail is the smallest resolution in the pyramid
+inline void GenerateGreyThumbnail(
+        GpuVars_t&                      Wksp,               //< Input: GPU workspace
+        const cv::Mat&                  Image,              //< Input: Original image
+        cv::Mat&                        ThumbImage          //< Output: Thumbnail image
+        )
 {
-    GpuVars_t( unsigned int nImgHeight, unsigned int nImgWidth ) :
-        GreyPyr( nImgWidth, nImgHeight ),
-        KeyGreyPyr( nImgWidth, nImgHeight ),
-        KeyDepthPyr( nImgWidth, nImgHeight ),
-        KeyDepthPyrNormalized( nImgWidth, nImgHeight ),
-        Workspace( nImgWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), nImgHeight ),
-        Debug( nImgWidth, nImgHeight )
-        ,uTmpPyr1( nImgWidth, nImgHeight ),
-        fTmpPyr1( nImgWidth, nImgHeight ),
-        fTmpPyr2( nImgWidth, nImgHeight ),
-        uTmp1( nImgWidth, nImgHeight ),
-        uTmp2( nImgWidth, nImgHeight )
-    { }
+    // copy image to GPU
+    Wksp.uPyr1[0].MemcpyFromHost( Image.data );
 
-    // member variables
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   GreyPyr;
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   KeyGreyPyr;
-    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           KeyDepthPyr;
-    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           KeyDepthPyrNormalized;
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     Workspace;
-    Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>                              Debug;
+    // reduce
+    Gpu::BlurReduce< unsigned char, MAX_PYR_LEVELS, unsigned int >( Wksp.uPyr1, Wksp.uImg1, Wksp.uImg2 );
 
-    // temporal auxilary variables (by type)
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   uTmpPyr1;
-    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           fTmpPyr1;
-    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           fTmpPyr2;
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     uTmp1;
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     uTmp2;
+    // copy image from GPU
+    assert( ThumbImage.empty() == false );
+    Wksp.uPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
+}
 
-};
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// generates a thumbnail given an input image - the thumbnail is the smallest resolution in the pyramid
+inline void GenerateDepthThumbnail(
+        GpuVars_t&                      Wksp,               //< Input: GPU workspace
+        const cv::Mat&                  Image,              //< Input: Original image
+        cv::Mat&                        ThumbImage          //< Output: Thumbnail image
+        )
+{
+    // upload depth image
+    Wksp.fPyr1[0].MemcpyFromHost( Image.data );
+
+    // downsample depth map
+    Gpu::BoxReduce< float, MAX_PYR_LEVELS, float >( Wksp.fPyr1 );
+
+    /*
+    TODO enable this if it is worth it
+    // (optional) cross-bilateral filter the downsampled depth maps
+    if( g_bBiFilterThumbs == true ) {
+        Wksp.fPyr2[0].CopyFrom( Wksp.fPyr1[0] );
+        for(int ii = 1; ii < MAX_PYR_LEVELS; ++ii ) {
+            Gpu::BilateralFilter< float, float, unsigned char >( Wksp.fPyr2[ii], Wksp.fPyr1[ii], Wksp.uPyr1[ii],
+                                                               g_dThumbFiltS, g_dThumbFiltD, g_dThumbFiltC, g_nThumbFiltSize );
+        }
+        Wksp.fPyr1.CopyFrom( Wksp.fPyr2 );
+    }
+    */
+
+    assert( ThumbImage.empty() == false );
+    Wksp.fPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
+}
+
+
+
+
 /*
 
 namespace gphp {

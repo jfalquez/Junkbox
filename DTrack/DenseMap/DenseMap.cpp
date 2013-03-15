@@ -21,13 +21,16 @@ DenseMap::~DenseMap()
 FramePtr DenseMap::NewFrame(
         double          dTime,                  //< Input: Sensor time
         const cv::Mat&  GreyImage,              //< Input: Greyscale image
-        const cv::Mat&  DepthImage              //< Input: Depth image
+        const cv::Mat&  DepthImage,             //< Input: Depth image
+        const cv::Mat&  GreyThumb,              //< Input: Greyscale thumbnail
+        const cv::Mat&  DepthThumb              //< Input: Depth thumbnail
     )
 {
     FramePtr pFrame( new ReferenceFrame );
     pFrame->SetId( m_vFrames.size() );
     pFrame->SetTime( dTime );
     pFrame->SetImages( GreyImage, DepthImage );
+    pFrame->SetThumbs( GreyThumb, DepthThumb );
     m_vFrames.push_back( pFrame );
     _UpdateModifiedTime();
     return pFrame;

@@ -29,8 +29,18 @@ void ReferenceFrame::SetImages(
         const cv::Mat&      DepthImage      //< Input: Depth image
     )
 {
-    m_GreyImage     = GreyImage.clone();
-    m_DepthImage    = DepthImage.clone();
+    m_GreyImage     = GreyImage;
+    m_DepthImage    = DepthImage;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReferenceFrame::SetThumbs(
+        const cv::Mat&      GreyThumb,      //< Input: Greyscale image
+        const cv::Mat&      DepthThumb      //< Input: Depth image
+    )
+{
+    m_GreyThumb     = GreyThumb;
+    m_DepthThumb    = DepthThumb;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////

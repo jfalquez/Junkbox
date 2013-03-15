@@ -53,6 +53,7 @@ public:
     ~DenseFrontEnd();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // initialize the engine
     bool Init(
             std::string             sGreyCModFilename,  //< Input: Greyscale camera model file
             std::string             sDepthCModFilename, //< Input: Depth camera model file
@@ -62,11 +63,13 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // iterate through the captured images
     bool Iterate(
             const CamImages&        vImages     //< Input: Camera Capture
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // returns true if tracking is bad
     bool TrackingBad()
     {
         return m_eTrackingState == eTrackingBad;
@@ -76,16 +79,17 @@ private:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // will generate a new keyframe (with thumnails, etc) and put it in the map
-    bool _GenerateKeyframe(
+    FramePtr _GenerateKeyframe(
             const CamImages&    vImages     //< Input: Images used to generate new keyframe
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // this function will localize a given frame against a reference frame
-    bool _EstimateRelativePose( FramePtr pFrameA,
-            FramePtr pFrameB,
-            Eigen::Matrix4d& Tab
-        );
+    // this function will localize an image against a keyframe
+    bool _EstimateRelativePose(
+            const cv::Mat&          GreyImg,        //< Input: Greyscale image
+            FramePtr                pKeyframe,      //< Input: Keyframe we are localizing against
+            Eigen::Matrix4d&        Tab             //< Output: the estimated transform
+            );
 
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -93,8 +97,10 @@ private:
     FramePtr                            m_pCurKeyframe;
     eTrackingState                      m_eTrackingState;
 
-    unsigned int                        m_nImgWidth;
-    unsigned int                        m_nImgHeight;
+    unsigned int                        m_nImageWidth;
+    unsigned int                        m_nImageHeight;
+    unsigned int                        m_nThumbWidth;
+    unsigned int                        m_nThumbHeight;
 
     CameraModelPyramid                  m_CModPyrGrey;
     CameraModelPyramid                  m_CModPyrDepth;
@@ -103,10 +109,12 @@ private:
     DenseMap*                           m_pMap;                     // map use for estimating poses
 
     // GPU Variables
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cd_nGreyPyr;
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cd_nKeyGreyPyr;
-    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           m_cd_fKeyDepthPyr;
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     m_cd_nWorkspace;
+    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cdGreyPyr;
+    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cdKeyGreyPyr;
+    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           m_cdKeyDepthPyr;
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     m_cdWorkspace;
+    Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>                              m_cdDebug;
+    GpuVars_t                                                                       m_cdTemp;
 
 
     Timer*                              m_pTimer;

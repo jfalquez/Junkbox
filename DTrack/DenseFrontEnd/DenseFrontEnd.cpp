@@ -49,14 +49,16 @@ bool DenseFrontEnd::Init(
     std::cout << mvl::T2Cart(m_CModPyrDepth.GetPose()).transpose() << std::endl << std::endl;
 
     // store image dimensions
-    m_nImgWidth = vImages[0].width();
-    m_nImgHeight = vImages[0].height();
+    m_nImageWidth = vImages[0].width();
+    m_nImageHeight = vImages[0].height();
+    m_nThumbHeight = m_nImageHeight >> MAX_PYR_LEVELS-1;
+    m_nThumbWidth = m_nImageWidth >> MAX_PYR_LEVELS-1;
 
     // sanity check
-    if( m_nImgHeight != m_CModPyrGrey.Height() ) {
+    if( m_nImageHeight != m_CModPyrGrey.Height() ) {
         std::cerr << "warning: Camera model and captured image's height do not match. Are you using the correct CMod file?" << std::endl;
     }
-    if( m_nImgWidth != m_CModPyrGrey.Width() ) {
+    if( m_nImageWidth != m_CModPyrGrey.Width() ) {
         std::cerr << "warning: Camera model and captured image's width do not match. Are you using the correct CMod file?" << std::endl;
     }
 
@@ -65,10 +67,12 @@ bool DenseFrontEnd::Init(
         std::cerr << "error: There seems to be too little CUDA memory available! Aborting." << std::endl;
         return false;
     }
-    m_cd_nWorkspace = Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >( m_nImgWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), m_nImgHeight );
-    m_cd_nGreyPyr.Allocate( m_nImgWidth, m_nImgHeight );
-    m_cd_nKeyGreyPyr.Allocate( m_nImgWidth, m_nImgHeight );
-    m_cd_fKeyDepthPyr.Allocate( m_nImgWidth, m_nImgHeight );
+    m_cdWorkspace = Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >( m_nImageWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), m_nImageHeight );
+    m_cdDebug = Gpu::Image< float4, Gpu::TargetDevice, Gpu::Manage >( m_nImageWidth, m_nImageHeight );
+    m_cdGreyPyr.Allocate( m_nImageWidth, m_nImageHeight );
+    m_cdKeyGreyPyr.Allocate( m_nImageWidth, m_nImageHeight );
+    m_cdKeyDepthPyr.Allocate( m_nImageWidth, m_nImageHeight );
+    m_cdTemp.Init( m_nImageWidth, m_nImageHeight );
 
 
     //
@@ -110,13 +114,12 @@ bool DenseFrontEnd::Init(
     }
 
     if( bNewFrame ) {
-        _GenerateKeyframe( vImages );
-        // TODO get this from the camera directly
-        double dSensorTime = mvl::Tic();
-        m_pCurKeyframe = m_pMap->NewFrame( dSensorTime, vImages[0].Image, vImages[1].Image );
+        m_pCurKeyframe = _GenerateKeyframe( vImages );
+        if( m_pCurKeyframe == NULL ) {
+            return false;
+        }
         m_pMap->SetKeyframe( m_pCurKeyframe );
     }
-
 
     return true;
 }
@@ -151,25 +154,34 @@ bool DenseFrontEnd::Iterate(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool DenseFrontEnd::_GenerateKeyframe(
+FramePtr DenseFrontEnd::_GenerateKeyframe(
         const CamImages&    vImages     //< Input: Images used to generate new keyframe
     )
 {
     // check if two images (grey and depth) were provided
     if( vImages.size() < 2 ) {
-        std::cerr << "warning: Could not create keyframe since two images are required!" << std::endl;
-        return false;
+        std::cerr << "error: Could not create keyframe since two images are required!" << std::endl;
+        return FramePtr( (ReferenceFrame*)NULL );
     }
 
-    return true;
+    // allocate thumb images
+    cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
+    cv::Mat DepthThumb( m_nThumbHeight, m_nThumbWidth, CV_32FC1 );
+
+    GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
+    GenerateDepthThumbnail( m_cdTemp, vImages[1].Image, DepthThumb );
+
+    // TODO get this from the camera directly.. the property map should have it
+    double dSensorTime = mvl::Tic();
+
+    return m_pMap->NewFrame( dSensorTime, vImages[0].Image, vImages[1].Image, GreyThumb, DepthThumb );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// This function will localize a given frame against a reference frame.
 bool DenseFrontEnd::_EstimateRelativePose(
-        FramePtr pFrameA,
-        FramePtr, // pFrameB,
-        Eigen::Matrix4d& Tab  //< Output: the estimated transform
+        const cv::Mat&          GreyImg,        //< Input: Greyscale image
+        FramePtr                pKeyframe,      //< Input: Keyframe we are localizing against
+        Eigen::Matrix4d&        Tab             //< Output: the estimated transform
         )
 {
 }
