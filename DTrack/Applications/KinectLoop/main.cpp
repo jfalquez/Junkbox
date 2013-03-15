@@ -5,7 +5,6 @@ void DTrackThread( Gui& gui, int argc, char** argv)
 {
     DTrackApp app;
     app.InitReset( argc, argv );
-    app.UpdateGui( gui );
     gui.SetState( PAUSED );
 
     while( gui.State != QUIT ) {
@@ -14,18 +13,18 @@ void DTrackThread( Gui& gui, int argc, char** argv)
             app.InitReset( argc, argv );
             gui.SetState( RESET_COMPLETE );
             usleep( 10000 );
-            app.UpdateGui( gui );
         }
         if( gui.State == PLAYING ){
             app.StepOnce( gui );
-            app.UpdateGui( gui );
         }
         if( gui.State == STEPPING ){
             app.StepOnce( gui );
-            app.UpdateGui( gui );
             gui.SetState( PAUSED );
         }
-        if( gui.State == PAUSED) {
+
+        app.UpdateGui( gui );
+
+        if( gui.State == PAUSED ) {
             usleep(1000000 / 30);
         }
     }

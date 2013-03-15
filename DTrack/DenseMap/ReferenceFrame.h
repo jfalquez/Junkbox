@@ -10,97 +10,100 @@
 
 class ReferenceFrame
 {
-    public:
+public:
 
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        ReferenceFrame();
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ReferenceFrame();
 
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        ReferenceFrame(
-                const ReferenceFrame&   rRHS        //< Input: Reference frame we are copying
-            )
-        {
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ReferenceFrame(
+            const ReferenceFrame&   rRHS        //< Input: Reference frame we are copying
+        )
+    {
+        _Copy(rRHS);
+    }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ReferenceFrame& operator=(
+            const ReferenceFrame&   rRHS        //< Input: Reference frame we are copying
+        )
+    {
+        if( this != &rRHS ) {
             _Copy(rRHS);
         }
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        ReferenceFrame& operator=(
-                const ReferenceFrame&   rRHS        //< Input: Reference frame we are copying
-            )
-        {
-            if( this != &rRHS ) {
-                _Copy(rRHS);
-            }
-            return *this;
-        }
+        return *this;
+    }
 
 
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        void AddNeighbor(
-                unsigned int    uEdgeId     //< Input: Edge that links to the new neighbor
-            );
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void AddNeighbor(
+            unsigned int    uEdgeId     //< Input: Edge that links to the new neighbor
+        );
 
 
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Setters
-        //
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Setters
+    //
 
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        void SetId( unsigned int uId );
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void SetId( unsigned int uId );
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        void SetTime( double dTime );
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void SetTime( double dTime );
 
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        void SetImages(
-                const cv::Mat&      GreyImage,      //< Input: Greyscale image
-                const cv::Mat&      DepthImage      //< Input: Depth image
-            );
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void SetImages(
+            const cv::Mat&      GreyImage,      //< Input: Greyscale image
+            const cv::Mat&      DepthImage      //< Input: Depth image
+        );
 
-        void SetParentEdgeId( unsigned int uEdgeId );
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void SetParentEdgeId( unsigned int uEdgeId );
 
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Getters
-        //
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Getters
+    //
 
-        unsigned int Id();
-        double Time();
-        unsigned int NumNeighbors();
+    unsigned int Id();
+    double Time();
+    unsigned int NumNeighbors();
 
-        unsigned int GetNeighborEdgeId( unsigned int uIdx );
+    unsigned int GetNeighborEdgeId( unsigned int uIdx );
 
-        /// HACK hand out reference to our private data
-        std::vector<unsigned int>& Neighbors();
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void GetImages(
+            cv::Mat&      GreyImage,      //< Output: Greyscale image
+            cv::Mat&      DepthImage      //< Output: Depth image
+        );
 
-        // return edge to parent
-        unsigned int ParentEdgeId();
+    /// HACK hand out reference to our private data
+    std::vector<unsigned int>& Neighbors();
 
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Checks
-        bool IsKeyframe();
-
-
-    private:
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        void _Copy(
-                const ReferenceFrame&       rRHS        //< Input: Reference frame we are copying
-            );
+    // return edge to parent
+    unsigned int ParentEdgeId();
 
 
-    private:
+private:
 
-        double                                  m_dSensorTime;          // time measurements were made
-        unsigned int                            m_uId;                  // reference frame ID
-        unsigned int                            m_uParentEdgeId;        // for bfs
-        std::vector< unsigned int >             m_vNeighborEdgeIds;     // for the co-vis graph
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void _Copy(
+            const ReferenceFrame&       rRHS        //< Input: Reference frame we are copying
+        );
 
-        cv::Mat                                 m_GreyImage;
-        cv::Mat                                 m_GreyThumb;
 
-        bool                                    m_bIsKeyframe;          // true if frame is a keyframe (ie. has depth information)
-        cv::Mat                                 m_DepthImage;
-        cv::Mat                                 m_DepthThumb;
+/////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+private:
+    double                                  m_dSensorTime;          // time measurements were made
+    unsigned int                            m_nId;                  // reference frame ID
+    unsigned int                            m_nParentEdgeId;        // for bfs
+    std::vector< unsigned int >             m_vNeighborEdgeIds;     // for the co-vis graph
+
+    cv::Mat                                 m_GreyImage;
+    cv::Mat                                 m_GreyThumb;
+
+    cv::Mat                                 m_DepthImage;
+    cv::Mat                                 m_DepthThumb;
 
 };
 

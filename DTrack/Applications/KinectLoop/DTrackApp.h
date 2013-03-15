@@ -49,7 +49,7 @@ class DTrackApp
                 delete m_pMap;
             }
             m_pMap = new DenseMap;
-            // load map from files IFF user provided it!
+            // load map from files IF user provided it!
 
 
             // get camera configuration
@@ -58,7 +58,7 @@ class DTrackApp
             std::string sCModFile;
 
             sCModFile = clArgs.follow( "cmod_i.xml", "-icmod" );
-            std::string sIntenCModFilename = sSrcDir + "/" + sCModFile;
+            std::string sGreyCModFilename = sSrcDir + "/" + sCModFile;
 
             sCModFile = clArgs.follow( "cmod_d.xml", "-dcmod" );
             std::string sDepthCModFilename = sSrcDir + "/" + sCModFile;
@@ -68,7 +68,7 @@ class DTrackApp
                 delete m_pFrontEnd;
             }
             m_pFrontEnd = new DenseFrontEnd;
-            return m_pFrontEnd->Init( sIntenCModFilename, sDepthCModFilename, m_vImages, m_pMap, m_pTimer );
+            return m_pFrontEnd->Init( sGreyCModFilename, sDepthCModFilename, m_vImages, m_pMap, m_pTimer );
         }
 
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -76,7 +76,7 @@ class DTrackApp
         {
             if( m_Cam.Capture( m_vImages ) ) {
                 _UnpackImages( m_vImages );
-//                m_pFrontEnd->Iterate( rframes );
+                m_pFrontEnd->Iterate( m_vImages );
 
                 if( m_pFrontEnd->TrackingBad() ){
                     rGui.SetState( PAUSED );
@@ -96,6 +96,7 @@ class DTrackApp
 //            rGui.UpdateTimer( m_pTimer->GetWindowSize(), m_pTimer->GetNames(3), m_pTimer->GetTimes(3) );
 
         }
+
 
 
     private:
@@ -124,6 +125,8 @@ class DTrackApp
         }
 
 
+    /////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     private:
 
         CameraDevice                m_Cam;          // camera handler

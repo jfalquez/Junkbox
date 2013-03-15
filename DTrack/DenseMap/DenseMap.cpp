@@ -4,6 +4,18 @@
 
 #include "DenseMap.h"
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+DenseMap::DenseMap()
+{
+    m_dLastModifiedTime = 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+DenseMap::~DenseMap()
+{
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // allocate a new frame, but do not link it into the graph
 FramePtr DenseMap::NewFrame(
@@ -15,6 +27,7 @@ FramePtr DenseMap::NewFrame(
     FramePtr pFrame( new ReferenceFrame );
     pFrame->SetId( m_vFrames.size() );
     pFrame->SetTime( dTime );
+    pFrame->SetImages( GreyImage, DepthImage );
     m_vFrames.push_back( pFrame );
     _UpdateModifiedTime();
     return pFrame;
@@ -197,13 +210,19 @@ void DenseMap::AddPathTransform(
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseMap::CopyMapChanges(
+FramePtr DenseMap::GetCurrentKeyframe()
+{
+    return m_pCurKeyframe;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+bool DenseMap::CopyMapChanges(
         DenseMap&       rRHS        //< Input: Map to copy from
     )
 {
-    //if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
-    //    return; // nothing to do, map is up-to date
-    //}
+    if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
+        return false; // nothing to do, map is up-to date
+    }
 
     // make sure we're dealing with the same map?
 //        assert( m_nMapId == rRHS.m_nMapId );
@@ -214,6 +233,7 @@ void DenseMap::CopyMapChanges(
     // HACK TODO FIXME  -- just to get going, copy the last 100 frames as a quick hack
     m_vEdges.resize( rRHS.m_vEdges.size() );
     m_vFrames.resize( rRHS.m_vFrames.size() );
+    m_pCurKeyframe = rRHS.m_pCurKeyframe;
 
     for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-100, 0 ); ii-- ){
         m_vEdges[ii] = boost::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
@@ -226,6 +246,15 @@ void DenseMap::CopyMapChanges(
     }
 
     m_dLastModifiedTime = rRHS.m_dLastModifiedTime;
+    return true;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::SetKeyframe(
+        FramePtr    pKeyframe       //< Input: Pointer to keyframe
+    )
+{
+    m_pCurKeyframe = pKeyframe;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

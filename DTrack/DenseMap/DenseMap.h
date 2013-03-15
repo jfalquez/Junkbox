@@ -15,6 +15,12 @@ class DenseMap
 public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    DenseMap();
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ~DenseMap();
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // allocate a new frame, but do not link it into the graph
     FramePtr NewFrame(
             double              dTime,              //< Input: Sensor time
@@ -106,11 +112,21 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // set frame as current keyframe
+    void SetKeyframe(
+            FramePtr    pKeyframe       //< Input: Pointer to keyframe
+        );
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // get pointer to current keyframe
+    FramePtr GetCurrentKeyframe();
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Copy changes from RHS into this
     // TODO for large copies, this could break the front end update speed.  Fix this by making
     // the copy process a separate thread and having it only copy for a fixed amount of time
     // until giving up control to the front end.
-    void CopyMapChanges(
+    bool CopyMapChanges(
             DenseMap&       rRHS        //< Input: Map to copy from
         );
 
@@ -125,8 +141,9 @@ private:
     void _UpdateModifiedTime();
 
 
+/////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
-
     double                              m_dLastModifiedTime;        // crucial that we keep this up-to date
 
     std::vector< FramePtr >             m_vFrames;                  // list of map's reference frames
@@ -134,6 +151,7 @@ private:
 
     // this perhaps shouldn't be here, since it is not really part of the map
     // but since the GUI already has a pointer to the map, it is easier for visualization
+    FramePtr                            m_pCurKeyframe;
     Eigen::Matrix4d                     m_dBasePose;                // base pose from which path starts
     std::vector < Eigen::Matrix4d >     m_vPath;                    // vector of poses being estimated
 

@@ -4,13 +4,13 @@
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TransformEdge::TransformEdge(
-        const unsigned int      uStartId,   //< Input: Frame ID of edge start
-        const unsigned int      uEndId,     //< Input: Frame ID of edge end
+        const unsigned int      nStartId,   //< Input: Frame ID of edge start
+        const unsigned int      nEndId,     //< Input: Frame ID of edge end
         Eigen::Matrix4d         Tab         //< Input: Optional transform
     )
 {
-    m_uStartId  = uStartId;
-    m_uEndId    = uEndId;
+    m_nStartId  = nStartId;
+    m_nEndId    = nEndId;
     m_dTab      = Tab;
 }
 
@@ -24,16 +24,16 @@ void TransformEdge::SetTransform(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool TransformEdge::SetTransform(
-        unsigned int                uStartId,   //< Input:
-        unsigned int                uEndId,     //< Input:
+        unsigned int                nStartId,   //< Input:
+        unsigned int                nEndId,     //< Input:
         const Eigen::Matrix4d&      Tab         //< Input:
     )
 {
-    if( uStartId == m_uStartId && uEndId == m_uEndId ){
+    if( nStartId == m_nStartId && nEndId == m_nEndId ){
         m_dTab = Tab;
         return true;
     }
-    if( uEndId == m_uStartId && uStartId == m_uEndId ){
+    if( nEndId == m_nStartId && nStartId == m_nEndId ){
         m_dTab = mvl::TInv(Tab);
         return true;
     }
@@ -42,16 +42,16 @@ bool TransformEdge::SetTransform(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool TransformEdge::GetTransform(
-        unsigned int            uStartId,   //< Input:
-        unsigned int            uEndId,     //< Input:
+        unsigned int            nStartId,   //< Input:
+        unsigned int            nEndId,     //< Input:
         Eigen::Matrix4d&        Tab         //< Output:
     )
 {
-    if( uStartId == m_uStartId && uEndId == m_uEndId ){
+    if( nStartId == m_nStartId && nEndId == m_nEndId ){
         Tab = m_dTab;
         return true;
     }
-    if( uEndId == m_uStartId && uStartId == m_uEndId ){
+    if( nEndId == m_nStartId && nStartId == m_nEndId ){
         Tab = mvl::TInv(m_dTab);
         return true;
     }
@@ -61,11 +61,11 @@ bool TransformEdge::GetTransform(
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 unsigned int TransformEdge::EndId()
 {
-    return m_uEndId;
+    return m_nEndId;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 unsigned int TransformEdge::StartId()
 {
-    return m_uStartId;
+    return m_nStartId;
 }

@@ -3,17 +3,16 @@
 #include "ReferenceFrame.h"
 
 ReferenceFrame::ReferenceFrame()
-               : m_bIsKeyframe(false),
-                 m_uParentEdgeId(NO_PARENT)
+               : m_nParentEdgeId(NO_PARENT)
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void ReferenceFrame::SetId(
-        unsigned int        uId         //< Input: Frame ID
+        unsigned int        nId         //< Input: Frame ID
     )
 {
-    m_uId = uId;
+    m_nId = nId;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -30,19 +29,19 @@ void ReferenceFrame::SetImages(
         const cv::Mat&      DepthImage      //< Input: Depth image
     )
 {
-    m_GreyImage = GreyImage.clone();
-    m_DepthImage = DepthImage.clone();
+    m_GreyImage     = GreyImage.clone();
+    m_DepthImage    = DepthImage.clone();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void ReferenceFrame::SetParentEdgeId( unsigned int uEdgeId ) {
-    m_uParentEdgeId = uEdgeId;
+void ReferenceFrame::SetParentEdgeId( unsigned int nEdgeId ) {
+    m_nParentEdgeId = nEdgeId;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 unsigned int ReferenceFrame::Id()
 {
-    return m_uId;
+    return m_nId;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -77,14 +76,18 @@ std::vector<unsigned int>& ReferenceFrame::Neighbors()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::ParentEdgeId() {
-    return m_uParentEdgeId;
+void ReferenceFrame::GetImages(
+        cv::Mat&      GreyImage,      //< Output: Greyscale image
+        cv::Mat&      DepthImage      //< Output: Depth image
+    )
+{
+    GreyImage = m_GreyImage.clone();
+    DepthImage = m_DepthImage.clone();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool ReferenceFrame::IsKeyframe()
-{
-    return m_bIsKeyframe;
+unsigned int ReferenceFrame::ParentEdgeId() {
+    return m_nParentEdgeId;
 }
 
 
@@ -99,9 +102,10 @@ void ReferenceFrame::_Copy(
     )
 {
     m_dSensorTime   = rRHS.m_dSensorTime;
-    m_uId           = rRHS.m_uId;
-    m_uParentEdgeId = rRHS.m_uParentEdgeId;
-    m_bIsKeyframe   = rRHS.m_bIsKeyframe;
+    m_nId           = rRHS.m_nId;
+    m_nParentEdgeId = rRHS.m_nParentEdgeId;
+    m_GreyImage     = rRHS.m_GreyImage.clone();
+    m_DepthImage    = rRHS.m_DepthImage.clone();
 
     // TODO only need to copy this IFF there has been a change, which could be found via the timestamp
     m_vNeighborEdgeIds.clear();

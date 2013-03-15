@@ -21,90 +21,90 @@ enum GuiState { PLAYING, STEPPING, PAUSED, RESETTING, RESET_COMPLETE, GETSTATE, 
 class Gui
 {
 
-    public:
+public:
 
-        Gui();
-        Gui( const std::string& sWindowName, const int nWidth, const int nHeight );
+    Gui();
+    Gui( const std::string& sWindowName, const int nWidth, const int nHeight );
 
-        void Init();
-        void InitReset();
-        void Run();
-        void CopyMapChanges( DenseMap& rMap );
+    void Init();
+    void InitReset();
+    void Run();
+    void CopyMapChanges( DenseMap& rMap );
 
-        // data updates
-        void UpdateImages( const cv::Mat& LiveGrey );
+    // data updates
+    void UpdateImages( const cv::Mat& LiveGrey );
 
-        void SetState( GuiState s )
-        {
-            State = s;
+    void SetState( GuiState s )
+    {
+        State = s;
+    }
+
+private:
+
+    void _RegisterKeyboardCallbacks();
+
+    void _RIGHT_ARROW()
+    {
+        State = STEPPING;
+    }
+
+    void _SPACE_BAR()
+    {
+        State = (State == PAUSED)?PLAYING:PAUSED;
+    }
+
+    void _CTRL_R()
+    {
+        State = RESETTING;
+        while( State != RESET_COMPLETE ){
+            usleep(10000);
         }
+        InitReset(); // not called from elsewhere
+        State = PAUSED;
+    }
 
-    private:
+    void _KEYBOARD_H()
+    {
+        //m_HelpView.ToggleShow();
+    }
 
-        void _RegisterKeyboardCallbacks();
 
-        void _RIGHT_ARROW()
-        {
-            State = STEPPING;
-        }
+/////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+public:
+    volatile GuiState               State;
 
-        void _SPACE_BAR()
-        {
-            State = (State == PAUSED)?PLAYING:PAUSED;
-        }
 
-        void _CTRL_R()
-        {
-            State = RESETTING;
-            while( State != RESET_COMPLETE ){
-                usleep(10000);
-            }
-            InitReset(); // not called from elsewhere
-            State = PAUSED;
-        }
+private:
+    bool                            m_bMapDirty;
 
-        void _KEYBOARD_H()
-        {
-            //m_HelpView.ToggleShow();
-        }
+    DenseMap*                       m_pRenderMap;          // re-allocated on reset. for now.
+    DenseMap*                       m_pChangesBufferMap;   // re-allocated on reset. for now.
 
-    public:
-        volatile GuiState               State;
+    int                             m_nWindowWidth;
+    int                             m_nWindowHeight;
+    int                             m_nImageWidth;
+    int                             m_nImageHeight;
+    std::string                     m_sWindowName;
 
-    private:
+    pangolin::View                  m_View3d;
+    pangolin::View                  m_ViewContainer;
 
-        bool                            m_bMapDirty;
+    pangolin::OpenGlRenderState     m_gl3dRenderState;
+    SceneGraph::GLSceneGraph        m_gl3dGraph;
 
-        DenseMap*                       m_pRenderMap;          // re-allocated on reset. for now.
-        DenseMap*                       m_pChangesBufferMap;   // re-allocated on reset. for now.
+    // objects for 3d view
+    SceneGraph::GLGrid              m_glGrid;
+    GLPath                          m_glPath;
 
-        int                             m_nWindowWidth;
-        int                             m_nWindowHeight;
-        int                             m_nImageWidth;
-        int                             m_nImageHeight;
-        std::string                     m_sWindowName;
+    // objects for view container
+    SceneGraph::ImageView           m_LiveGrey;
+    SceneGraph::ImageView           m_KeyGrey;
+    SceneGraph::ImageView           m_KeyDepth;
+    SceneGraph::ImageView           m_Debug;
 
-        pangolin::View                  m_View3d;
-        pangolin::View                  m_ViewContainer;
-
-        pangolin::OpenGlRenderState     m_gl3dRenderState;
-        SceneGraph::GLSceneGraph        m_gl3dGraph;
-
-        // objects for 3d view
-        SceneGraph::GLGrid              m_glGrid;
-        GLPath                          m_glPath;
-
-        // objects for view container
-        SceneGraph::ImageView           m_LiveGrey;
-        SceneGraph::ImageView           m_KeyGrey;
-        SceneGraph::ImageView           m_KeyDepth;
-        SceneGraph::ImageView           m_Debug;
-
-        boost::mutex                    m_Mutex;
+    boost::mutex                    m_Mutex;
 };
-
-
-
 
 
 
@@ -119,7 +119,7 @@ Gui::Gui()
      Gui( "DTrack Application", 640, 480 );
 }
 
-/////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 Gui::Gui( const std::string& sWindowName, const int nWidth, const int nHeight )
 {
     m_sWindowName        = sWindowName;
@@ -133,7 +133,7 @@ Gui::Gui( const std::string& sWindowName, const int nWidth, const int nHeight )
     State                = PLAYING;
 }
 
-/////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::Init()
 {
     // create OpenGL window in single line thanks to GLUT
@@ -163,7 +163,8 @@ void Gui::Init()
 
     // configure view container
     m_ViewContainer.SetBounds( 0, 0.4, pangolin::Attach::Pix(280), 1 );
-    m_ViewContainer.SetLayout( pangolin::LayoutHorizontal );
+    m_ViewContainer.SetLayout( pangolin::LayoutEqual );
+    m_LiveGrey.SetAspect(1.0);
     m_ViewContainer.AddDisplay( m_LiveGrey );
     m_ViewContainer.AddDisplay( m_KeyGrey );
     m_ViewContainer.AddDisplay( m_KeyDepth );
@@ -177,7 +178,7 @@ void Gui::Init()
     InitReset();
 }
 
-///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::InitReset()
 {
     m_Mutex.lock();
@@ -199,7 +200,7 @@ void Gui::InitReset()
 //    m_PrevImageLeft.Show( false );
 }
 
-///////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::Run()
 {
     while( !pangolin::ShouldQuit() ) {
@@ -207,8 +208,7 @@ void Gui::Run()
          if( m_bMapDirty ) {
             // the map has changed update it before rendering again
             m_Mutex.lock();
-            DenseMap* Tmp;
-            Tmp = m_pChangesBufferMap;
+            DenseMap* Tmp = m_pChangesBufferMap;
             m_pChangesBufferMap = m_pRenderMap;
             m_pRenderMap = Tmp;
             m_bMapDirty = false;
@@ -226,11 +226,12 @@ void Gui::Run()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void Gui::CopyMapChanges( DenseMap& rMap )
+void Gui::CopyMapChanges(
+        DenseMap&       rMap        //< Input: Map we are copying from
+    )
 {
     boost::mutex::scoped_lock lock(m_Mutex);
-    m_pChangesBufferMap->CopyMapChanges( rMap );
-    m_bMapDirty = true;
+    m_bMapDirty = m_pChangesBufferMap->CopyMapChanges( rMap );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -242,6 +243,16 @@ void Gui::UpdateImages( const cv::Mat& LiveGrey )
     }
 
     m_LiveGrey.SetImage( LiveGrey.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE );
+
+    FramePtr CurKeyframe = m_pRenderMap->GetCurrentKeyframe();
+    if( CurKeyframe ) {
+        cv::Mat KeyGrey, KeyDepth;
+        CurKeyframe->GetImages( KeyGrey, KeyDepth );
+        m_KeyGrey.SetImage( KeyGrey.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_BYTE );
+        // TODO currently a rough normalization.. make it nicer
+        KeyDepth = KeyDepth / 20.0;
+        m_KeyDepth.SetImage( KeyDepth.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+    }
 }
 
 

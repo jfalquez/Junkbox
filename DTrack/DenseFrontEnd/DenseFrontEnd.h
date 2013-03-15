@@ -44,53 +44,54 @@ class DenseFrontEnd
 
 public:
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     DenseFrontEnd();
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ~DenseFrontEnd();
 
-    // need to pass:
-    // K for greyscale camera.
-    // K for depth camera (in some cases these are the same).
-    // Tid = Transform between intensity sensor (greyscale) and depth sensor.
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     bool Init(
-            std::string             sIntenCModFilename, //< Input:
-            std::string             sDepthCModFilename, //< Input:
+            std::string             sGreyCModFilename,  //< Input: Greyscale camera model file
+            std::string             sDepthCModFilename, //< Input: Depth camera model file
             const CamImages&        vImages,            //< Input: Camera Capture
             DenseMap*               pMap,               //< Input: Pointer to the map that should be used
             Timer*                  pTimer              //< Input: Pointer to timer
         );
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     bool Iterate(
             const CamImages&        vImages     //< Input: Camera Capture
         );
 
-    Eigen::Matrix4d GetCurrentPose();
-
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     bool TrackingBad()
     {
         return m_eTrackingState == eTrackingBad;
     }
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
 
-    void _SetCurTime( double dCurTime );
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // will generate a new keyframe (with thumnails, etc) and put it in the map
+    bool _GenerateKeyframe(
+            const CamImages&    vImages     //< Input: Images used to generate new keyframe
+        );
 
-    // This function will localize a given frame against a reference frame
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // this function will localize a given frame against a reference frame
     bool _EstimateRelativePose( FramePtr pFrameA,
             FramePtr pFrameB,
             Eigen::Matrix4d& Tab
         );
 
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
-
-    double                              m_dCurTime;
-    unsigned long int                   m_nFrameIndex;              // frame index counter
+    FramePtr                            m_pCurKeyframe;
     eTrackingState                      m_eTrackingState;
 
-    CameraModelPyramid                  m_CModPyrInten;
+    CameraModelPyramid                  m_CModPyrGrey;
     CameraModelPyramid                  m_CModPyrDepth;
 
     Eigen::Matrix4d                     m_dGlobalPose;              // global pose for display w.r.t the map
@@ -99,13 +100,6 @@ private:
     Timer*                              m_pTimer;
 
     boost::mutex                        m_Mutex;
-
-
-    FramePtr                            m_pCurFrame;
-    FramePtr                            m_pPrevFrame;
-
-
-
 };
 
 
