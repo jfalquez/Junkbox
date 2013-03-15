@@ -3,7 +3,7 @@
 
 #include <kangaroo/kangaroo.h>
 #include <kangaroo/../applications/common/CameraModelPyramid.h>
-/*
+
 #include "Common.h"
 #include "GpuHelpers.h"
 
@@ -125,7 +125,6 @@ inline unsigned int FindBestKeyframe(
     return nBestIdx;
 }
 
-/*
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Create a new keyframe
 Keyframe_t CreateKeyframe(
@@ -359,7 +358,5 @@ void UploadKeyframe(
     }
 }
 
-
-*/
 
 #endif // KEYFRAMES_H

@@ -4,8 +4,11 @@
 void DTrackThread( Gui& gui, int argc, char** argv)
 {
     DTrackApp app;
-    app.InitReset( argc, argv );
-    gui.SetState( PAUSED );
+    if( !app.InitReset( argc, argv ) ) {
+        gui.SetState( QUIT );
+    } else {
+        gui.SetState( PAUSED );
+    }
 
     while( gui.State != QUIT ) {
 

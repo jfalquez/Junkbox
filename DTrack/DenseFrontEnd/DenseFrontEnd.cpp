@@ -1,7 +1,6 @@
 #include <Mvlpp/Mvl.h>
 
 #include "DenseFrontEnd.h"
-#include "DenseFrontEndConfig.h"
 
 
 // Global CVars
@@ -32,11 +31,6 @@ bool DenseFrontEnd::Init(
         Timer*                  pTimer              //< Input: Pointer to timer
     )
 {
-    m_pMap = pMap;
-
-    m_pTimer = pTimer;
-    m_pTimer->SetWindowSize( 40 );
-
     // get intrinsics
     if( !m_CModPyrGrey.Read( sGreyCModFilename ) ) {
         return false;
@@ -52,16 +46,43 @@ bool DenseFrontEnd::Init(
     std::cout << "Depth Camera Intrinsics: " << std::endl;
     std::cout << m_CModPyrDepth.K() << std::endl << std::endl;
     std::cout << "Tid: " << std::endl;
-    std::cout << m_CModPyrDepth.GetPose() << std::endl << std::endl;
+    std::cout << mvl::T2Cart(m_CModPyrDepth.GetPose()).transpose() << std::endl << std::endl;
+
+    // store image dimensions
+    m_nImgWidth = vImages[0].width();
+    m_nImgHeight = vImages[0].height();
 
     // sanity check
-    if( vImages[0].height() != m_CModPyrGrey.Height() ) {
+    if( m_nImgHeight != m_CModPyrGrey.Height() ) {
         std::cerr << "warning: Camera model and captured image's height do not match. Are you using the correct CMod file?" << std::endl;
     }
-    if( vImages[0].width() != m_CModPyrGrey.Width() ) {
+    if( m_nImgWidth != m_CModPyrGrey.Width() ) {
         std::cerr << "warning: Camera model and captured image's width do not match. Are you using the correct CMod file?" << std::endl;
     }
 
+    // initialize CUDA variables
+    if( CheckMemoryCUDA() < 384 ) {
+        std::cerr << "error: There seems to be too little CUDA memory available! Aborting." << std::endl;
+        return false;
+    }
+    m_cd_nWorkspace = Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >( m_nImgWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), m_nImgHeight );
+    m_cd_nGreyPyr.Allocate( m_nImgWidth, m_nImgHeight );
+    m_cd_nKeyGreyPyr.Allocate( m_nImgWidth, m_nImgHeight );
+    m_cd_fKeyDepthPyr.Allocate( m_nImgWidth, m_nImgHeight );
+
+
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+
+    // assign map
+    m_pMap = pMap;
+
+    // assign timer
+    m_pTimer = pTimer;
+    m_pTimer->SetWindowSize( 40 );
+
+    // flag used to generate a new keyframe
     bool bNewFrame = true;
 
     // check if MAP is preloaded with frames...

@@ -10,6 +10,8 @@
 #include <DenseMap/DenseMap.h>
 #include <Utils/CamModelPyramid.h>
 
+#include "DenseFrontEndConfig.h"
+#include "GpuHelpers.h"
 #include "Timer.h"
 
 
@@ -91,11 +93,21 @@ private:
     FramePtr                            m_pCurKeyframe;
     eTrackingState                      m_eTrackingState;
 
+    unsigned int                        m_nImgWidth;
+    unsigned int                        m_nImgHeight;
+
     CameraModelPyramid                  m_CModPyrGrey;
     CameraModelPyramid                  m_CModPyrDepth;
 
     Eigen::Matrix4d                     m_dGlobalPose;              // global pose for display w.r.t the map
     DenseMap*                           m_pMap;                     // map use for estimating poses
+
+    // GPU Variables
+    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cd_nGreyPyr;
+    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cd_nKeyGreyPyr;
+    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           m_cd_fKeyDepthPyr;
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     m_cd_nWorkspace;
+
 
     Timer*                              m_pTimer;
 

@@ -203,7 +203,7 @@ void Gui::InitReset()
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::Run()
 {
-    while( !pangolin::ShouldQuit() ) {
+    while( !pangolin::ShouldQuit() && State != QUIT ) {
 
          if( m_bMapDirty ) {
             // the map has changed update it before rendering again
