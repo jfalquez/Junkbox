@@ -64,7 +64,7 @@ bool DenseFrontEnd::Init(
 
     // initialize CUDA variables
     if( CheckMemoryCUDA() < 384 ) {
-        std::cerr << "error: There seems to be too little CUDA memory available! Aborting." << std::endl;
+        std::cerr << "error: There isn't enough free CUDA memory available! Aborting." << std::endl;
         return false;
     }
     m_cdWorkspace = Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >( m_nImageWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), m_nImageHeight );

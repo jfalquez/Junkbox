@@ -10,6 +10,7 @@
 #include <DenseMap/DenseMap.h>
 
 #include <GLObjects/GLPath.h>
+#include <GLObjects/GLMap.h>
 
 #include "GuiConfig.h"
 
@@ -95,7 +96,9 @@ private:
 
     // objects for 3d view
     SceneGraph::GLGrid              m_glGrid;
+    SceneGraph::GLAxis              m_glKeyPose;
     GLPath                          m_glPath;
+    GLMap                           m_glMap;
 
     // objects for view container
     SceneGraph::ImageView           m_LiveGrey;
@@ -139,6 +142,9 @@ void Gui::Init()
     // create OpenGL window in single line thanks to GLUT
     pangolin::CreateGlutWindowAndBind( m_sWindowName, m_nWindowWidth, m_nWindowHeight );
 
+    // init GLEW
+    glewInit();
+
     // register keyboard callbacks
     _RegisterKeyboardCallbacks();
 
@@ -149,6 +155,9 @@ void Gui::Init()
     // configure 3d view
     SceneGraph::GLSceneGraph::ApplyPreferredGlSettings();
     m_gl3dGraph.AddChild( &m_glGrid );
+    m_gl3dGraph.AddChild( &m_glKeyPose );
+    m_glKeyPose.SetScale( 3.0 );
+    m_glKeyPose.AddChild( &m_glMap );
 //    m_gl3dGraph.AddChild( &m_glPath );
 
     m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000) );
@@ -191,8 +200,9 @@ void Gui::InitReset()
     m_Mutex.unlock();
 
     // initreset objects
-    m_glGrid.SetNumLines( guiConfig.g_nNumGridLines);
+    m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
     m_glGrid.SetLineSpacing( 10.0 );
+    m_glMap.InitReset( m_pRenderMap );
 //    m_glPath.InitReset( m_pRenderMap );
 
 
@@ -208,9 +218,7 @@ void Gui::Run()
          if( m_bMapDirty ) {
             // the map has changed update it before rendering again
             m_Mutex.lock();
-            DenseMap* Tmp = m_pChangesBufferMap;
-            m_pChangesBufferMap = m_pRenderMap;
-            m_pRenderMap = Tmp;
+            m_pRenderMap->CopyMapChanges( *m_pChangesBufferMap );
             m_bMapDirty = false;
             m_Mutex.unlock();
          }

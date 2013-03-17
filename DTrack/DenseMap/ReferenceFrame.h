@@ -8,7 +8,7 @@
 
 #define NO_PARENT INT_MAX
 
-class ReferenceFrame
+class  ReferenceFrame
 {
 public:
 
@@ -81,6 +81,12 @@ public:
             cv::Mat&      GreyImage,      //< Output: Greyscale image
             cv::Mat&      DepthImage      //< Output: Depth image
         );
+
+    int GetImageHeight() { return m_GreyImage.rows; }
+    int GetImageWidth() { return m_GreyImage.cols; }
+
+    unsigned char* GetGreyImagePtr() { return m_GreyImage.data; }
+    unsigned char* GetDepthImagePtr() { return m_DepthImage.data; }
 
     /// HACK hand out reference to our private data
     std::vector<unsigned int>& Neighbors();

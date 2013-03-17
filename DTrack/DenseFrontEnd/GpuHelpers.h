@@ -53,6 +53,25 @@ unsigned int CheckMemoryCUDA();
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// converts disparities into depth values
+inline void Disp2Depth(
+        GpuVars_t&                      Wksp,               //< Input: GPU workspace
+        float                           fLength,            //< Input: Focal length
+        float                           fBaseline,          //< Input: Baseline
+        cv::Mat&                        Image               //< Input/Output: Disparity image, Depth image.
+        )
+{
+    Gpu::Image< float, Gpu::TargetDevice, Gpu::Manage >& dImage = Wksp.fPyr1[0];
+
+    dImage.MemcpyFromHost( Image.data );
+
+    Gpu::Disp2Depth( dImage, dImage, fLength, fBaseline );
+
+    dImage.MemcpyToHost( Image.data );
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // generates a thumbnail given an input image - the thumbnail is the smallest resolution in the pyramid
 inline void GenerateGreyThumbnail(
         GpuVars_t&                      Wksp,               //< Input: GPU workspace
