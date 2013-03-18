@@ -150,6 +150,12 @@ void Gui::Init()
 
     // side panel
     pangolin::CreatePanel("ui").SetBounds( 0, 1, 0, pangolin::Attach::Pix(280) );
+    pangolin::Var<float>            ui_fRMSE( "ui.RMSE" );
+    pangolin::Var<unsigned int>     ui_nBlur( "ui.Blur", 1, 0, 5 );
+    pangolin::Var<bool>             ui_bBreakEarly( "ui.Break Early", false, true );
+    pangolin::Var<float>            ui_fBreakErrorThreshold( "ui.Break Early Error Threshold", 0.8, 0, 2 );
+    pangolin::Var<float>            ui_fNormC( "ui.Norm C", 10, 0, 100);
+    pangolin::Var<bool>             ui_bDiscardMaxMin( "ui.Discard Max-Min Pix Values", true, true );
 
 
     // configure 3d view
@@ -157,8 +163,8 @@ void Gui::Init()
     m_gl3dGraph.AddChild( &m_glGrid );
     m_gl3dGraph.AddChild( &m_glKeyPose );
     m_glKeyPose.SetScale( 3.0 );
-    m_glKeyPose.AddChild( &m_glMap );
-//    m_gl3dGraph.AddChild( &m_glPath );
+    m_gl3dGraph.AddChild( &m_glMap );
+    m_gl3dGraph.AddChild( &m_glPath );
 
     m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000) );
     m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-10, 0, -10, 30, 0, 0, pangolin::AxisNegZ) );
@@ -203,7 +209,7 @@ void Gui::InitReset()
     m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
     m_glGrid.SetLineSpacing( 10.0 );
     m_glMap.InitReset( m_pRenderMap );
-//    m_glPath.InitReset( m_pRenderMap );
+    m_glPath.InitReset( m_pRenderMap );
 
 
     // hide or show things

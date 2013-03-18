@@ -1,5 +1,7 @@
 #include <Mvlpp/Mvl.h>
 
+#include <pangolin/pangolin.h>
+
 #include "DenseFrontEnd.h"
 
 
@@ -45,7 +47,7 @@ bool DenseFrontEnd::Init(
     std::cout << m_CModPyrGrey.K() << std::endl << std::endl;
     std::cout << "Depth Camera Intrinsics: " << std::endl;
     std::cout << m_CModPyrDepth.K() << std::endl << std::endl;
-    std::cout << "Tid: " << std::endl;
+    std::cout << "Tgd: " << std::endl;
     std::cout << mvl::T2Cart(m_CModPyrDepth.GetPose()).transpose() << std::endl << std::endl;
 
     // store image dimensions
@@ -63,16 +65,29 @@ bool DenseFrontEnd::Init(
     }
 
     // initialize CUDA variables
-    if( CheckMemoryCUDA() < 384 ) {
+    if( CheckMemoryCUDA() < 256 ) {
         std::cerr << "error: There isn't enough free CUDA memory available! Aborting." << std::endl;
         return false;
     }
-    m_cdWorkspace = Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >( m_nImageWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), m_nImageHeight );
-    m_cdDebug = Gpu::Image< float4, Gpu::TargetDevice, Gpu::Manage >( m_nImageWidth, m_nImageHeight );
+    m_cdWorkspace = Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage>( m_nImageWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), m_nImageHeight );
+    m_cdDebug = Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>( m_nImageWidth, m_nImageHeight );
     m_cdGreyPyr.Allocate( m_nImageWidth, m_nImageHeight );
     m_cdKeyGreyPyr.Allocate( m_nImageWidth, m_nImageHeight );
     m_cdKeyDepthPyr.Allocate( m_nImageWidth, m_nImageHeight );
     m_cdTemp.Init( m_nImageWidth, m_nImageHeight );
+
+
+    // initialize max number of iterations to perform at each pyramid level
+    // level 0 is finest (ie. biggest image)
+    feConfig.g_vPyrMaxIters.resize( MAX_PYR_LEVELS );
+    feConfig.g_vPyrMaxIters.setZero();
+    feConfig.g_vPyrMaxIters << 1, 2, 3, 4, 5;
+
+    // initialize if full estimate should be performed at a particular level
+    // 1: full estimate          0: just rotation
+    feConfig.g_vPyrFullMask.resize( MAX_PYR_LEVELS );
+    feConfig.g_vPyrFullMask.setZero();
+    feConfig.g_vPyrFullMask << 1, 1, 1, 1, 0;
 
 
     //
@@ -144,6 +159,40 @@ bool DenseFrontEnd::Iterate(
 
     // check point threshold to see if new keyframe must be added to the map
 
+    //
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+
+    // FOR NOW
+    // run ESM between current and previous frame
+    Eigen::Matrix4d Tpc;
+    Tpc.setIdentity();
+    Tpc(0,3) = 0.2;
+    Tpc(2,3) = -0.02;
+//    double dRMSE = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc );
+//    std::cout << "Estimate was: " << std::endl << Tpc << std::endl << std::endl;
+
+    // drop estimate into path vector
+    m_pMap->AddPathPose( Tpc );
+
+    // update global pose
+    m_dGlobalPose = m_dGlobalPose * Tpc;
+
+    // drop new keyframe ALWAYS
+    /* */
+    FramePtr pNewKeyframe = _GenerateKeyframe( vImages );
+    if( pNewKeyframe == NULL ) {
+        return false;
+    }
+
+    // link previous frame with new frame
+    m_pMap->LinkFrames( m_pCurKeyframe, pNewKeyframe, Tpc );
+
+    // set new keyframe as current keyframe
+    m_pCurKeyframe = pNewKeyframe;
+    m_pMap->SetKeyframe( m_pCurKeyframe );
+    /* */
+
     return true;
 }
 
@@ -178,10 +227,145 @@ FramePtr DenseFrontEnd::_GenerateKeyframe(
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool DenseFrontEnd::_EstimateRelativePose(
+double DenseFrontEnd::_EstimateRelativePose(
         const cv::Mat&          GreyImg,        //< Input: Greyscale image
         FramePtr                pKeyframe,      //< Input: Keyframe we are localizing against
-        Eigen::Matrix4d&        Tab             //< Output: the estimated transform
+        Eigen::Matrix4d&        Tkc             //< Input/Output: the estimated relative transform (input is used as a hint)
         )
 {
+    // get GUI variables
+    pangolin::Var<float>            ui_fRMSE("ui.RMSE");
+    pangolin::Var<bool>             ui_bBreakEarly( "ui.Break Early" );
+    pangolin::Var<float>            ui_fBreakErrorThreshold( "ui.Break Early Error Threshold" );
+    pangolin::Var<unsigned int>     ui_nBlur("ui.Blur");
+    pangolin::Var<float>            ui_fNormC( "ui.Norm C" );
+    pangolin::Var<bool>             ui_bDiscardMaxMin( "ui.Discard Max-Min Pix Values" );
+
+
+    //--- upload GREYSCALE data to GPU as a pyramid
+    m_cdGreyPyr[0].MemcpyFromHost( GreyImg.data );
+    m_cdKeyGreyPyr[0].MemcpyFromHost( pKeyframe->GetGreyImagePtr() );
+
+    for( int ii = 0; ii < ui_nBlur; ii++ ) {
+        Gpu::Blur( m_cdGreyPyr[0], m_cdTemp.uImg1 );
+        Gpu::Blur( m_cdKeyGreyPyr[0], m_cdTemp.uImg2 );
+    }
+
+    // downsample grey images
+    Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( m_cdGreyPyr, m_cdTemp.uImg1, m_cdTemp.uImg2 );
+    Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( m_cdKeyGreyPyr, m_cdTemp.uImg1, m_cdTemp.uImg2 );
+
+
+    //--- upload DEPTH data to GPU as a pyramid
+    m_cdKeyDepthPyr[0].MemcpyFromHost( pKeyframe->GetDepthImagePtr() );
+
+    // downsample depth maps
+    Gpu::BoxReduce<float, MAX_PYR_LEVELS, float>( m_cdKeyDepthPyr );
+
+
+
+    //--- localize
+    double dLastError;
+
+//    for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
+    for( int PyrLvl = 0; PyrLvl >= 0; PyrLvl-- ) {
+        dLastError = 0;
+        std::cout << "========================== Level: " << PyrLvl << std::endl;
+        for(int ii = 0; ii < feConfig.g_vPyrMaxIters[PyrLvl]; ii++ ) {
+            std::cout << "----- Iter: " << ii << std::endl;
+            const unsigned              PyrLvlWidth = m_nImageWidth >> PyrLvl;
+            const unsigned              PyrLvlHeight = m_nImageHeight >> PyrLvl;
+
+            Eigen::Matrix3d             Kg = m_CModPyrGrey.K( PyrLvl );     // grey sensor's instrinsics
+            Eigen::Matrix3d             Kd = m_CModPyrDepth.K( PyrLvl );    // depth sensor's intrinsics
+            Sophus::SE3d                sTgd = Sophus::SE3d( m_CModPyrDepth.GetPose() ); // depth sensor's pose w.r.t. grey sensor
+            Sophus::SE3d                sTkc = Sophus::SE3d( Tkc );
+            Eigen::Matrix<double,3,4>   KTck = Kg * sTkc.inverse().matrix3x4();
+
+            const float fNormC = ui_fNormC * ( 1 << PyrLvl );
+
+            // build system
+            std::cout << "GreyPyr[" << m_cdGreyPyr[PyrLvl].IsValid() << "] Dims: " << m_cdGreyPyr[PyrLvl].Width() << " x " << m_cdGreyPyr[PyrLvl].Height() << std::endl;
+            std::cout << "KeyGreyPyr[" << m_cdKeyGreyPyr[PyrLvl].IsValid() << "] Dims: " << m_cdKeyGreyPyr[PyrLvl].Width() << " x " << m_cdKeyGreyPyr[PyrLvl].Height() << std::endl;
+            std::cout << "KeyDepthPyr[" << m_cdKeyDepthPyr[PyrLvl].IsValid() << "] Dims: " << m_cdKeyDepthPyr[PyrLvl].Width() << " x " << m_cdKeyDepthPyr[PyrLvl].Height() << std::endl;
+            std::cout << "Workspace[" << m_cdWorkspace.IsValid() << "] Dims: " << m_cdWorkspace.Width() << " x " << m_cdWorkspace.Height() << std::endl;
+            Gpu::Image<float4, Gpu::TargetDevice, Gpu::DontManage> tmp = m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight);
+            std::cout << "Debug[" << tmp.IsValid() << "] Dims: " << tmp.Width() << " x " << tmp.Height() << std::endl;
+
+            /*
+            std::cout << "Solving... ";
+            Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthESM( m_cdGreyPyr[PyrLvl], m_cdKeyGreyPyr[PyrLvl],
+                                                                                    m_cdKeyDepthPyr[PyrLvl], sTgd.matrix3x4(), KTck, fNormC,
+                                                                                    Kd(0,0), Kd(1,1), Kd(0,2), Kd(1,2),
+                                                                                    m_cdWorkspace, m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight),
+                                                                                    ui_bDiscardMaxMin, 0.3, 20.0 );
+            std::cout << "done!" << std::endl;
+
+            Eigen::Matrix<double,6,6>   LHS = LSS.JTJ;
+            Eigen::Vector6d             RHS = LSS.JTy;
+
+            // solve system
+            Eigen::Vector6d             X;
+
+            // check if we are solving only for rotation, or full estimate
+            if( feConfig.g_vPyrFullMask(PyrLvl) != 0 ) {
+                Eigen::FullPivLU< Eigen::Matrix<double,6,6> >    lu_JTJ(LHS);
+
+                // check degenerate system
+                if( lu_JTJ.rank() < 6 ) {
+                    std::cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << std::endl;
+                    continue;
+                }
+
+                X = - (lu_JTJ.solve(RHS));
+            } else {
+                // extract rotation information only
+                Eigen::Matrix<double,3,3>                       rLHS = LHS.block<3,3>(3,3);
+                Eigen::Vector3d                                 rRHS = RHS.tail(3);
+                Eigen::FullPivLU< Eigen::Matrix<double,3,3> >   lu_JTJ(rLHS);
+
+                // check degenerate system
+                if( lu_JTJ.rank() < 3 ) {
+                    std::cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << std::endl;
+                    continue;
+                }
+
+                Eigen::Vector3d rX;
+                rX = - (lu_JTJ.solve(rRHS));
+
+                // pack solution
+                X.setZero();
+                X.tail(3) = rX;
+            }
+
+            /*
+            // if we have too few observations, discard estimate
+            if( (float)LSS.obs < ui_fMinPts * (float)( PyrLvlWidth * PyrLvlHeight ) ) {
+                std::cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Too few pixels!" << std::endl;
+                continue;
+            }
+            /* *
+
+            // everything seems fine... apply update
+            Tkc = (Tkc.inverse() * Sophus::SE3::exp(X).matrix()).inverse();
+
+            const double dNewError = sqrt(LSS.sqErr / LSS.obs);
+
+            // only show error of last level so the GUI doesn't go too crazy
+            if( PyrLvl == 0 ) {
+                ui_fRMSE =  dNewError;
+            }
+
+            // if error decreases too slowly, break out of this level
+            if( ( fabs( dNewError - dLastError ) < ui_fBreakErrorThreshold ) && ui_bBreakEarly ) {
+                break;
+            }
+
+            // update error
+            dLastError = dNewError;
+            */
+        }
+    }
+
+    return dLastError;
 }

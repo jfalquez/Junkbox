@@ -85,10 +85,10 @@ private:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // this function will localize an image against a keyframe
-    bool _EstimateRelativePose(
+    double _EstimateRelativePose(
             const cv::Mat&          GreyImg,        //< Input: Greyscale image
             FramePtr                pKeyframe,      //< Input: Keyframe we are localizing against
-            Eigen::Matrix4d&        Tab             //< Output: the estimated transform
+            Eigen::Matrix4d&        Tkc             //< Input/Output: the estimated relative transform (input is used as a hint)
             );
 
 /////
@@ -109,10 +109,10 @@ private:
     DenseMap*                           m_pMap;                     // map use for estimating poses
 
     // GPU Variables
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cdGreyPyr;
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cdKeyGreyPyr;
-    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           m_cdKeyDepthPyr;
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     m_cdWorkspace;
+    Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdGreyPyr;
+    Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdKeyGreyPyr;
+    Gpu::Pyramid<float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>             m_cdKeyDepthPyr;
+    Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage>                       m_cdWorkspace;
     Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>                              m_cdDebug;
     GpuVars_t                                                                       m_cdTemp;
 

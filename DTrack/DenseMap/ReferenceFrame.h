@@ -5,6 +5,7 @@
 #include <limits.h>
 
 #include <opencv.hpp>
+#include <Eigen/Dense>
 
 #define NO_PARENT INT_MAX
 
@@ -110,6 +111,10 @@ private:
     unsigned int                            m_nId;                  // reference frame ID
     unsigned int                            m_nParentEdgeId;        // for bfs
     std::vector< unsigned int >             m_vNeighborEdgeIds;     // for the co-vis graph
+
+    // TODO this has to be replaced with a method that computes a "global" pose given a starting
+    // frame and a DFS
+    Eigen::Matrix4d                         m_dGlobalPose;          // keyframe's global pose
 
     cv::Mat                                 m_GreyImage;
     cv::Mat                                 m_GreyThumb;

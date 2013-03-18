@@ -205,7 +205,7 @@ void DenseMap::SetPathBasePose(
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseMap::AddPathTransform(
+void DenseMap::AddPathPose(
         const Eigen::Matrix4d&      Tab         //< Input: Relative transform
     )
 {
@@ -236,17 +236,23 @@ bool DenseMap::CopyMapChanges(
     // HACK TODO FIXME  -- just to get going, copy the last 100 frames as a quick hack
     m_vEdges.resize( rRHS.m_vEdges.size() );
     m_vFrames.resize( rRHS.m_vFrames.size() );
+    m_vPath.resize( rRHS.m_vPath.size() );
     m_pCurKeyframe = rRHS.m_pCurKeyframe;
 
-    for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-100, 0 ); ii-- ){
+    for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-5, 0 ); ii-- ){
         m_vEdges[ii] = boost::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
         //m_vEdges[ii] = rRHS.m_vEdges[ii]; // will do a deep copy
     }
 
-    for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-100, 0 ); ii-- ){
+    for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-5, 0 ); ii-- ){
         m_vFrames[ii] = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
         //m_vFrames[ii] = rRHS.m_vFrames[ii]; // will do a deep copy
     }
+
+    for( int ii = rRHS.m_vPath.size()-1; ii >= std::max( (int)rRHS.m_vPath.size()-5, 0 ); ii-- ){
+        m_vPath[ii] = rRHS.m_vPath[ii];
+    }
+
 
     m_dLastModifiedTime = rRHS.m_dLastModifiedTime;
     return true;

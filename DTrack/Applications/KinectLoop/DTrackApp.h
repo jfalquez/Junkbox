@@ -28,6 +28,8 @@ class DTrackApp
             // parse command line arguments
             GetPot clArgs( argc, argv );
 
+            m_Cam.SetProperty("BufferSize", 20);
+
             // initialize camera
             if( !rpg::InitCam( m_Cam, clArgs ) ) {
                 exit(0);
@@ -131,9 +133,9 @@ class DTrackApp
 
         CameraDevice                m_Cam;          // camera handler
         CamImages                   m_vImages;      // camera images
-        Eigen::Matrix3d             m_Ki;           // intensity (ie. greyscale) camera's intrinsics
+        Eigen::Matrix3d             m_Kg;           // intensity (ie. greyscale) camera's intrinsics
         Eigen::Matrix3d             m_Kd;           // depth camera's intrinsics
-        Eigen::Matrix4d             m_Tid;          // depth camera's pose w.r.t. the greyscale camera
+        Eigen::Matrix4d             m_Tgd;          // depth camera's pose w.r.t. the greyscale camera
 
         DenseFrontEnd*              m_pFrontEnd;
         DenseMap*                   m_pMap;
