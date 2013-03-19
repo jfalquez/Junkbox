@@ -433,7 +433,7 @@ int main(int argc, char** argv)
     vVBO.resize( MAX_PYR_LEVELS );
     vector < pangolin::GlBufferCudaPtr* >      vCBO;
     vCBO.resize( MAX_PYR_LEVELS );
-    vector < pangolin::GlBuffer* >      vIBO;
+    vector < pangolin::GlBuffer* >             vIBO;
     vIBO.resize( MAX_PYR_LEVELS );
     vector < SceneGraph::GLObject* >           glVBO;
     glVBO.resize( MAX_PYR_LEVELS );

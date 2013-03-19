@@ -76,7 +76,7 @@ public:
     volatile GuiState               State;
 
 
-private:
+//private:
     bool                            m_bMapDirty;
 
     DenseMap*                       m_pRenderMap;          // re-allocated on reset. for now.
@@ -141,9 +141,6 @@ void Gui::Init()
 {
     // create OpenGL window in single line thanks to GLUT
     pangolin::CreateGlutWindowAndBind( m_sWindowName, m_nWindowWidth, m_nWindowHeight );
-
-    // init GLEW
-    glewInit();
 
     // register keyboard callbacks
     _RegisterKeyboardCallbacks();
@@ -258,10 +255,10 @@ void Gui::UpdateImages( const cv::Mat& LiveGrey )
 
     m_LiveGrey.SetImage( LiveGrey.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE );
 
-    FramePtr CurKeyframe = m_pRenderMap->GetCurrentKeyframe();
-    if( CurKeyframe ) {
+    FramePtr pKeyframe = m_pRenderMap->GetCurrentKeyframe();
+    if( pKeyframe ) {
         cv::Mat KeyGrey, KeyDepth;
-        CurKeyframe->GetImages( KeyGrey, KeyDepth );
+        pKeyframe->GetImages( KeyGrey, KeyDepth );
         m_KeyGrey.SetImage( KeyGrey.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_BYTE );
         // TODO currently a rough normalization.. make it nicer
         KeyDepth = KeyDepth / 20.0;

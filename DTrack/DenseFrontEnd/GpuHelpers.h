@@ -7,38 +7,22 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class GpuVars_t
+struct GpuVars_t
 {
-public:
-    GpuVars_t()
-    { }
-
     GpuVars_t( unsigned int nImgWidth, unsigned int nImgHeight ) :
-        uImg1( nImgWidth, nImgHeight ),
-        uImg2( nImgWidth, nImgHeight ),
         uPyr1( nImgWidth, nImgHeight ),
         fPyr1( nImgWidth, nImgHeight ),
-        fPyr2( nImgWidth, nImgHeight )
+        fPyr2( nImgWidth, nImgHeight ),
+        uImg1( nImgWidth, nImgHeight ),
+        uImg2( nImgWidth, nImgHeight )
     { }
 
-    void Init( unsigned int nImgWidth, unsigned int nImgHeight )
-    {
-        uImg1 = Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >(nImgWidth, nImgHeight);
-        uImg2 = Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >(nImgWidth, nImgHeight);
-
-        uPyr1.Allocate( nImgWidth, nImgHeight );
-        fPyr1.Allocate( nImgWidth, nImgHeight );
-        fPyr2.Allocate( nImgWidth, nImgHeight );
-    }
-
-public:
     // temporal auxilary variables (by type)
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     uImg1;
-    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     uImg2;
-
-    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   uPyr1;
-    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           fPyr1;
-    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           fPyr2;
+    Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage>                       uImg1;
+    Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage>                       uImg2;
+    Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     uPyr1;
+    Gpu::Pyramid<float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>             fPyr1;
+    Gpu::Pyramid<float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>             fPyr2;
 };
 
 
@@ -79,11 +63,11 @@ inline void GenerateGreyThumbnail(
         cv::Mat&                        ThumbImage          //< Output: Thumbnail image
         )
 {
-    // copy image to GPU
+    // upload grey image
     Wksp.uPyr1[0].MemcpyFromHost( Image.data );
 
     // reduce
-    Gpu::BlurReduce< unsigned char, MAX_PYR_LEVELS, unsigned int >( Wksp.uPyr1, Wksp.uImg1, Wksp.uImg2 );
+    Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( Wksp.uPyr1, Wksp.uImg1, Wksp.uImg2 );
 
     // copy image from GPU
     assert( ThumbImage.empty() == false );

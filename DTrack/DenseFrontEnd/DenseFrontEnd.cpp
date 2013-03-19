@@ -1,6 +1,7 @@
 #include <Mvlpp/Mvl.h>
 
 #include <pangolin/pangolin.h>
+#include <cuda_gl_interop.h>
 
 #include "DenseFrontEnd.h"
 
@@ -10,12 +11,24 @@ DenseFrontEndConfig         feConfig;
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-DenseFrontEnd::DenseFrontEnd()
+DenseFrontEnd::DenseFrontEnd( unsigned int nImageWidth, unsigned int nImageHeight ) :
+    m_cdGreyPyr( nImageWidth, nImageHeight ),
+    m_cdKeyGreyPyr( nImageWidth, nImageHeight ),
+    m_cdKeyDepthPyr( nImageWidth, nImageHeight ),
+    m_cdWorkspace( nImageWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), nImageHeight ),
+    m_cdDebug( nImageWidth, nImageHeight ),
+    m_cdTemp( nImageWidth, nImageHeight )
 {
     mvl::PrintHandlerSetErrorLevel( feConfig.g_nErrorLevel );
 
+    m_nImageWidth = nImageWidth;
+    m_nImageHeight = nImageHeight;
+
     m_pMap   = NULL; // passed in by the user
     m_pTimer = NULL; // passed in by the user
+
+    // check CUDA
+    CheckMemoryCUDA();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -50,12 +63,6 @@ bool DenseFrontEnd::Init(
     std::cout << "Tgd: " << std::endl;
     std::cout << mvl::T2Cart(m_CModPyrDepth.GetPose()).transpose() << std::endl << std::endl;
 
-    // store image dimensions
-    m_nImageWidth = vImages[0].width();
-    m_nImageHeight = vImages[0].height();
-    m_nThumbHeight = m_nImageHeight >> MAX_PYR_LEVELS-1;
-    m_nThumbWidth = m_nImageWidth >> MAX_PYR_LEVELS-1;
-
     // sanity check
     if( m_nImageHeight != m_CModPyrGrey.Height() ) {
         std::cerr << "warning: Camera model and captured image's height do not match. Are you using the correct CMod file?" << std::endl;
@@ -64,18 +71,9 @@ bool DenseFrontEnd::Init(
         std::cerr << "warning: Camera model and captured image's width do not match. Are you using the correct CMod file?" << std::endl;
     }
 
-    // initialize CUDA variables
-    if( CheckMemoryCUDA() < 256 ) {
-        std::cerr << "error: There isn't enough free CUDA memory available! Aborting." << std::endl;
-        return false;
-    }
-    m_cdWorkspace = Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage>( m_nImageWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), m_nImageHeight );
-    m_cdDebug = Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>( m_nImageWidth, m_nImageHeight );
-    m_cdGreyPyr.Allocate( m_nImageWidth, m_nImageHeight );
-    m_cdKeyGreyPyr.Allocate( m_nImageWidth, m_nImageHeight );
-    m_cdKeyDepthPyr.Allocate( m_nImageWidth, m_nImageHeight );
-    m_cdTemp.Init( m_nImageWidth, m_nImageHeight );
-
+    // calculate thumb image dimensions
+    m_nThumbHeight = m_nImageHeight >> MAX_PYR_LEVELS-1;
+    m_nThumbWidth = m_nImageWidth >> MAX_PYR_LEVELS-1;
 
     // initialize max number of iterations to perform at each pyramid level
     // level 0 is finest (ie. biggest image)
@@ -167,10 +165,10 @@ bool DenseFrontEnd::Iterate(
     // run ESM between current and previous frame
     Eigen::Matrix4d Tpc;
     Tpc.setIdentity();
-    Tpc(0,3) = 0.2;
-    Tpc(2,3) = -0.02;
-//    double dRMSE = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc );
-//    std::cout << "Estimate was: " << std::endl << Tpc << std::endl << std::endl;
+//    Tpc(0,3) = 0.2;
+//    Tpc(2,3) = -0.02;
+    double dRMSE = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc );
+    std::cout << "Estimate was: " << std::endl << Tpc << std::endl << std::endl;
 
     // drop estimate into path vector
     m_pMap->AddPathPose( Tpc );
@@ -182,6 +180,7 @@ bool DenseFrontEnd::Iterate(
     /* */
     FramePtr pNewKeyframe = _GenerateKeyframe( vImages );
     if( pNewKeyframe == NULL ) {
+        std::cerr << "error: generating new keyframe." << std::endl;
         return false;
     }
 
@@ -267,8 +266,7 @@ double DenseFrontEnd::_EstimateRelativePose(
     //--- localize
     double dLastError;
 
-//    for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
-    for( int PyrLvl = 0; PyrLvl >= 0; PyrLvl-- ) {
+    for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
         dLastError = 0;
         std::cout << "========================== Level: " << PyrLvl << std::endl;
         for(int ii = 0; ii < feConfig.g_vPyrMaxIters[PyrLvl]; ii++ ) {
@@ -285,14 +283,6 @@ double DenseFrontEnd::_EstimateRelativePose(
             const float fNormC = ui_fNormC * ( 1 << PyrLvl );
 
             // build system
-            std::cout << "GreyPyr[" << m_cdGreyPyr[PyrLvl].IsValid() << "] Dims: " << m_cdGreyPyr[PyrLvl].Width() << " x " << m_cdGreyPyr[PyrLvl].Height() << std::endl;
-            std::cout << "KeyGreyPyr[" << m_cdKeyGreyPyr[PyrLvl].IsValid() << "] Dims: " << m_cdKeyGreyPyr[PyrLvl].Width() << " x " << m_cdKeyGreyPyr[PyrLvl].Height() << std::endl;
-            std::cout << "KeyDepthPyr[" << m_cdKeyDepthPyr[PyrLvl].IsValid() << "] Dims: " << m_cdKeyDepthPyr[PyrLvl].Width() << " x " << m_cdKeyDepthPyr[PyrLvl].Height() << std::endl;
-            std::cout << "Workspace[" << m_cdWorkspace.IsValid() << "] Dims: " << m_cdWorkspace.Width() << " x " << m_cdWorkspace.Height() << std::endl;
-            Gpu::Image<float4, Gpu::TargetDevice, Gpu::DontManage> tmp = m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight);
-            std::cout << "Debug[" << tmp.IsValid() << "] Dims: " << tmp.Width() << " x " << tmp.Height() << std::endl;
-
-            /*
             std::cout << "Solving... ";
             Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthESM( m_cdGreyPyr[PyrLvl], m_cdKeyGreyPyr[PyrLvl],
                                                                                     m_cdKeyDepthPyr[PyrLvl], sTgd.matrix3x4(), KTck, fNormC,
@@ -344,7 +334,7 @@ double DenseFrontEnd::_EstimateRelativePose(
                 std::cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Too few pixels!" << std::endl;
                 continue;
             }
-            /* *
+            /* */
 
             // everything seems fine... apply update
             Tkc = (Tkc.inverse() * Sophus::SE3::exp(X).matrix()).inverse();
@@ -363,7 +353,6 @@ double DenseFrontEnd::_EstimateRelativePose(
 
             // update error
             dLastError = dNewError;
-            */
         }
     }
 

@@ -47,7 +47,7 @@ class DenseFrontEnd
 public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    DenseFrontEnd();
+    DenseFrontEnd( unsigned int nImageWidth, unsigned int nImageHeight );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ~DenseFrontEnd();
@@ -108,18 +108,18 @@ private:
     Eigen::Matrix4d                     m_dGlobalPose;              // global pose for display w.r.t the map
     DenseMap*                           m_pMap;                     // map use for estimating poses
 
+    Timer*                              m_pTimer;
+
+    boost::mutex                        m_Mutex;
+
+
     // GPU Variables
+    GpuVars_t                                                                       m_cdTemp;
     Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdGreyPyr;
     Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdKeyGreyPyr;
     Gpu::Pyramid<float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>             m_cdKeyDepthPyr;
     Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage>                       m_cdWorkspace;
     Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>                              m_cdDebug;
-    GpuVars_t                                                                       m_cdTemp;
-
-
-    Timer*                              m_pTimer;
-
-    boost::mutex                        m_Mutex;
 };
 
 

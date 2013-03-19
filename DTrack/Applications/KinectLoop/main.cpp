@@ -50,11 +50,34 @@ int main( int argc, char** argv )
         std::cerr << "error: a problem occured while initializing app." << std::endl;
     }
 
-    std::cout << "Sleeping..." << std::endl;
-    sleep(1);
+    app.UpdateGui( gui );
 
-    app.StepOnce( gui );
-    */
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    pangolin::FinishGlutFrame();
+
+    while( !pangolin::ShouldQuit() ) {
+
+        std::cout << ".";
+        sleep(1);
+
+        app.StepOnce( gui );
+
+        app.UpdateGui( gui );
+
+        if( gui.m_bMapDirty ) {
+            // the map has changed update it before rendering again
+            gui.m_pRenderMap->CopyMapChanges( *(gui.m_pChangesBufferMap) );
+            gui.m_bMapDirty = false;
+        }
+
+        app.UpdateGui( gui );
+
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        pangolin::FinishGlutFrame();
+
+        usleep(1000000 / 120);
+    }
+    /* */
 
     // start gui thread
     gui.Run();

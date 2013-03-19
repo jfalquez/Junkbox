@@ -65,11 +65,14 @@ class DTrackApp
             sCModFile = clArgs.follow( "cmod_d.xml", "-dcmod" );
             std::string sDepthCModFilename = sSrcDir + "/" + sCModFile;
 
+            // TODO load files here so that GUI is aware of intrinsics or something
+            // perhaps store it in the map??
+
 
             if( m_pFrontEnd ) {
                 delete m_pFrontEnd;
             }
-            m_pFrontEnd = new DenseFrontEnd;
+            m_pFrontEnd = new DenseFrontEnd( m_vImages[0].width(), m_vImages[0].height() );
             return m_pFrontEnd->Init( sGreyCModFilename, sDepthCModFilename, m_vImages, m_pMap, m_pTimer );
         }
 

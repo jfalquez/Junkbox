@@ -223,9 +223,9 @@ bool DenseMap::CopyMapChanges(
         DenseMap&       rRHS        //< Input: Map to copy from
     )
 {
-    if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
-        return false; // nothing to do, map is up-to date
-    }
+//    if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
+//        return false; // nothing to do, map is up-to date
+//    }
 
     // make sure we're dealing with the same map?
 //        assert( m_nMapId == rRHS.m_nMapId );
@@ -238,6 +238,7 @@ bool DenseMap::CopyMapChanges(
     m_vFrames.resize( rRHS.m_vFrames.size() );
     m_vPath.resize( rRHS.m_vPath.size() );
     m_pCurKeyframe = rRHS.m_pCurKeyframe;
+//    m_pCurKeyframe = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *(rRHS.m_pCurKeyframe) ) );
 
     for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-5, 0 ); ii-- ){
         m_vEdges[ii] = boost::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
