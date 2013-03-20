@@ -168,7 +168,7 @@ bool DenseFrontEnd::Iterate(
 //    Tpc(0,3) = 0.2;
 //    Tpc(2,3) = -0.02;
     double dRMSE = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc );
-    std::cout << "Estimate was: " << std::endl << Tpc << std::endl << std::endl;
+    std::cout << "Estimate was: " << mvl::T2Cart(Tpc).transpose() << std::endl << std::endl;
 
     // drop estimate into path vector
     m_pMap->AddPathPose( Tpc );
@@ -268,28 +268,27 @@ double DenseFrontEnd::_EstimateRelativePose(
 
     for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
         dLastError = 0;
-        std::cout << "========================== Level: " << PyrLvl << std::endl;
+//        std::cout << "========================== Level: " << PyrLvl << std::endl;
         for(int ii = 0; ii < feConfig.g_vPyrMaxIters[PyrLvl]; ii++ ) {
-            std::cout << "----- Iter: " << ii << std::endl;
+//            std::cout << "----- Iter: " << ii << std::endl;
             const unsigned              PyrLvlWidth = m_nImageWidth >> PyrLvl;
             const unsigned              PyrLvlHeight = m_nImageHeight >> PyrLvl;
 
             Eigen::Matrix3d             Kg = m_CModPyrGrey.K( PyrLvl );     // grey sensor's instrinsics
             Eigen::Matrix3d             Kd = m_CModPyrDepth.K( PyrLvl );    // depth sensor's intrinsics
-            Sophus::SE3d                sTgd = Sophus::SE3d( m_CModPyrDepth.GetPose() ); // depth sensor's pose w.r.t. grey sensor
-            Sophus::SE3d                sTkc = Sophus::SE3d( Tkc );
-            Eigen::Matrix<double,3,4>   KTck = Kg * sTkc.inverse().matrix3x4();
+            Eigen::Matrix4d             Tgd = m_CModPyrDepth.GetPose();     // depth sensor's pose w.r.t. grey sensor
+            Eigen::Matrix4d             Tck = Tkc.inverse();
+            Eigen::Matrix<double,3,4>   KgTck = Kg * Tck.block<3,4>(0,0);
 
             const float fNormC = ui_fNormC * ( 1 << PyrLvl );
 
             // build system
-            std::cout << "Solving... ";
-            Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthESM( m_cdGreyPyr[PyrLvl], m_cdKeyGreyPyr[PyrLvl],
-                                                                                    m_cdKeyDepthPyr[PyrLvl], sTgd.matrix3x4(), KTck, fNormC,
-                                                                                    Kd(0,0), Kd(1,1), Kd(0,2), Kd(1,2),
+            Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthESM( m_cdGreyPyr[PyrLvl],
+                                                                                    m_cdKeyGreyPyr[PyrLvl],
+                                                                                    m_cdKeyDepthPyr[PyrLvl],
+                                                                                    Kg, Kd, Tgd, Tck, KgTck,
                                                                                     m_cdWorkspace, m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight),
-                                                                                    ui_bDiscardMaxMin, 0.3, 20.0 );
-            std::cout << "done!" << std::endl;
+                                                                                    fNormC, ui_bDiscardMaxMin, 0.3, 30.0 );
 
             Eigen::Matrix<double,6,6>   LHS = LSS.JTJ;
             Eigen::Vector6d             RHS = LSS.JTy;
@@ -348,6 +347,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
             // if error decreases too slowly, break out of this level
             if( ( fabs( dNewError - dLastError ) < ui_fBreakErrorThreshold ) && ui_bBreakEarly ) {
+                std::cout << "Breaking early..." << std::endl;
                 break;
             }
 

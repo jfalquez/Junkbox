@@ -32,8 +32,8 @@ public:
 
     void DrawCanonicalObject()
     {
-        if( m_pMap->NumFrames() < 0 ) {
-//        if( m_pMap->GetCurrentKeyframe() ) {
+//        if( m_pMap->NumFrames() < 0 ) {
+        if( m_pMap->GetCurrentKeyframe() ) {
             FramePtr pKeyframe = m_pMap->GetCurrentKeyframe();
             unsigned int nImgWidth = pKeyframe->GetImageWidth();
             unsigned int nImgHeight = pKeyframe->GetImageHeight();

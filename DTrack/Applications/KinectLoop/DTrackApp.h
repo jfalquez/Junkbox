@@ -59,7 +59,7 @@ class DTrackApp
 
             std::string sCModFile;
 
-            sCModFile = clArgs.follow( "cmod_i.xml", "-icmod" );
+            sCModFile = clArgs.follow( "cmod.xml", "-cmod" );
             std::string sGreyCModFilename = sSrcDir + "/" + sCModFile;
 
             sCModFile = clArgs.follow( "cmod_d.xml", "-dcmod" );
@@ -111,6 +111,8 @@ class DTrackApp
                 CamImages&          vImages    //< Input/Output
             )
         {
+            /*
+
             // this converts images from the kinect to the expected format of DTrack
             cv::Mat Tmp;
 
@@ -127,6 +129,8 @@ class DTrackApp
 
                 vImages[1].Image = Tmp;
             }
+
+            /* */
         }
 
 
