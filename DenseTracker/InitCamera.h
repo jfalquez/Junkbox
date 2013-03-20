@@ -48,6 +48,7 @@ CameraDevice* InitCamera(
     std::string sDeviceDriver     = cl->follow( "FileReader", 1, "-idev" );
     std::string sSourceDir        = cl->follow( ".", 1, "-sdir"  );
     std::string sCameraModel      = cl->follow( "cmod.xml", 1, "-cmod" );
+    std::string sDepthCameraModel      = cl->follow( "cmod_d.xml", 1, "-dcmod" );
     std::string sLeftCameraModel  = cl->follow( "lcmod.xml", 1, "-lcmod" );
     std::string sRightCameraModel = cl->follow( "rcmod.xml", 1, "-rcmod" );
     std::string sLeftFileRegex    = cl->follow( "Left.*pgm", 1, "-lfile" );
@@ -79,16 +80,16 @@ CameraDevice* InitCamera(
         pCam->SetProperty( "Loop",          true);
 
         // check if second image is RGB or Depth
-        pCam->SetProperty( "CamModFileName", sSourceDir + "/" + sRightCameraModel );
+        pCam->SetProperty( "CamModFileName", sSourceDir + "/" + sCameraModel );
         if( sDepthFileRegex.empty() ) {
             pCam->SetProperty( "Channel-1",    sRightFileRegex );
         } else {
             g_bHaveDepth = true;
             pCam->SetProperty("Channel-1",     sDepthFileRegex );
-            pCam->SetProperty( "CamModFileName", sSourceDir + "/" + sLeftCameraModel );
+            pCam->SetProperty( "DepthCamModFileName", sSourceDir + "/" + sDepthCameraModel );
         }
         // USE THIS FOR KINECT FILES
-        g_fDepthScale = 1000.0;
+//        g_fDepthScale = 1000.0;
     }
 
     // //////////////////////////////////////////////////////////////////////
