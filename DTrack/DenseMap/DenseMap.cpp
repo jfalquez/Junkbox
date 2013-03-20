@@ -223,9 +223,9 @@ bool DenseMap::CopyMapChanges(
         DenseMap&       rRHS        //< Input: Map to copy from
     )
 {
-//    if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
-//        return false; // nothing to do, map is up-to date
-//    }
+    if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
+        return false; // nothing to do, map is up-to date
+    }
 
     // make sure we're dealing with the same map?
 //        assert( m_nMapId == rRHS.m_nMapId );

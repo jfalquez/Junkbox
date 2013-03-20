@@ -3,10 +3,6 @@ CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
 PROJECT( KinectLoop )
 
 
-IF( CMAKE_COMPILER_IS_GNUCXX )
- SET(CMAKE_CXX_FLAGS "-std=c++11 -g")
-ENDIF()
-
 LIST( APPEND HDRS
         DTrackApp.h
         Gui.h

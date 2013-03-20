@@ -12,12 +12,12 @@ DenseFrontEndConfig         feConfig;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 DenseFrontEnd::DenseFrontEnd( unsigned int nImageWidth, unsigned int nImageHeight ) :
+    m_cdTemp( nImageWidth, nImageHeight ),
     m_cdGreyPyr( nImageWidth, nImageHeight ),
     m_cdKeyGreyPyr( nImageWidth, nImageHeight ),
     m_cdKeyDepthPyr( nImageWidth, nImageHeight ),
     m_cdWorkspace( nImageWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), nImageHeight ),
-    m_cdDebug( nImageWidth, nImageHeight ),
-    m_cdTemp( nImageWidth, nImageHeight )
+    m_cdDebug( nImageWidth, nImageHeight )
 {
     mvl::PrintHandlerSetErrorLevel( feConfig.g_nErrorLevel );
 
@@ -242,7 +242,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
 
     //--- upload GREYSCALE data to GPU as a pyramid
-    m_cdGreyPyr[0].MemcpyFromHost( GreyImg.data );
+    m_cdGreyPyr[0].MemcpyFromHost( GreyImg.data, m_nImageWidth );
     m_cdKeyGreyPyr[0].MemcpyFromHost( pKeyframe->GetGreyImagePtr() );
 
     for( int ii = 0; ii < ui_nBlur; ii++ ) {
@@ -262,8 +262,21 @@ double DenseFrontEnd::_EstimateRelativePose(
     Gpu::BoxReduce<float, MAX_PYR_LEVELS, float>( m_cdKeyDepthPyr );
 
 
-
     //--- localize
+    // IMPORTANT!!!!!!!
+    // The localization code operates in VISION frame. Thus, we convert our initial pose from ROBOTICS to VISION
+    // and once the solution is found, we convert it from VISION to ROBOTICS.
+
+    // vision-robotics permutation matrix
+    Eigen::Matrix4d Tvr;
+    Tvr << 0, 1, 0, 0,
+           0, 0, 1, 0,
+           1, 0, 0, 0,
+           0, 0, 0, 1;
+
+    // convert initial pose to VISION reference frame
+    Tkc = Tvr * Tkc * Tvr.inverse();
+
     double dLastError;
 
     for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
@@ -278,7 +291,7 @@ double DenseFrontEnd::_EstimateRelativePose(
             Eigen::Matrix3d             Kd = m_CModPyrDepth.K( PyrLvl );    // depth sensor's intrinsics
             Eigen::Matrix4d             Tgd = m_CModPyrDepth.GetPose();     // depth sensor's pose w.r.t. grey sensor
             Eigen::Matrix4d             Tck = Tkc.inverse();
-            Eigen::Matrix<double,3,4>   KgTck = Kg * Tck.block<3,4>(0,0);
+            Eigen::Matrix<double,3,4>   KgTck = Kg * Tck.block<3,4>(0,0);   // precompute for speed
 
             const float fNormC = ui_fNormC * ( 1 << PyrLvl );
 
@@ -289,6 +302,20 @@ double DenseFrontEnd::_EstimateRelativePose(
                                                                                     Kg, Kd, Tgd, Tck, KgTck,
                                                                                     m_cdWorkspace, m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight),
                                                                                     fNormC, ui_bDiscardMaxMin, 0.3, 30.0 );
+
+// Show DEBUG image from minimization
+#if 0
+            {
+                cv::Mat Debug( m_nImageHeight, m_nImageWidth, CV_32FC4 );
+                m_cdDebug.MemcpyToHost(Debug.data);
+                cv::imshow("Debug", Debug );
+                cv::waitKey(1000);
+                if( PyrLvl == 0 ) {
+                    cv::waitKey(3000);
+                    cv::destroyWindow("Debug");
+                }
+            }
+#endif
 
             Eigen::Matrix<double,6,6>   LHS = LSS.JTJ;
             Eigen::Vector6d             RHS = LSS.JTy;
@@ -355,6 +382,9 @@ double DenseFrontEnd::_EstimateRelativePose(
             dLastError = dNewError;
         }
     }
+
+    // convert estimate to ROBOTICS frame
+    Tkc = Tvr.inverse() * Tkc * Tvr;
 
     return dLastError;
 }

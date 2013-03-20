@@ -112,7 +112,6 @@ private:
 
     boost::mutex                        m_Mutex;
 
-
     // GPU Variables
     GpuVars_t                                                                       m_cdTemp;
     Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdGreyPyr;

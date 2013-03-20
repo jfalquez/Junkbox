@@ -311,6 +311,7 @@ int main(int argc, char** argv)
     glewInit();
     cudaGLSetGLDevice(0);
     SceneGraph::GLSceneGraph::ApplyPreferredGlSettings();
+    glClearColor(0,0,0,0);
 
     // Define Camera Render Object (for view / scene browsing)
     pangolin::OpenGlRenderState glState( pangolin::ProjectionMatrix( 640, 480, 420, 420, 320, 240, 0.1, 1000 ),

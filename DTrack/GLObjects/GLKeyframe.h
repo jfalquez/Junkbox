@@ -1,5 +1,5 @@
-#ifndef _GLMAP_H_
-#define _GLMAP_H_
+#ifndef _GLKEYFRAME_H_
+#define _GLKEYFRAME_H_
 
 #include <SceneGraph/GLObject.h>
 
@@ -12,73 +12,58 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class GLMap : public SceneGraph::GLObject
+class GLKeyframe : public SceneGraph::GLObject
 {
 public:
 
-    GLMap()
+    GLKeyframe()
     { }
 
     void InitReset( DenseMap* pMap )
     {
-        m_bInitIBO  = false;
         m_pMap      = pMap;
+        m_bIsInit   = false;
+
     }
 
     void DrawCanonicalObject()
     {
-        if( m_pVBO.size() < m_pMap->NumFrames() ) {
+        if( m_pMap->GetCurrentKeyframe() ) {
+            FramePtr pKeyframe = m_pMap->GetCurrentKeyframe();
+            const unsigned int nImgWidth = pKeyframe->GetImageWidth();
+            const unsigned int nImgHeight = pKeyframe->GetImageHeight();
 
-            // get image dimensions
-            FramePtr pFrame = m_pMap->GetFramePtr(0);
-            const unsigned int nImgWidth    = pFrame->GetImageWidth();
-            const unsigned int nImgHeight   = pFrame->GetImageHeight();
-
-            // allocate single IBO which will be shared
-            if( m_bInitIBO == false ) {
+            // allocate memory
+            if( m_bIsInit == false ) {
+                m_pVBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_FLOAT, 4, GL_STREAM_DRAW );
+                m_pCBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_UNSIGNED_BYTE, 4, GL_STREAM_DRAW );
                 m_pIBO = new pangolin::GlBuffer();
                 pangolin::MakeTriangleStripIboForVbo( *m_pIBO, nImgWidth, nImgHeight );
-
-                m_bInitIBO = true;
+                m_bIsInit = true;
             }
 
-            // allocate and populate VBO and CBO
-            for( int ii = m_pVBO.size(); ii < m_pMap->NumFrames(); ++ii ) {
-                pFrame = m_pMap->GetFramePtr( ii );
-
-                pangolin::GlBuffer* pVBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_FLOAT, 4, GL_STREAM_DRAW );
-                pangolin::GlBuffer* pCBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_UNSIGNED_BYTE, 4, GL_STREAM_DRAW );
-
+            // only update VBO if keyframe has changed
+            if( m_pLastKeyframe != pKeyframe ) {
                 float VBO[nImgWidth * nImgHeight * 4];
                 // TODO obtain these intrinsics from SOMEWHERE
-                _DepthToVBO( (float*)pFrame->GetDepthImagePtr(), nImgWidth, nImgHeight, 570, 570, 320, 240, VBO );
-                pVBO->Upload( VBO, nImgWidth * nImgHeight * 4 * 4);
+                _DepthToVBO( (float*)pKeyframe->GetDepthImagePtr(), nImgWidth, nImgHeight, 570, 570, 320, 240, VBO );
+                m_pVBO->Upload( VBO, nImgWidth * nImgHeight * 4 * 4);
 
                 unsigned char CBO[nImgWidth * nImgHeight * 4];
-                _GreyToCBO( (unsigned char*)pFrame->GetGreyImagePtr(), nImgWidth, nImgHeight, CBO );
-                pCBO->Upload( CBO, nImgWidth * nImgHeight * 4);
-
-                m_pVBO.push_back( pVBO );
-                m_pCBO.push_back( pCBO );
+                _GreyToCBO( (unsigned char*)pKeyframe->GetGreyImagePtr(), nImgWidth, nImgHeight, CBO );
+                m_pCBO->Upload( CBO, nImgWidth * nImgHeight * 4);
             }
+
+            // draw!
+            glPushAttrib( GL_ENABLE_BIT );
+            glDisable( GL_LIGHTING );
+
+            // TODO obtain global pose from somewhere
+
+            pangolin::RenderVboIboCbo( *m_pVBO, *m_pIBO, *m_pCBO, true, true );
+
+            glPopAttrib();
         }
-
-
-        // draw!
-        glPushAttrib( GL_ENABLE_BIT );
-        glDisable( GL_LIGHTING );
-
-        glPushMatrix();
-        Eigen::Matrix4d Tab;
-        for( int ii = 0; ii < m_pMap->NumFrames(); ++ii ) {
-            if( m_pMap->GetTransformFromParent( ii, Tab ) ) {
-                glMultMatrixd( MAT4_COL_MAJOR_DATA( Tab ) );
-            }
-            pangolin::RenderVboIboCbo( *m_pVBO[ii], *m_pIBO, *m_pCBO[ii], true, true );
-        }
-
-        glPopMatrix();
-        glPopAttrib();
     }
 
 
@@ -128,11 +113,12 @@ private:
 
 
 protected:
-    bool                                    m_bInitIBO;
-    DenseMap*                               m_pMap;
-    pangolin::GlBuffer*                     m_pIBO;
-    std::vector < pangolin::GlBuffer* >     m_pVBO;
-    std::vector < pangolin::GlBuffer* >     m_pCBO;
+    bool                            m_bIsInit;
+    DenseMap*                       m_pMap;
+    FramePtr                        m_pLastKeyframe;
+    pangolin::GlBuffer*             m_pVBO;
+    pangolin::GlBuffer*             m_pCBO;
+    pangolin::GlBuffer*             m_pIBO;
 };
 
 #endif

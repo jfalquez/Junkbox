@@ -142,6 +142,9 @@ void Gui::Init()
     // create OpenGL window in single line thanks to GLUT
     pangolin::CreateGlutWindowAndBind( m_sWindowName, m_nWindowWidth, m_nWindowHeight );
 
+    // init GLEW
+    glewInit();
+
     // register keyboard callbacks
     _RegisterKeyboardCallbacks();
 
@@ -157,6 +160,7 @@ void Gui::Init()
 
     // configure 3d view
     SceneGraph::GLSceneGraph::ApplyPreferredGlSettings();
+    glClearColor( 0, 0, 0, 0 );
     m_gl3dGraph.AddChild( &m_glGrid );
     m_gl3dGraph.AddChild( &m_glKeyPose );
     m_glKeyPose.SetScale( 3.0 );
