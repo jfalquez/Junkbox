@@ -7,9 +7,9 @@ class GuiConfig
 {
 public:
     GuiConfig() :
-    g_nNumPosesToShow( CVarUtils::CreateCVar<>( "gui.NumPosesToShow", 20u, "Number of poses to display on GUI. Setting to 0 displays all poses." ) ),
-    g_nNumGridLines( CVarUtils::CreateCVar<>( "gui.NumGridLines", 10u, "Number of grid divisions." ) ),
-    g_nStartFrame( CVarUtils::CreateCVar<>( "gui.StartFrame", 0u, "Starting image frame for FileReader." ) )
+    g_nNumPosesToShow( CVarUtils::CreateCVar<>( "ui.NumPosesToShow", 20u, "Number of poses to display on GUI. Setting to 0 displays all poses." ) ),
+    g_nNumGridLines( CVarUtils::CreateCVar<>( "ui.NumGridLines", 10u, "Number of grid divisions." ) ),
+    g_nStartFrame( CVarUtils::CreateCVar<>( "ui.StartFrame", 0u, "Starting image frame for FileReader." ) )
     {}
 
     unsigned int&         g_nNumPosesToShow;

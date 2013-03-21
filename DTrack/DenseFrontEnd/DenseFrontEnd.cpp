@@ -12,12 +12,12 @@ DenseFrontEndConfig         feConfig;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 DenseFrontEnd::DenseFrontEnd( unsigned int nImageWidth, unsigned int nImageHeight ) :
-    m_cdTemp( nImageWidth, nImageHeight ),
     m_cdGreyPyr( nImageWidth, nImageHeight ),
     m_cdKeyGreyPyr( nImageWidth, nImageHeight ),
     m_cdKeyDepthPyr( nImageWidth, nImageHeight ),
     m_cdWorkspace( nImageWidth * sizeof(Gpu::LeastSquaresSystem<float,6>), nImageHeight ),
-    m_cdDebug( nImageWidth, nImageHeight )
+    m_cdDebug( nImageWidth, nImageHeight ),
+    m_cdTemp( nImageWidth, nImageHeight )
 {
     mvl::PrintHandlerSetErrorLevel( feConfig.g_nErrorLevel );
 
@@ -103,7 +103,7 @@ bool DenseFrontEnd::Init(
     bool bNewFrame = true;
 
     // check if MAP is preloaded with frames...
-    if( m_pMap->NumFrames() == 0 ) {
+    if( m_pMap->GetNumFrames() == 0 ) {
 
         // nope, so set path base pose and global pose accordingly
         m_pMap->SetPathBasePose( Eigen::Matrix4d::Identity() );
@@ -143,11 +143,14 @@ bool DenseFrontEnd::Iterate(
         const CamImages&    vImages     //< Input: Camera capture
     )
 {
+    // get GUI variables
+    pangolin::Var<float>            ui_fRMSE("ui.RMSE");
+
     // update error level in case user changed it
     mvl::PrintHandlerSetErrorLevel( feConfig.g_nErrorLevel );
 
     // given a motion model or IMU, get estimated pose
-    // based on this pose, load closest keyframe (euclidean distance)
+    // based on this pose, load closest keyframe (euclidean distance including rotation of sorts)
 
     // run ESM to localize
 
@@ -165,9 +168,8 @@ bool DenseFrontEnd::Iterate(
     // run ESM between current and previous frame
     Eigen::Matrix4d Tpc;
     Tpc.setIdentity();
-//    Tpc(0,3) = 0.2;
-//    Tpc(2,3) = -0.02;
-    double dRMSE = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc );
+    ui_fRMSE = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc );
+
     std::cout << "Estimate was: " << mvl::T2Cart(Tpc).transpose() << std::endl << std::endl;
 
     // drop estimate into path vector
@@ -177,20 +179,23 @@ bool DenseFrontEnd::Iterate(
     m_dGlobalPose = m_dGlobalPose * Tpc;
 
     // drop new keyframe ALWAYS
-    /* */
     FramePtr pNewKeyframe = _GenerateKeyframe( vImages );
     if( pNewKeyframe == NULL ) {
         std::cerr << "error: generating new keyframe." << std::endl;
         return false;
     }
 
-    // link previous frame with new frame
+    // set keyframe's global pose
+    pNewKeyframe->SetGlobalPose( m_dGlobalPose );
+
+    // link previous frame with new frame (relative pose)
     m_pMap->LinkFrames( m_pCurKeyframe, pNewKeyframe, Tpc );
 
     // set new keyframe as current keyframe
     m_pCurKeyframe = pNewKeyframe;
     m_pMap->SetKeyframe( m_pCurKeyframe );
-    /* */
+
+    // check for loop closure
 
     return true;
 }
@@ -233,7 +238,6 @@ double DenseFrontEnd::_EstimateRelativePose(
         )
 {
     // get GUI variables
-    pangolin::Var<float>            ui_fRMSE("ui.RMSE");
     pangolin::Var<bool>             ui_bBreakEarly( "ui.Break Early" );
     pangolin::Var<float>            ui_fBreakErrorThreshold( "ui.Break Early Error Threshold" );
     pangolin::Var<unsigned int>     ui_nBlur("ui.Blur");
@@ -366,11 +370,6 @@ double DenseFrontEnd::_EstimateRelativePose(
             Tkc = (Tkc.inverse() * Sophus::SE3::exp(X).matrix()).inverse();
 
             const double dNewError = sqrt(LSS.sqErr / LSS.obs);
-
-            // only show error of last level so the GUI doesn't go too crazy
-            if( PyrLvl == 0 ) {
-                ui_fRMSE =  dNewError;
-            }
 
             // if error decreases too slowly, break out of this level
             if( ( fabs( dNewError - dLastError ) < ui_fBreakErrorThreshold ) && ui_bBreakEarly ) {

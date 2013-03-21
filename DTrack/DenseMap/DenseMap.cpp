@@ -44,14 +44,14 @@ bool DenseMap::FindEdgeId(
     )
 {
     FramePtr pf = GetFramePtr( uStartId );
-    std::vector<unsigned int>& vEdgeIds = pf->Neighbors();
+    std::vector<unsigned int>& vEdgeIds = pf->GetNeighbors();
     for( size_t ii = 0; ii < vEdgeIds.size(); ++ii ){
         EdgePtr pEdge = m_vEdges[ vEdgeIds[ii] ];
-        if( pEdge->EndId() == uEndId   && pEdge->StartId() == uStartId ){
+        if( pEdge->GetEndId() == uEndId   && pEdge->GetStartId() == uStartId ){
             uEdgeId =  vEdgeIds[ii];
             return true;
         }
-        else if( pEdge->EndId() == uStartId   && pEdge->StartId() == uEndId ){
+        else if( pEdge->GetEndId() == uStartId   && pEdge->GetStartId() == uEndId ){
             uEdgeId =  vEdgeIds[ii];
             return true;
         }
@@ -73,7 +73,7 @@ void DenseMap::LinkFrames(
     assert( pA->Id() == m_vFrames[pA->Id()]->Id() );
     assert( pB->Id() == m_vFrames[pB->Id()]->Id() );
 
-    EdgePtr pEdge( new TransformEdge( pA->Id(), pB->Id(), Tab ) );
+    EdgePtr pEdge( new TransformEdge( pA->GetId(), pB->GetId(), Tab ) );
     // make sure we're not duplicating an existing edge
     //        if( HasEdge( nStartId, nEndId ) ){
     //            printf("ERROR: edge <nStartId,nEndId> or <nEndId,nStartId> already exists\n");
@@ -144,7 +144,7 @@ FramePtr DenseMap::GetFramePtr( unsigned int uFrameId )
 {
     std::vector<FramePtr>::reverse_iterator rit;
     for( rit =  m_vFrames.rbegin(); rit != m_vFrames.rend(); ++rit ) {
-        if( (*rit)->Id() == uFrameId )
+        if( (*rit)->GetId() == uFrameId )
             return (*rit);
     }
 
@@ -173,9 +173,9 @@ bool DenseMap::GetTransformFromParent(
     )
 {
     FramePtr pChildFrame  = GetFramePtr( uChildFrameId );
-    FramePtr pParentFrame = GetFramePtr( pChildFrame->ParentEdgeId() );
+    FramePtr pParentFrame = GetFramePtr( pChildFrame->GetParentEdgeId() );
     if( pParentFrame != NULL && pChildFrame != NULL ) {
-        if( GetRelativeTransform( pParentFrame->Id(), uChildFrameId, dTab ) ) {
+        if( GetRelativeTransform( pParentFrame->GetId(), uChildFrameId, dTab ) ) {
             return true;
         }
     }
@@ -187,12 +187,12 @@ bool DenseMap::GetTransformFromParent(
 FramePtr DenseMap::GetParentFramePtr( unsigned int uChildFrameId )
 {
     FramePtr pChildFrame = GetFramePtr( uChildFrameId );
-    if( pChildFrame->ParentEdgeId() == NO_PARENT ) {
+    if( pChildFrame->GetParentEdgeId() == NO_PARENT ) {
         return FramePtr( (ReferenceFrame*)NULL );
     }
-    EdgePtr pEdge = GetEdgePtr( pChildFrame->ParentEdgeId() );
+    EdgePtr pEdge = GetEdgePtr( pChildFrame->GetParentEdgeId() );
     FramePtr pParentFrame;
-    pParentFrame = pEdge->EndId() == uChildFrameId ? GetFramePtr(pEdge->StartId()) : GetFramePtr(pEdge->EndId());
+    pParentFrame = pEdge->GetEndId() == uChildFrameId ? GetFramePtr(pEdge->GetStartId()) : GetFramePtr(pEdge->GetEndId());
     return pParentFrame;
 }
 
@@ -237,8 +237,6 @@ bool DenseMap::CopyMapChanges(
     m_vEdges.resize( rRHS.m_vEdges.size() );
     m_vFrames.resize( rRHS.m_vFrames.size() );
     m_vPath.resize( rRHS.m_vPath.size() );
-    m_pCurKeyframe = rRHS.m_pCurKeyframe;
-//    m_pCurKeyframe = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *(rRHS.m_pCurKeyframe) ) );
 
     for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-5, 0 ); ii-- ){
         m_vEdges[ii] = boost::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
@@ -255,7 +253,13 @@ bool DenseMap::CopyMapChanges(
     }
 
 
+    m_pCurKeyframe = rRHS.m_pCurKeyframe;
+//    m_pCurKeyframe = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *(rRHS.m_pCurKeyframe) ) );
+
+    m_dBasePose = rRHS.m_dBasePose;
+
     m_dLastModifiedTime = rRHS.m_dLastModifiedTime;
+
     return true;
 }
 
@@ -274,7 +278,7 @@ void DenseMap::Print()
     printf("EDGES\n");
     printf("*******************************************\n");
     for( unsigned int ii=0; ii < m_vEdges.size(); ii++ ) {
-        printf("Id: %d  start_frame: %d  end_frame: %d \n", ii, m_vEdges[ii]->StartId(), m_vEdges[ii]->EndId());
+        printf("Id: %d  start_frame: %d  end_frame: %d \n", ii, m_vEdges[ii]->GetStartId(), m_vEdges[ii]->GetEndId());
     }
 
     printf("*******************************************\n");

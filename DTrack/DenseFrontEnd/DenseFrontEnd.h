@@ -113,12 +113,12 @@ private:
     boost::mutex                        m_Mutex;
 
     // GPU Variables
-    GpuVars_t                                                                       m_cdTemp;
     Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdGreyPyr;
     Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdKeyGreyPyr;
     Gpu::Pyramid<float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>             m_cdKeyDepthPyr;
     Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage>                       m_cdWorkspace;
     Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>                              m_cdDebug;
+    GpuVars_t                                                                       m_cdTemp;
 };
 
 

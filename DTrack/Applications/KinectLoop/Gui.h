@@ -96,7 +96,6 @@ public:
 
     // objects for 3d view
     SceneGraph::GLGrid              m_glGrid;
-    SceneGraph::GLAxis              m_glKeyPose;
     GLPath                          m_glPath;
     GLMap                           m_glMap;
 
@@ -162,8 +161,6 @@ void Gui::Init()
     SceneGraph::GLSceneGraph::ApplyPreferredGlSettings();
     glClearColor( 0, 0, 0, 0 );
     m_gl3dGraph.AddChild( &m_glGrid );
-    m_gl3dGraph.AddChild( &m_glKeyPose );
-    m_glKeyPose.SetScale( 3.0 );
     m_gl3dGraph.AddChild( &m_glMap );
     m_gl3dGraph.AddChild( &m_glPath );
 
@@ -229,6 +226,10 @@ void Gui::Run()
             m_bMapDirty = false;
             m_Mutex.unlock();
          }
+
+         // update gui variables
+         m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
+         m_glPath.SetPoseDisplay( guiConfig.g_nNumPosesToShow );
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 

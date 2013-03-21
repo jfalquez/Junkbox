@@ -89,7 +89,7 @@ CameraDevice* InitCamera(
             pCam->SetProperty( "DepthCamModFileName", sSourceDir + "/" + sDepthCameraModel );
         }
         // USE THIS FOR KINECT FILES
-//        g_fDepthScale = 1000.0;
+        g_fDepthScale = 1000.0;
     }
 
     // //////////////////////////////////////////////////////////////////////

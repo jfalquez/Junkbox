@@ -53,6 +53,9 @@ public:
     void SetTime( double dTime );
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void SetGlobalPose( const Eigen::Matrix4d& dPose );
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
     void SetImages(
             const cv::Mat&      GreyImage,      //< Input: Greyscale image
             const cv::Mat&      DepthImage      //< Input: Depth image
@@ -71,9 +74,10 @@ public:
     // Getters
     //
 
-    unsigned int Id();
-    double Time();
-    unsigned int NumNeighbors();
+    unsigned int GetId();
+    double GetTime();
+    Eigen::Matrix4d GetGlobalPose();
+    unsigned int GetNumNeighbors();
 
     unsigned int GetNeighborEdgeId( unsigned int uIdx );
 
@@ -84,16 +88,20 @@ public:
         );
 
     int GetImageHeight() { return m_GreyImage.rows; }
+    int GetThumbHeight() { return m_GreyThumb.rows; }
     int GetImageWidth() { return m_GreyImage.cols; }
+    int GetThumbWidth() { return m_GreyThumb.cols; }
 
     unsigned char* GetGreyImagePtr() { return m_GreyImage.data; }
+    unsigned char* GetGreyThumbPtr() { return m_GreyThumb.data; }
     unsigned char* GetDepthImagePtr() { return m_DepthImage.data; }
+    unsigned char* GetDepthThumbPtr() { return m_DepthThumb.data; }
 
     /// HACK hand out reference to our private data
-    std::vector<unsigned int>& Neighbors();
+    std::vector<unsigned int>& GetNeighbors();
 
     // return edge to parent
-    unsigned int ParentEdgeId();
+    unsigned int GetParentEdgeId();
 
 
 private:

@@ -54,16 +54,18 @@ public:
 
         glPushAttrib(GL_ENABLE_BIT);
 
-        // draw at base pose
-        // TODO this is not working
-//        glMultMatrixd( MAT4_COL_MAJOR_DATA( m_pMap->GetPathBasePose() ) );
-
         glDisable( GL_LIGHTING );
         glEnable( GL_DEPTH_TEST );
 
         glEnable(GL_LINE_SMOOTH);
 
         glLineWidth(1);
+
+        // draw at base pose
+        glPushMatrix();
+        glMultMatrixd( MAT4_COL_MAJOR_DATA( m_pMap->GetPathBasePose() ) );
+        glCallList( m_nDrawListId );
+
         std::vector< Eigen::Matrix4d >& vPath = m_pMap->GetPathRef();
 
         if( m_bDrawAxis ) {
@@ -114,6 +116,7 @@ public:
             glEnd();
         }
 
+        glPopMatrix();
         glPopAttrib();
     }
 

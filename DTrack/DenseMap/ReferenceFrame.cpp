@@ -5,6 +5,8 @@
 ReferenceFrame::ReferenceFrame()
                : m_nParentEdgeId(NO_PARENT)
 {
+    // reset pose
+    m_dGlobalPose.setIdentity();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -21,6 +23,14 @@ void ReferenceFrame::SetTime(
     )
 {
     m_dSensorTime = dTime;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReferenceFrame::SetGlobalPose(
+        const Eigen::Matrix4d& dPose
+    )
+{
+    m_dGlobalPose = dPose;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -49,19 +59,25 @@ void ReferenceFrame::SetParentEdgeId( unsigned int nEdgeId ) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::Id()
+unsigned int ReferenceFrame::GetId()
 {
     return m_nId;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-double ReferenceFrame::Time()
+double ReferenceFrame::GetTime()
 {
     return m_dSensorTime;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::NumNeighbors()
+Eigen::Matrix4d ReferenceFrame::GetGlobalPose()
+{
+    return m_dGlobalPose;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+unsigned int ReferenceFrame::GetNumNeighbors()
 {
     return m_vNeighborEdgeIds.size();
 }
@@ -80,7 +96,7 @@ unsigned int ReferenceFrame::GetNeighborEdgeId( unsigned int uIdx )
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-std::vector<unsigned int>& ReferenceFrame::Neighbors()
+std::vector<unsigned int>& ReferenceFrame::GetNeighbors()
 {
     return m_vNeighborEdgeIds;
 }
@@ -96,7 +112,7 @@ void ReferenceFrame::GetImages(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-unsigned int ReferenceFrame::ParentEdgeId() {
+unsigned int ReferenceFrame::GetParentEdgeId() {
     return m_nParentEdgeId;
 }
 
@@ -113,9 +129,12 @@ void ReferenceFrame::_Copy(
 {
     m_dSensorTime   = rRHS.m_dSensorTime;
     m_nId           = rRHS.m_nId;
+    m_dGlobalPose   = rRHS.m_dGlobalPose;
     m_nParentEdgeId = rRHS.m_nParentEdgeId;
     m_GreyImage     = rRHS.m_GreyImage.clone();
+    m_GreyThumb     = rRHS.m_GreyThumb.clone();
     m_DepthImage    = rRHS.m_DepthImage.clone();
+    m_DepthThumb    = rRHS.m_DepthThumb.clone();
 
     // TODO only need to copy this IFF there has been a change, which could be found via the timestamp
     m_vNeighborEdgeIds.clear();
