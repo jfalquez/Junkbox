@@ -167,10 +167,32 @@ bool DenseFrontEnd::Iterate(
     // FOR NOW
     // run ESM between current and previous frame
     Eigen::Matrix4d Tpc;
-    Tpc.setIdentity();
-    ui_fRMSE = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc );
+
+    // use constant velocity motion model??
+    if( feConfig.g_bConstantVelocityMotionModel == true ) {
+        if( m_pMap->GetTransformFromParent( m_pCurKeyframe->GetId(), Tpc ) == false ) {
+            Tpc.setIdentity();
+        }
+    } else {
+        Tpc.setIdentity();
+    }
+
+    double dTrackingError = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc );
+    ui_fRMSE = dTrackingError;
 
     std::cout << "Estimate was: " << mvl::T2Cart(Tpc).transpose() << std::endl << std::endl;
+
+    if( dTrackingError < 5 ) {
+        m_eTrackingState = eTrackingGood;
+    } else if( dTrackingError < 20 ) {
+        m_eTrackingState = eTrackingPoor;
+    } else if( dTrackingError < 35 ) {
+        std::cerr << "warning: tracking is bad." << std::endl;
+        m_eTrackingState = eTrackingBad;
+    } else {
+        m_eTrackingState = eTrackingFail;
+        return false;
+    }
 
     // drop estimate into path vector
     m_pMap->AddPathPose( Tpc );
@@ -196,6 +218,17 @@ bool DenseFrontEnd::Iterate(
     m_pMap->SetKeyframe( m_pCurKeyframe );
 
     // check for loop closure
+    double          dLoopClosureError;
+    Eigen::Matrix4d LoopClosureT;
+    int nLoopClosureFrameId = _LoopClosure( m_pCurKeyframe, LoopClosureT, dLoopClosureError );
+    if( nLoopClosureFrameId != -1 && dLoopClosureError < feConfig.g_dLoopClosureThreshold ) {
+        std::cout << "Loop Closure Detected!!! Frame: " << nLoopClosureFrameId << " Error: " << dLoopClosureError << std::endl;
+        m_eTrackingState = eTrackingLoopClosure;
+        // link frames
+    }
+
+    // TODO kinda hacky, but check if frame ID is too "close" to our current frame
+    // have some sort of margin variable controlled by CVar
 
     return true;
 }
@@ -284,10 +317,8 @@ double DenseFrontEnd::_EstimateRelativePose(
     double dLastError;
 
     for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
-        dLastError = 0;
-//        std::cout << "========================== Level: " << PyrLvl << std::endl;
+        dLastError = DBL_MAX;
         for(int ii = 0; ii < feConfig.g_vPyrMaxIters[PyrLvl]; ii++ ) {
-//            std::cout << "----- Iter: " << ii << std::endl;
             const unsigned              PyrLvlWidth = m_nImageWidth >> PyrLvl;
             const unsigned              PyrLvlHeight = m_nImageHeight >> PyrLvl;
 
@@ -333,7 +364,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
                 // check degenerate system
                 if( lu_JTJ.rank() < 6 ) {
-                    std::cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << std::endl;
+                    PrintMessage( feConfig.g_nDebugESM, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
                     continue;
                 }
 
@@ -346,7 +377,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
                 // check degenerate system
                 if( lu_JTJ.rank() < 3 ) {
-                    std::cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Rank: " << lu_JTJ.rank() << std::endl;
+                    PrintMessage( feConfig.g_nDebugESM, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
                     continue;
                 }
 
@@ -373,7 +404,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
             // if error decreases too slowly, break out of this level
             if( ( fabs( dNewError - dLastError ) < ui_fBreakErrorThreshold ) && ui_bBreakEarly ) {
-                std::cout << "Breaking early..." << std::endl;
+                PrintMessage( feConfig.g_nDebugESM, "notice: Breaking early @ L%d : I%d ...\n", PyrLvl+1, ii+1 );
                 break;
             }
 
@@ -386,4 +417,72 @@ double DenseFrontEnd::_EstimateRelativePose(
     Tkc = Tvr.inverse() * Tkc * Tvr;
 
     return dLastError;
+}
+
+
+// TODO put this somewhere else
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// SAD score image1 with image2 -- images are assumed to be same type & dimensions
+// returns: SAD score
+template < typename T >
+inline float ScoreImages(
+        const cv::Mat&              Image1,
+        const cv::Mat&              Image2
+        )
+{
+    float fScore = 0;
+    for( int ii = 0; ii < Image1.rows; ii++ ) {
+        for( int jj = 0; jj < Image1.cols; jj++ ) {
+            fScore += fabs(Image1.at<T>(ii, jj) - Image2.at<T>(ii, jj));
+        }
+    }
+    return fScore;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int DenseFrontEnd::_LoopClosure(
+        FramePtr                pFrame,         //< Input: Frame we are attempting to find a loop closure
+        Eigen::Matrix4d&        T,              //< Output: Transform between input frame and closest matching frame
+        double&                 dError          //< Output: RMSE of estimated transform
+    )
+{
+    // TODO use frame's global pose to find closest frames and from there do DFS? some sort of Kd-tree?
+    // this is only for speed-up purposes to achieve near RT loop closure
+
+    // TODO add a vector of "top" matches so we can compare with multiple frames instead of just 1
+//    std::vector< FramePtr >     vMatches;
+
+    // TODO add grey-depth contribution ratio for matching
+
+    float       fBestScore = FLT_MAX;
+    FramePtr    pBestMatch;
+
+    for( int ii = 0; ii < m_pMap->GetNumFrames(); ii++ ) {
+
+        // do not try to compare with frames too close too us
+        if( abs(ii - pFrame->GetId()) <= feConfig.g_nLoopClosureMargin ) {
+            continue;
+        }
+
+        // get frame pointer
+        FramePtr pMatchFrame = m_pMap->GetFramePtr( ii );
+
+        float fScore = ScoreImages<unsigned char>( pFrame->GetGreyThumbRef(), pMatchFrame->GetGreyThumbRef() );
+
+        if( fScore < fBestScore ) {
+            fBestScore = fScore;
+            pBestMatch = pMatchFrame;
+        }
+    }
+
+    // if no match is found, return 0
+    if( fBestScore == FLT_MAX ) {
+        return -1;
+    }
+
+    // calculate transform between best match and input frame
+    dError = _EstimateRelativePose( pFrame->GetGreyImageRef(), pBestMatch, T );
+
+    return pBestMatch->GetId();
 }

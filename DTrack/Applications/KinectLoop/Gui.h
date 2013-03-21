@@ -165,11 +165,11 @@ void Gui::Init()
     m_gl3dGraph.AddChild( &m_glPath );
 
     m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000) );
-    m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-10, 0, -10, 30, 0, 0, pangolin::AxisNegZ) );
+    m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-20, 0, -30, 0, 0, 0, pangolin::AxisNegZ) );
 
     m_View3d.SetBounds( 0.4, 1.0, pangolin::Attach::Pix(280), 1.0, 640.0f/480.0f );
     m_View3d.SetAspect( 640.0 / 480.0 );
-    m_View3d.SetHandler( new SceneGraph::HandlerSceneGraph( m_gl3dGraph, m_gl3dRenderState, pangolin::AxisNone) );
+    m_View3d.SetHandler( new SceneGraph::HandlerSceneGraph( m_gl3dGraph, m_gl3dRenderState, pangolin::AxisNone ) );
     m_View3d.SetDrawFunction( SceneGraph::ActivateDrawFunctor( m_gl3dGraph, m_gl3dRenderState ) );
 
 
@@ -263,7 +263,7 @@ void Gui::UpdateImages( const cv::Mat& LiveGrey )
     FramePtr pKeyframe = m_pRenderMap->GetCurrentKeyframe();
     if( pKeyframe ) {
         cv::Mat KeyGrey, KeyDepth;
-        pKeyframe->GetImages( KeyGrey, KeyDepth );
+        pKeyframe->CopyImages( KeyGrey, KeyDepth );
         m_KeyGrey.SetImage( KeyGrey.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_BYTE );
         // TODO currently a rough normalization.. make it nicer
         KeyDepth = KeyDepth / 20.0;

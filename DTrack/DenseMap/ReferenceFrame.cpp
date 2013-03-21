@@ -54,7 +54,10 @@ void ReferenceFrame::SetThumbs(
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void ReferenceFrame::SetParentEdgeId( unsigned int nEdgeId ) {
+void ReferenceFrame::SetParentEdgeId(
+        unsigned int nEdgeId
+    )
+{
     m_nParentEdgeId = nEdgeId;
 }
 
@@ -102,7 +105,7 @@ std::vector<unsigned int>& ReferenceFrame::GetNeighbors()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void ReferenceFrame::GetImages(
+void ReferenceFrame::CopyImages(
         cv::Mat&      GreyImage,      //< Output: Greyscale image
         cv::Mat&      DepthImage      //< Output: Depth image
     )

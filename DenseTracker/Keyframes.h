@@ -21,7 +21,9 @@ struct Keyframe_t {
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Score Image with Keyframe Image
+// SAD score image1 with image2 -- images are assumed to be same type & dimensions
+// returns: SAD score
+template < typename T >
 inline float ScoreImages(
         const cv::Mat&              Image1,
         const cv::Mat&              Image2
@@ -30,7 +32,7 @@ inline float ScoreImages(
     float fScore = 0;
     for( int ii = 0; ii < Image1.rows; ii++ ) {
         for( int jj = 0; jj < Image1.cols; jj++ ) {
-            fScore += abs(Image1.at<unsigned char>(ii,jj) - Image2.at<unsigned char>(ii,jj));
+            fScore += fabs(Image1.at<T>(ii,jj) - Image2.at<T>(ii,jj));
         }
     }
     return fScore;
@@ -108,13 +110,13 @@ inline unsigned int FindBestKeyframe(
 
     unsigned int nBestIdx = 0;
 
-    float ImageScore = ScoreImages( ThumbImage, vKeyframes[0].ThumbImage );
-    float DepthScore = ScoreImages( ThumbDepth, vKeyframes[0].ThumbDepth );
+    float ImageScore = ScoreImages<unsigned char>( ThumbImage, vKeyframes[0].ThumbImage );
+    float DepthScore = ScoreImages<float>( ThumbDepth, vKeyframes[0].ThumbDepth );
     vKeyframes[0].ThumbScore = ( fLumContrib * ImageScore ) + ( fDepthContrib * DepthScore );
     float fBestScore     = vKeyframes[0].ThumbScore;
     for( int ii = 1; ii < vKeyframes.size(); ii++ ) {
-        ImageScore = ScoreImages( ThumbImage, vKeyframes[ii].ThumbImage );
-        DepthScore = ScoreImages( ThumbDepth, vKeyframes[ii].ThumbDepth );
+        ImageScore = ScoreImages<unsigned char>( ThumbImage, vKeyframes[ii].ThumbImage );
+        DepthScore = ScoreImages<float>( ThumbDepth, vKeyframes[ii].ThumbDepth );
         vKeyframes[ii].ThumbScore = ( fLumContrib * ImageScore ) + ( fDepthContrib * DepthScore );
         if( vKeyframes[ii].ThumbScore < fBestScore ) {
             fBestScore = vKeyframes[ii].ThumbScore;

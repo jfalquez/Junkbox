@@ -82,15 +82,20 @@ public:
     unsigned int GetNeighborEdgeId( unsigned int uIdx );
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void GetImages(
-            cv::Mat&      GreyImage,      //< Output: Greyscale image
-            cv::Mat&      DepthImage      //< Output: Depth image
+    void CopyImages(
+            cv::Mat&      GreyImage,      //< Output: A full copy of the greyscale image
+            cv::Mat&      DepthImage      //< Output: A full copy of the depth image
         );
 
     int GetImageHeight() { return m_GreyImage.rows; }
     int GetThumbHeight() { return m_GreyThumb.rows; }
     int GetImageWidth() { return m_GreyImage.cols; }
     int GetThumbWidth() { return m_GreyThumb.cols; }
+
+    cv::Mat& GetGreyImageRef() { return m_GreyImage; }
+    cv::Mat& GetGreyThumbRef() { return m_GreyThumb; }
+    cv::Mat& GetDepthImageRef() { return m_DepthImage; }
+    cv::Mat& GetDepthThumbRef() { return m_DepthThumb; }
 
     unsigned char* GetGreyImagePtr() { return m_GreyImage.data; }
     unsigned char* GetGreyThumbPtr() { return m_GreyThumb.data; }

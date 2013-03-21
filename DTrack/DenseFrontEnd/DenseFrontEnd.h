@@ -34,10 +34,11 @@ typedef std::vector< rpg::ImageWrapper >               CamImages;
 
 enum eTrackingState
 {
-    eTrackingGood = 1,
-    eTrackingPoor = 2,
-    eTrackingBad  = 4,
-    eTrackingFail = 8
+    eTrackingGood           = 1,
+    eTrackingPoor           = 2,
+    eTrackingBad            = 4,
+    eTrackingFail           = 8,
+    eTrackingLoopClosure    = 16
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -54,6 +55,7 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // initialize the engine
+    // returns: true if no errors were encountered
     bool Init(
             std::string             sGreyCModFilename,  //< Input: Greyscale camera model file
             std::string             sDepthCModFilename, //< Input: Depth camera model file
@@ -64,32 +66,44 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // iterate through the captured images
+    // returns: true if no errors were encountered
     bool Iterate(
             const CamImages&        vImages     //< Input: Camera Capture
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // returns true if tracking is bad
-    bool TrackingBad()
+    // returns current tracking state
+    eTrackingState TrackingState()
     {
-        return m_eTrackingState == eTrackingBad;
+        return m_eTrackingState;
     }
 
 private:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // will generate a new keyframe (with thumnails, etc) and put it in the map
+    // returns: pointer to newly created reference frame
     FramePtr _GenerateKeyframe(
             const CamImages&    vImages     //< Input: Images used to generate new keyframe
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // this function will localize an image against a keyframe
+    // returns: root mean square error
     double _EstimateRelativePose(
             const cv::Mat&          GreyImg,        //< Input: Greyscale image
             FramePtr                pKeyframe,      //< Input: Keyframe we are localizing against
             Eigen::Matrix4d&        Tkc             //< Input/Output: the estimated relative transform (input is used as a hint)
             );
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // this function will try to find a loop closure between the provided keyframe and the map
+    // returns: frame ID of loop closure -- returns -1 if no frame is found
+    int _LoopClosure(
+            FramePtr                pFrame,         //< Input: Frame we are attempting to find a loop closure
+            Eigen::Matrix4d&        T,              //< Output: Transform between input frame and closest matching frame
+            double&                 dError          //< Output: RMSE of estimated transform
+        );
 
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

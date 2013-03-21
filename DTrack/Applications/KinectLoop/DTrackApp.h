@@ -81,9 +81,12 @@ class DTrackApp
         {
             if( m_Cam.Capture( m_vImages ) ) {
                 _UnpackImages( m_vImages );
-                m_pFrontEnd->Iterate( m_vImages );
+                if( m_pFrontEnd->Iterate( m_vImages ) == false) {
+                    std::cerr << "critical warning: something went wrong during the last iteration." << std::endl;
+                    rGui.SetState( PAUSED );
+                }
 
-                if( m_pFrontEnd->TrackingBad() ){
+                if( m_pFrontEnd->TrackingState() == eTrackingBad || m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
                     rGui.SetState( PAUSED );
                 }
             } else {
@@ -111,7 +114,7 @@ class DTrackApp
                 CamImages&          vImages    //< Input/Output
             )
         {
-            /*
+            /* */
 
             // this converts images from the kinect to the expected format of DTrack
             cv::Mat Tmp;

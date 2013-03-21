@@ -97,13 +97,21 @@ private:
             float*      pVBO
         )
     {
+        const float fMaxDistance = 5.0;
         for( int ii = 0; ii < nHeight; ++ii ) {
             for( int jj = 0; jj < nWidth; ++jj ) {
                 const unsigned int nIdx = (ii * nWidth) + jj;
                 const unsigned int nVboIdx = nIdx * 4;
-                pVBO[nVboIdx]   = pDepth[nIdx];
-                pVBO[nVboIdx+1] = pDepth[nIdx] * (jj-cx) / fx;
-                pVBO[nVboIdx+2] = pDepth[nIdx] * (ii-cy) / fy;
+                float fDistanceWeight = ( ((cx - abs(jj - cx)) / cx ) + ((cy - abs(ii - cy)) / cy) ) / 2;
+                if( pDepth[nIdx] < fMaxDistance * fDistanceWeight ) {
+                    pVBO[nVboIdx]   = 0.0/0.0;
+                    pVBO[nVboIdx+1] = 0.0/0.0;
+                    pVBO[nVboIdx+2] = 0.0/0.0;
+                } else {
+                    pVBO[nVboIdx]   = pDepth[nIdx];
+                    pVBO[nVboIdx+1] = pDepth[nIdx] * (jj-cx) / fx;
+                    pVBO[nVboIdx+2] = pDepth[nIdx] * (ii-cy) / fy;
+                }
                 pVBO[nVboIdx+3] = 1;
             }
         }
