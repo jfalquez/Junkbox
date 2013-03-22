@@ -69,33 +69,37 @@ public:
 
         std::map<unsigned int, Eigen::Matrix4d> vPoses;
 
-        /* */
         m_pMap->GenerateAbsolutePoses( vPoses );
 
-        if( m_bDrawAxis ) {
-            std::map<unsigned int, Eigen::Matrix4d>::iterator it;
-            for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
-                Eigen::Matrix4d&    Pose = it->second;
+        if( !vPoses.empty() ) {
+            // look for first pose of map, which is our "true" origin
+            Eigen::Matrix4d dOrigin = _TInv( vPoses[0] );
 
-                glPushMatrix();
-                glMultMatrixd( MAT4_COL_MAJOR_DATA( Pose ) );
-                glCallList( m_nDrawListId );
-                glPopMatrix();
+            if( m_bDrawAxis ) {
+                std::map<unsigned int, Eigen::Matrix4d>::iterator it;
+                for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
+                    Eigen::Matrix4d&    Pose = it->second;
+
+                    glPushMatrix();
+                    glMultMatrixd( MAT4_COL_MAJOR_DATA( dOrigin * Pose ) );
+                    glCallList( m_nDrawListId );
+                    glPopMatrix();
+                }
             }
-        }
 
-        if( m_bDrawLines ) {
-            glEnable( GL_LINE_SMOOTH );
-            glLineWidth( 1 );
-            glColor4f( m_fLineColor(0), m_fLineColor(1), m_fLineColor(2), m_fLineColor(3) );
+            if( m_bDrawLines ) {
+                glEnable( GL_LINE_SMOOTH );
+                glLineWidth( 1 );
+                glColor4f( m_fLineColor(0), m_fLineColor(1), m_fLineColor(2), m_fLineColor(3) );
 
-            glBegin( GL_LINE_STRIP );
-            std::map<unsigned int, Eigen::Matrix4d>::iterator it;
-            for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
-                Eigen::Matrix4d&    Pose = it->second;
-                glVertex3f( Pose(0,3), Pose(1,3), Pose(2,3) );
+                glBegin( GL_LINE_STRIP );
+                std::map<unsigned int, Eigen::Matrix4d>::iterator it;
+                for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
+                    Eigen::Matrix4d    Pose = dOrigin * it->second;
+                    glVertex3f( Pose(0,3), Pose(1,3), Pose(2,3) );
+                }
+                glEnd();
             }
-            glEnd();
         }
         /* */
 
@@ -204,6 +208,8 @@ public:
 
 
 private:
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     bool _GLInit()
     {
         m_nDrawListId = glGenLists(1);
@@ -239,6 +245,18 @@ private:
         m_bInitGLComplete = true;
         return true;
     }
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    inline Eigen::Matrix4d _TInv( Eigen::Matrix4d T )
+    {
+        // calc Hji = [ Hij(1:3,1:3).' -Hij(1:3,1:3).'*Hij(1:3,4); 0 0 0 1 ];
+        Eigen::Matrix4d invT;
+        invT.block<3,3>(0,0) =  T.block<3,3>(0,0).transpose();
+        invT.block<3,1>(0,3) = -T.block<3,3>(0,0).transpose() * T.block<3,1>(0,3);
+        invT.row(3) = Eigen::Vector4d( 0, 0, 0, 1 );
+        return invT;
+    }
+
 
 private:
     DenseMap*                       m_pMap;

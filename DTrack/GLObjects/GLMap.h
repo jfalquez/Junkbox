@@ -70,47 +70,35 @@ public:
 
         std::map<unsigned int, Eigen::Matrix4d> vPoses;
 
-        /* */
         m_pMap->GenerateAbsolutePoses( vPoses );
 
-        // draw!
-        glPushAttrib( GL_ENABLE_BIT );
-        glDisable( GL_LIGHTING );
+        if( !vPoses.empty() ) {
+            // look for first pose of map, which is our "true" origin
+            Eigen::Matrix4d dOrigin = _TInv( vPoses[0] );
 
-        std::map<unsigned int, Eigen::Matrix4d>::iterator it;
-        for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
-            unsigned int        nId = it->first;
-            Eigen::Matrix4d&    Pose = it->second;
+            // draw!
+            glPushAttrib( GL_ENABLE_BIT );
+            glDisable( GL_LIGHTING );
 
-            glPushMatrix();
-            glMultMatrixd( MAT4_COL_MAJOR_DATA( Pose ) );
-            pangolin::RenderVboIboCbo( *m_pVBO[nId], *m_pIBO, *m_pCBO[nId], true, true );
-            glPopMatrix();
+            std::map<unsigned int, Eigen::Matrix4d>::iterator it;
+            for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
+                unsigned int        nId = it->first;
+                Eigen::Matrix4d&    Pose = it->second;
+
+                glPushMatrix();
+                glMultMatrixd( MAT4_COL_MAJOR_DATA( dOrigin * Pose ) );
+                pangolin::RenderVboIboCbo( *m_pVBO[nId], *m_pIBO, *m_pCBO[nId], true, true );
+                glPopMatrix();
+            }
         }
-        /* */
-
-        /*
-        m_pMap->GenerateRelativePoses( vPoses );
-
-        // draw!
-        glPushAttrib( GL_ENABLE_BIT );
-        glDisable( GL_LIGHTING );
-
-        glPushMatrix();
-        for( int ii = 0; ii < vPoses.size(); ii++ ) {
-            Eigen::Matrix4d&    Pose = vPoses[ii];
-
-            glMultMatrixd( MAT4_COL_MAJOR_DATA( Pose ) );
-            pangolin::RenderVboIboCbo( *m_pVBO[ii], *m_pIBO, *m_pCBO[ii], true, true );
-        }
-        glPopMatrix();
-        /* */
 
         glPopAttrib();
     }
 
 
 private:
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     inline void _DepthToVBO(
             float*      pDepth,
             int         nWidth,
@@ -142,6 +130,7 @@ private:
         }
     }
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     inline void _GreyToCBO(
             unsigned char*  pGrey,
             int             nWidth,
@@ -161,6 +150,16 @@ private:
         }
     }
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    inline Eigen::Matrix4d _TInv( Eigen::Matrix4d T )
+    {
+        // calc Hji = [ Hij(1:3,1:3).' -Hij(1:3,1:3).'*Hij(1:3,4); 0 0 0 1 ];
+        Eigen::Matrix4d invT;
+        invT.block<3,3>(0,0) =  T.block<3,3>(0,0).transpose();
+        invT.block<3,1>(0,3) = -T.block<3,3>(0,0).transpose() * T.block<3,1>(0,3);
+        invT.row(3) = Eigen::Vector4d( 0, 0, 0, 1 );
+        return invT;
+    }
 
 
 protected:

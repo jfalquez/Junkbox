@@ -223,8 +223,10 @@ bool DenseFrontEnd::Iterate(
         m_eTrackingState = eTrackingLoopClosure;
 
         // link frames
-        m_pMap->LinkFrames( m_pMap->GetFramePtr(nLoopClosureFrameId), m_pCurKeyframe, Tpc );
-//        m_pMap->LinkFrames( m_pCurKeyframe, m_pMap->GetFramePtr(nLoopClosureFrameId),  Tpc );
+        // TODO Ask Steeeeeeevveeeee!! Why the hell is this weird behaviour happening? Comment the top line
+        // and uncomment the bottom, and no loop closure is found.. WTF?!?!?!?
+        m_pMap->LinkFrames( m_pMap->GetFramePtr(nLoopClosureFrameId), m_pCurKeyframe, LoopClosureT );
+//        m_pMap->LinkFrames( m_pCurKeyframe, m_pMap->GetFramePtr(nLoopClosureFrameId),  LoopClosureT.inverse() );
     }
 
     // TODO kinda hacky, but check if frame ID is too "close" to our current frame

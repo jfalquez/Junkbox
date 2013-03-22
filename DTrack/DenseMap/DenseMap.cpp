@@ -318,53 +318,55 @@ void DenseMap::GenerateRelativePoses(
 
     // now search for close nodes
     std::queue<FramePtr> q;
+    std::queue<Eigen::Matrix4d> t;
     pRoot->SetDepth(0);
     q.push(pRoot);
+    t.push(Eigen::Matrix4d::Identity());
 
     // reset colors
     _ResetNodes();
 
     FramePtr pCurNode;
+    Eigen::Matrix4d curT;
     Eigen::Matrix4d T;
 
     while( !q.empty() ) {
 
         pCurNode = q.front();
+        curT     = t.front();
         q.pop();
+        t.pop();
         pCurNode->SetGrey();
 
         // Explore neighbours
         for( unsigned int ii = 0; ii < pCurNode->GetNumNeighbors(); ++ii ) {
-            unsigned int uNeighborEdgeId = pCurNode->GetNeighborEdgeId(ii);
-            EdgePtr pNeighborEdge   = GetEdgePtr(uNeighborEdgeId);
-            unsigned int uNeighborNodeId;
+            unsigned int nNeighborEdgeId = pCurNode->GetNeighborEdgeId(ii);
+            EdgePtr pNeighborEdge   = GetEdgePtr(nNeighborEdgeId);
 
-            uNeighborNodeId = ( pNeighborEdge->GetStartId() == pCurNode->GetId() ) ?
+            unsigned int nNeighborNodeId;
+            nNeighborNodeId = ( pNeighborEdge->GetStartId() == pCurNode->GetId() ) ?
                 pNeighborEdge->GetEndId() : pNeighborEdge->GetStartId();
 
-            FramePtr pNeighborNode = GetFramePtr(uNeighborNodeId);
+            FramePtr pNeighborNode = GetFramePtr(nNeighborNodeId);
 
             if( pCurNode->GetDepth() < nDepth &&
-                    pNeighborNode != NULL && pNeighborNode->IsWhite()) {
+                    pNeighborNode != NULL   &&
+                    pNeighborNode->IsWhite() ) {
 
                 // add node to the queue
                 pNeighborNode->SetDepth( pCurNode->GetDepth()+1 );
                 pNeighborNode->SetGrey();
                 q.push( pNeighborNode );
+
+                // store transformation (transformation from root)
+                pNeighborEdge->GetTransform( pCurNode->GetId(), nNeighborNodeId, T );
+                t.push( T );
             }
         }
 
         // We are done with this node, add it to the map
         pCurNode->SetBlack();
-        unsigned int uParentEdgeId = pCurNode->GetParentEdgeId();
-
-        if( uParentEdgeId == NO_PARENT ) {
-            vPoses[pCurNode->GetId()] = Eigen::Matrix4d::Identity();
-        } else {
-            EdgePtr pEdge = GetEdgePtr( uParentEdgeId );
-            pEdge->GetTransform(pEdge->GetStartId(), pEdge->GetEndId(), T);
-            vPoses[pCurNode->GetId()] = T;
-        }
+        vPoses[pCurNode->GetId()] = curT;
     }
 }
 
@@ -417,18 +419,18 @@ void DenseMap::GenerateAbsolutePoses(
 
         // Explore neighbours
         for( unsigned int ii = 0; ii < pCurNode->GetNumNeighbors(); ++ii ) {
-            unsigned int uNeighborEdgeId = pCurNode->GetNeighborEdgeId(ii);
-            EdgePtr pNeighborEdge   = GetEdgePtr(uNeighborEdgeId);
-            unsigned int uNeighborNodeId;
+            unsigned int nNeighborEdgeId = pCurNode->GetNeighborEdgeId(ii);
+            EdgePtr pNeighborEdge = GetEdgePtr(nNeighborEdgeId);
 
-            uNeighborNodeId = ( pNeighborEdge->GetStartId() == pCurNode->GetId() ) ?
+            unsigned int nNeighborNodeId;
+            nNeighborNodeId = ( pNeighborEdge->GetStartId() == pCurNode->GetId() ) ?
                                 pNeighborEdge->GetEndId() : pNeighborEdge->GetStartId();
 
-            FramePtr pNeighborNode = GetFramePtr(uNeighborNodeId);
+            FramePtr pNeighborNode = GetFramePtr(nNeighborNodeId);
 
             if( (int)pCurNode->GetDepth() < nDepth &&
                 pNeighborNode != NULL      &&
-                pNeighborNode->IsWhite()) {
+                pNeighborNode->IsWhite() ) {
 
                 // add node to the queue
                 pNeighborNode->SetDepth( pCurNode->GetDepth()+1 );
@@ -436,7 +438,7 @@ void DenseMap::GenerateAbsolutePoses(
                 q.push( pNeighborNode );
 
                 // compute cummulative transformation (transformation from root)
-                pNeighborEdge->GetTransform( pCurNode->GetId(), uNeighborNodeId, T);
+                pNeighborEdge->GetTransform( pCurNode->GetId(), nNeighborNodeId, T );
                 t.push( curT*T );
                 mvl::MakeOrthonormal( t.back() );
             }
