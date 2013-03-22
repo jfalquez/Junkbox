@@ -207,9 +207,6 @@ bool DenseFrontEnd::Iterate(
         return false;
     }
 
-    // set keyframe's global pose
-    pNewKeyframe->SetGlobalPose( m_dGlobalPose );
-
     // link previous frame with new frame (relative pose)
     m_pMap->LinkFrames( m_pCurKeyframe, pNewKeyframe, Tpc );
 
@@ -224,7 +221,10 @@ bool DenseFrontEnd::Iterate(
     if( nLoopClosureFrameId != -1 && dLoopClosureError < feConfig.g_dLoopClosureThreshold ) {
         std::cout << "Loop Closure Detected!!! Frame: " << nLoopClosureFrameId << " Error: " << dLoopClosureError << std::endl;
         m_eTrackingState = eTrackingLoopClosure;
+
         // link frames
+        m_pMap->LinkFrames( m_pMap->GetFramePtr(nLoopClosureFrameId), m_pCurKeyframe, Tpc );
+//        m_pMap->LinkFrames( m_pCurKeyframe, m_pMap->GetFramePtr(nLoopClosureFrameId),  Tpc );
     }
 
     // TODO kinda hacky, but check if frame ID is too "close" to our current frame
@@ -477,9 +477,11 @@ int DenseFrontEnd::_LoopClosure(
     }
 
     // if no match is found, return 0
-    if( fBestScore == FLT_MAX ) {
+    if( fBestScore > (feConfig.g_nLoopClosureSAD * (m_nThumbHeight * m_nThumbWidth)) ) {
         return -1;
     }
+
+    std::cout << "Found a candidate with score: " << fBestScore << std::endl;
 
     // calculate transform between best match and input frame
     dError = _EstimateRelativePose( pFrame->GetGreyImageRef(), pBestMatch, T );

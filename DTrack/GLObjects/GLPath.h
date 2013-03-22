@@ -66,6 +66,41 @@ public:
         glMultMatrixd( MAT4_COL_MAJOR_DATA( m_pMap->GetPathBasePose() ) );
         glCallList( m_nDrawListId );
 
+
+        std::map<unsigned int, Eigen::Matrix4d> vPoses;
+
+        /* */
+        m_pMap->GenerateAbsolutePoses( vPoses );
+
+        if( m_bDrawAxis ) {
+            std::map<unsigned int, Eigen::Matrix4d>::iterator it;
+            for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
+                Eigen::Matrix4d&    Pose = it->second;
+
+                glPushMatrix();
+                glMultMatrixd( MAT4_COL_MAJOR_DATA( Pose ) );
+                glCallList( m_nDrawListId );
+                glPopMatrix();
+            }
+        }
+
+        if( m_bDrawLines ) {
+            glEnable( GL_LINE_SMOOTH );
+            glLineWidth( 1 );
+            glColor4f( m_fLineColor(0), m_fLineColor(1), m_fLineColor(2), m_fLineColor(3) );
+
+            glBegin( GL_LINE_STRIP );
+            std::map<unsigned int, Eigen::Matrix4d>::iterator it;
+            for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
+                Eigen::Matrix4d&    Pose = it->second;
+                glVertex3f( Pose(0,3), Pose(1,3), Pose(2,3) );
+            }
+            glEnd();
+        }
+        /* */
+
+
+        /*
         std::vector< Eigen::Matrix4d >& vPath = m_pMap->GetPathRef();
 
         if( m_bDrawAxis ) {
@@ -115,6 +150,7 @@ public:
             }
             glEnd();
         }
+        /* */
 
         glPopMatrix();
         glPopAttrib();

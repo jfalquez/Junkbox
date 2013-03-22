@@ -68,18 +68,43 @@ public:
             }
         }
 
+        std::map<unsigned int, Eigen::Matrix4d> vPoses;
+
+        /* */
+        m_pMap->GenerateAbsolutePoses( vPoses );
 
         // draw!
         glPushAttrib( GL_ENABLE_BIT );
         glDisable( GL_LIGHTING );
 
-        for( int ii = 0; ii < m_pMap->GetNumFrames(); ++ii ) {
-            FramePtr pFrame = m_pMap->GetFramePtr(ii);
+        std::map<unsigned int, Eigen::Matrix4d>::iterator it;
+        for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
+            unsigned int        nId = it->first;
+            Eigen::Matrix4d&    Pose = it->second;
+
             glPushMatrix();
-            glMultMatrixd( MAT4_COL_MAJOR_DATA(pFrame->GetGlobalPose()) );
-            pangolin::RenderVboIboCbo( *m_pVBO[ii], *m_pIBO, *m_pCBO[ii], true, true );
+            glMultMatrixd( MAT4_COL_MAJOR_DATA( Pose ) );
+            pangolin::RenderVboIboCbo( *m_pVBO[nId], *m_pIBO, *m_pCBO[nId], true, true );
             glPopMatrix();
         }
+        /* */
+
+        /*
+        m_pMap->GenerateRelativePoses( vPoses );
+
+        // draw!
+        glPushAttrib( GL_ENABLE_BIT );
+        glDisable( GL_LIGHTING );
+
+        glPushMatrix();
+        for( int ii = 0; ii < vPoses.size(); ii++ ) {
+            Eigen::Matrix4d&    Pose = vPoses[ii];
+
+            glMultMatrixd( MAT4_COL_MAJOR_DATA( Pose ) );
+            pangolin::RenderVboIboCbo( *m_pVBO[ii], *m_pIBO, *m_pCBO[ii], true, true );
+        }
+        glPopMatrix();
+        /* */
 
         glPopAttrib();
     }

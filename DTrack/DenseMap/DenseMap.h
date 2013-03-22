@@ -41,22 +41,22 @@ public:
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // lookup the id of edge between start and end frame (if it exists)
     bool FindEdgeId(
-            unsigned int        uStartId,       //< Input:
-            unsigned int        uEndId,         //< Input:
-            unsigned int&       uEdgeId         //< Output: Global ID of edge
+            unsigned int        nStartId,       //< Input:
+            unsigned int        nEndId,         //< Input:
+            unsigned int&       nEdgeId         //< Output: Global ID of edge
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // true if ID of frame exists
     bool FrameExists(
-            unsigned int    uId     //< Input:
+            unsigned int    nId     //< Input:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // true if there is an edge between start and end frame
     bool EdgeExists(
-            unsigned int    uStartId,       //< Input:
-            unsigned int    uEndId          //< Input:
+            unsigned int    nStartId,       //< Input:
+            unsigned int    nEndId          //< Input:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -64,15 +64,15 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // get pointer of edge given ID
-    EdgePtr GetEdgePtr( unsigned int uEdgeId );
+    EdgePtr GetEdgePtr( unsigned int nEdgeId );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // get pointer of edge between start and end frame
-    EdgePtr GetEdgePtr( unsigned int uStartId, unsigned int uEndId );
+    EdgePtr GetEdgePtr( unsigned int nStartId, unsigned int nEndId );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // get pointer of frame given ID
-    FramePtr GetFramePtr( unsigned int uFrameId );
+    FramePtr GetFramePtr( unsigned int nFrameId );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     unsigned int GetNumFrames() { return m_vFrames.size(); }
@@ -90,13 +90,38 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     bool GetTransformFromParent(
-            unsigned int        uChildFrameId,  //< Input: Child ID we will find parent of
+            unsigned int        nChildFrameId,  //< Input: Child ID we will find parent of
             Eigen::Matrix4d&    dTab            //< Output: Found transform from parent to child
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // return smart pointer to frames "parent"
-    FramePtr GetParentFramePtr( unsigned int uChildFrameId );
+    FramePtr GetParentFramePtr( unsigned int nChildFrameId );
+
+
+
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // traverse the graph via BFS up to input depth and store relative poses relative to input root
+    void GenerateRelativePoses(
+            std::map<unsigned int, Eigen::Matrix4d>&    vPoses,         //< Output: Poses id and relative poses from input root
+            int                                         nRootId = -1,   //< Input: Frame that will be the origin [default: last frame]
+            int                                         nDepth = -1     //< Input: Grapth depth search from root [default: max depth]
+        );
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // traverse the graph via BFS up to input depth and store absolute poses relative to input root
+    void GenerateAbsolutePoses(
+            std::map<unsigned int, Eigen::Matrix4d>&    vPoses,         //< Output: Poses id and absolute poses from input root
+            int                                         nRootId = -1,   //< Input: Frame that will be the origin [default: last frame]
+            int                                         nDepth = -1     //< Input: Grapth depth search from root [default: max depth]
+        );
+
+
+
+
+
+
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //    std::vector<EdgePtr>& GetEdges() { return m_vEdges; }
@@ -147,6 +172,10 @@ private:
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // updates the map's modified time -- to be called whenever a change occurs in the map
     void _UpdateModifiedTime();
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // reset color and depth of all of the map's frames
+    void _ResetNodes();
 
 
 /////

@@ -38,21 +38,21 @@ FramePtr DenseMap::NewFrame(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::FindEdgeId(
-        unsigned int        uStartId,       //< Input:
-        unsigned int        uEndId,         //< Input:
-        unsigned int&       uEdgeId         //< Output: global ID of edge
+        unsigned int        nStartId,       //< Input:
+        unsigned int        nEndId,         //< Input:
+        unsigned int&       nEdgeId         //< Output: global ID of edge
     )
 {
-    FramePtr pf = GetFramePtr( uStartId );
+    FramePtr pf = GetFramePtr( nStartId );
     std::vector<unsigned int>& vEdgeIds = pf->GetNeighbors();
     for( size_t ii = 0; ii < vEdgeIds.size(); ++ii ){
         EdgePtr pEdge = m_vEdges[ vEdgeIds[ii] ];
-        if( pEdge->GetEndId() == uEndId   && pEdge->GetStartId() == uStartId ){
-            uEdgeId =  vEdgeIds[ii];
+        if( pEdge->GetEndId() == nEndId   && pEdge->GetStartId() == nStartId ){
+            nEdgeId =  vEdgeIds[ii];
             return true;
         }
-        else if( pEdge->GetEndId() == uStartId   && pEdge->GetStartId() == uEndId ){
-            uEdgeId =  vEdgeIds[ii];
+        else if( pEdge->GetEndId() == nStartId   && pEdge->GetStartId() == nEndId ){
+            nEdgeId =  vEdgeIds[ii];
             return true;
         }
     }
@@ -68,15 +68,15 @@ void DenseMap::LinkFrames(
     )
 {
 
-    assert( pA->Id() < m_vFrames.size() );
-    assert( pB->Id() < m_vFrames.size() );
-    assert( pA->Id() == m_vFrames[pA->Id()]->Id() );
-    assert( pB->Id() == m_vFrames[pB->Id()]->Id() );
+    assert( pA->GetId() < m_vFrames.size() );
+    assert( pB->GetId() < m_vFrames.size() );
+    assert( pA->GetId() == m_vFrames[pA->GetId()]->GetId() );
+    assert( pB->GetId() == m_vFrames[pB->GetId()]->GetId() );
 
     EdgePtr pEdge( new TransformEdge( pA->GetId(), pB->GetId(), Tab ) );
     // make sure we're not duplicating an existing edge
-    //        if( HasEdge( nStartId, nEndId ) ){
-    //            printf("ERROR: edge <nStartId,nEndId> or <nEndId,nStartId> already exists\n");
+    //        if( HasEdge( nGetStartId, nEndId ) ){
+    //            printf("ERROR: edge <nGetStartId,nEndId> or <nEndId,nGetStartId> already exists\n");
     //        }
     unsigned int nEdgeId = m_vEdges.size();
 
@@ -90,38 +90,37 @@ void DenseMap::LinkFrames(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::FrameExists(
-        unsigned int    uId     //< Input:
+        unsigned int    nId     //< Input:
     )
 {
-    return uId < m_vFrames.size() && m_vFrames[uId] != NULL;
+    return nId < m_vFrames.size() && m_vFrames[nId] != NULL;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::EdgeExists(
-        unsigned int    uStartId,       //< Input:
-        unsigned int    uEndId          //< Input:
+        unsigned int    nGetStartId,    //< Input:
+        unsigned int    nEndId          //< Input:
     )
 {
     unsigned int tmp;
-    return FindEdgeId( uStartId, uEndId, tmp );
+    return FindEdgeId( nGetStartId, nEndId, tmp );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-EdgePtr DenseMap::GetEdgePtr( unsigned int uEdgeId )
+EdgePtr DenseMap::GetEdgePtr( unsigned int nEdgeId )
 {
-    assert( uEdgeId < m_vEdges.size() );
-    return m_vEdges[ uEdgeId ];
+    assert( nEdgeId < m_vEdges.size() );
+    return m_vEdges[ nEdgeId ];
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-EdgePtr DenseMap::GetEdgePtr( unsigned int uStartId, unsigned int uEndId )
+EdgePtr DenseMap::GetEdgePtr( unsigned int nGetStartId, unsigned int nEndId )
 {
-    if( FrameExists( uStartId ) && FrameExists( uEndId ) ){
-        FramePtr pf = GetFramePtr( uStartId );
-        unsigned int uEdgeId;
-        if( FindEdgeId( uStartId, uEndId, uEdgeId ) ){
-            assert( uEdgeId < m_vEdges.size() );
-            return m_vEdges[ uEdgeId ];
+    if( FrameExists( nGetStartId ) && FrameExists( nEndId ) ){
+        unsigned int nEdgeId;
+        if( FindEdgeId( nGetStartId, nEndId, nEdgeId ) ){
+            assert( nEdgeId < m_vEdges.size() );
+            return m_vEdges[ nEdgeId ];
         }
     }
     return EdgePtr( (TransformEdge*)NULL ); // like null
@@ -140,11 +139,11 @@ FramePtr DenseMap::GetFirstFramePtr()
 */
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-FramePtr DenseMap::GetFramePtr( unsigned int uFrameId )
+FramePtr DenseMap::GetFramePtr( unsigned int nFrameId )
 {
     std::vector<FramePtr>::reverse_iterator rit;
     for( rit =  m_vFrames.rbegin(); rit != m_vFrames.rend(); ++rit ) {
-        if( (*rit)->GetId() == uFrameId )
+        if( (*rit)->GetId() == nFrameId )
             return (*rit);
     }
 
@@ -152,30 +151,30 @@ FramePtr DenseMap::GetFramePtr( unsigned int uFrameId )
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseMap::SetRelativeTransform( int nStartId, int nEndId, Eigen::Matrix4d& Tab )
+void DenseMap::SetRelativeTransform( int nGetStartId, int nEndId, Eigen::Matrix4d& Tab )
 {
-    EdgePtr pEdge = GetEdgePtr( nStartId, nEndId );
-    pEdge->SetTransform( nStartId, nEndId, Tab );
+    EdgePtr pEdge = GetEdgePtr( nGetStartId, nEndId );
+    pEdge->SetTransform( nGetStartId, nEndId, Tab );
     _UpdateModifiedTime();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool DenseMap::GetRelativeTransform( int nStartId, int nEndId, Eigen::Matrix4d& Tab )
+bool DenseMap::GetRelativeTransform( int nGetStartId, int nEndId, Eigen::Matrix4d& Tab )
 {
-    EdgePtr pEdge = GetEdgePtr( nStartId, nEndId );
-    return pEdge->GetTransform( nStartId, nEndId, Tab );
+    EdgePtr pEdge = GetEdgePtr( nGetStartId, nEndId );
+    return pEdge->GetTransform( nGetStartId, nEndId, Tab );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::GetTransformFromParent(
-        unsigned int        uChildFrameId,  //< Input: Child ID we will find parent of
+        unsigned int        nChildFrameId,  //< Input: Child ID we will find parent of
         Eigen::Matrix4d&    dTab            //< Output: Found transform from parent to child
     )
 {
-    FramePtr pChildFrame  = GetFramePtr( uChildFrameId );
+    FramePtr pChildFrame  = GetFramePtr( nChildFrameId );
     FramePtr pParentFrame = GetFramePtr( pChildFrame->GetParentEdgeId() );
     if( pParentFrame != NULL && pChildFrame != NULL ) {
-        if( GetRelativeTransform( pParentFrame->GetId(), uChildFrameId, dTab ) ) {
+        if( GetRelativeTransform( pParentFrame->GetId(), nChildFrameId, dTab ) ) {
             return true;
         }
     }
@@ -184,15 +183,17 @@ bool DenseMap::GetTransformFromParent(
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-FramePtr DenseMap::GetParentFramePtr( unsigned int uChildFrameId )
+FramePtr DenseMap::GetParentFramePtr(
+        unsigned int        nChildFrameId       //< Input: Child ID we will find parent of
+    )
 {
-    FramePtr pChildFrame = GetFramePtr( uChildFrameId );
+    FramePtr pChildFrame = GetFramePtr( nChildFrameId );
     if( pChildFrame->GetParentEdgeId() == NO_PARENT ) {
         return FramePtr( (ReferenceFrame*)NULL );
     }
     EdgePtr pEdge = GetEdgePtr( pChildFrame->GetParentEdgeId() );
     FramePtr pParentFrame;
-    pParentFrame = pEdge->GetEndId() == uChildFrameId ? GetFramePtr(pEdge->GetStartId()) : GetFramePtr(pEdge->GetEndId());
+    pParentFrame = pEdge->GetEndId() == nChildFrameId ? GetFramePtr(pEdge->GetStartId()) : GetFramePtr(pEdge->GetEndId());
     return pParentFrame;
 }
 
@@ -289,6 +290,165 @@ void DenseMap::Print()
 }
 
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::GenerateRelativePoses(
+        std::map<unsigned int, Eigen::Matrix4d>&    vPoses,     //< Output: Poses id and relative poses from input root
+        int                                         nRootId,    //< Input: Frame that will be the origin [default: last frame]
+        int                                         nDepth      //< Input: Grapth depth search from root [default: max depth]
+    )
+{
+    assert( nRootId >= -1 && nRootId < m_vFrames.size() );
+
+    // clear output vector
+    vPoses.clear();
+
+    // check if we have frames
+    if( m_vFrames.empty() ) {
+        return;
+    }
+
+    // return all poses
+    if( nDepth == -1 ) {
+        nDepth = m_vFrames.size();
+    }
+
+    // get pointer to root frame
+    FramePtr pRoot = nRootId == -1? m_vFrames.back() : m_vFrames[nRootId];
+
+    // now search for close nodes
+    std::queue<FramePtr> q;
+    pRoot->SetDepth(0);
+    q.push(pRoot);
+
+    // reset colors
+    _ResetNodes();
+
+    FramePtr pCurNode;
+    Eigen::Matrix4d T;
+
+    while( !q.empty() ) {
+
+        pCurNode = q.front();
+        q.pop();
+        pCurNode->SetGrey();
+
+        // Explore neighbours
+        for( unsigned int ii = 0; ii < pCurNode->GetNumNeighbors(); ++ii ) {
+            unsigned int uNeighborEdgeId = pCurNode->GetNeighborEdgeId(ii);
+            EdgePtr pNeighborEdge   = GetEdgePtr(uNeighborEdgeId);
+            unsigned int uNeighborNodeId;
+
+            uNeighborNodeId = ( pNeighborEdge->GetStartId() == pCurNode->GetId() ) ?
+                pNeighborEdge->GetEndId() : pNeighborEdge->GetStartId();
+
+            FramePtr pNeighborNode = GetFramePtr(uNeighborNodeId);
+
+            if( pCurNode->GetDepth() < nDepth &&
+                    pNeighborNode != NULL && pNeighborNode->IsWhite()) {
+
+                // add node to the queue
+                pNeighborNode->SetDepth( pCurNode->GetDepth()+1 );
+                pNeighborNode->SetGrey();
+                q.push( pNeighborNode );
+            }
+        }
+
+        // We are done with this node, add it to the map
+        pCurNode->SetBlack();
+        unsigned int uParentEdgeId = pCurNode->GetParentEdgeId();
+
+        if( uParentEdgeId == NO_PARENT ) {
+            vPoses[pCurNode->GetId()] = Eigen::Matrix4d::Identity();
+        } else {
+            EdgePtr pEdge = GetEdgePtr( uParentEdgeId );
+            pEdge->GetTransform(pEdge->GetStartId(), pEdge->GetEndId(), T);
+            vPoses[pCurNode->GetId()] = T;
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::GenerateAbsolutePoses(
+        std::map<unsigned int, Eigen::Matrix4d>&    vPoses,     //< Output: Poses id and absolute poses from input root
+        int                                         nRootId,    //< Input: Frame that will be the origin [default: last frame]
+        int                                         nDepth      //< Input: Grapth depth search from root [default: max depth]
+    )
+{
+    assert( nRootId >= -1 && nRootId < m_vFrames.size() );
+
+    // clear output vector
+    vPoses.clear();
+
+    // check if we have frames
+    if( m_vFrames.empty() ) {
+        return;
+    }
+
+    // return all poses
+    if( nDepth == -1 ) {
+        nDepth = m_vFrames.size();
+    }
+
+    // get pointer to root frame
+    FramePtr pRoot = nRootId == -1? m_vFrames.back() : m_vFrames[nRootId];
+
+    // now search for close nodes
+    std::queue<FramePtr>    q;
+    std::queue<Eigen::Matrix4d> t;
+    pRoot->SetDepth(0);
+    q.push(pRoot);
+    t.push(Eigen::Matrix4d::Identity());
+
+    // reset colors
+    _ResetNodes();
+
+    FramePtr pCurNode;
+    Eigen::Matrix4d curT;
+    Eigen::Matrix4d T;
+
+    while( !q.empty() ) {
+
+        pCurNode = q.front();
+        curT     = t.front();
+        q.pop();
+        t.pop();
+        pCurNode->SetGrey();
+
+        // Explore neighbours
+        for( unsigned int ii = 0; ii < pCurNode->GetNumNeighbors(); ++ii ) {
+            unsigned int uNeighborEdgeId = pCurNode->GetNeighborEdgeId(ii);
+            EdgePtr pNeighborEdge   = GetEdgePtr(uNeighborEdgeId);
+            unsigned int uNeighborNodeId;
+
+            uNeighborNodeId = ( pNeighborEdge->GetStartId() == pCurNode->GetId() ) ?
+                                pNeighborEdge->GetEndId() : pNeighborEdge->GetStartId();
+
+            FramePtr pNeighborNode = GetFramePtr(uNeighborNodeId);
+
+            if( (int)pCurNode->GetDepth() < nDepth &&
+                pNeighborNode != NULL      &&
+                pNeighborNode->IsWhite()) {
+
+                // add node to the queue
+                pNeighborNode->SetDepth( pCurNode->GetDepth()+1 );
+                pNeighborNode->SetGrey();
+                q.push( pNeighborNode );
+
+                // compute cummulative transformation (transformation from root)
+                pNeighborEdge->GetTransform( pCurNode->GetId(), uNeighborNodeId, T);
+                t.push( curT*T );
+                mvl::MakeOrthonormal( t.back() );
+            }
+        }
+
+        // We are done with this node, add it to the map
+        pCurNode->SetBlack();
+        vPoses[pCurNode->GetId()] = curT;
+    }
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -298,4 +458,16 @@ void DenseMap::Print()
 void DenseMap::_UpdateModifiedTime()
 {
     m_dLastModifiedTime = mvl::Tic();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::_ResetNodes()
+{
+    std::vector< FramePtr >::iterator it;
+
+    for(it = m_vFrames.begin(); it != m_vFrames.end(); ++it) {
+        (*it)->SetWhite();
+        (*it)->SetDepth(0);
+    }
 }

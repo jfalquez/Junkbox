@@ -119,7 +119,7 @@ private:
     CameraModelPyramid                  m_CModPyrGrey;
     CameraModelPyramid                  m_CModPyrDepth;
 
-    Eigen::Matrix4d                     m_dGlobalPose;              // global pose for display w.r.t the map
+    Eigen::Matrix4d                     m_dGlobalPose;              // current global pose w.r.t the map
     DenseMap*                           m_pMap;                     // map use for estimating poses
 
     Timer*                              m_pTimer;

@@ -114,7 +114,7 @@ class DTrackApp
                 CamImages&          vImages    //< Input/Output
             )
         {
-            /* */
+            /*
 
             // this converts images from the kinect to the expected format of DTrack
             cv::Mat Tmp;
