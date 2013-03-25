@@ -81,19 +81,13 @@ public:
 private:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // will generate a new keyframe (with thumnails, etc) and put it in the map
-    // returns: pointer to newly created reference frame
-    FramePtr _GenerateKeyframe(
-            const CamImages&    vImages     //< Input: Images used to generate new keyframe
-        );
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // this function will localize an image against a keyframe
     // returns: root mean square error
     double _EstimateRelativePose(
             const cv::Mat&          GreyImg,        //< Input: Greyscale image
             FramePtr                pKeyframe,      //< Input: Keyframe we are localizing against
-            Eigen::Matrix4d&        Tkc             //< Input/Output: the estimated relative transform (input is used as a hint)
+            Eigen::Matrix4d&        Tkc,            //< Input/Output: the estimated relative transform (input is used as a hint)
+            unsigned int&           nNumObs         //< Output: Number of observations used for estimate
             );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -108,7 +102,8 @@ private:
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
-    FramePtr                            m_pCurKeyframe;
+    FramePtr                            m_pCurFrame;
+    Eigen::Matrix4d                     m_dLastEstimate;
     eTrackingState                      m_eTrackingState;
 
     unsigned int                        m_nImageWidth;

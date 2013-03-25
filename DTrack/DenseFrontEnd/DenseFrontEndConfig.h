@@ -20,6 +20,9 @@ public:
         g_vPyrFullMask( CVarUtils::CreateCVar( "tracker.ESM.PyrFullMask", Eigen::Matrix<int,1,Eigen::Dynamic>(),
                                                 "Set 1 for full estimate, 0 for rotation only estimates." ) ),
 
+        // KEYFRAME OPTIONS
+        g_fKeyframePtsThreshold( CVarUtils::CreateCVar<>( "tracker.KeyframePtsThreshold", 1.0f, "Minimum percentage of points before a new keyframe is added to the map." ) ),
+
         // LOOP CLOSURE OPTIONS
         g_nLoopClosureMargin( CVarUtils::CreateCVar<>( "tracker.LoopClosure.FrameMargin", 20u, "Number of frames between current frame which will not be taken in consideration for loop closure." ) ),
         g_nLoopClosureSAD( CVarUtils::CreateCVar<>( "tracker.LoopClosure.SAD", 5u, "Maximum SAD score for loop closure candidates. This value is multiplied by number of pixels in thumbnail." ) ),
@@ -36,6 +39,7 @@ public:
     bool&                                   g_bConstantVelocityMotionModel;
     Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrMaxIters;
     Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrFullMask;
+    float&                                  g_fKeyframePtsThreshold;
     unsigned int&                           g_nLoopClosureMargin;
     unsigned int&                           g_nLoopClosureSAD;
     double&                                 g_dLoopClosureThreshold;

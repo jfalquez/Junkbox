@@ -106,7 +106,6 @@ bool DenseFrontEnd::Init(
     if( m_pMap->GetNumFrames() == 0 ) {
 
         // nope, so set path base pose and global pose accordingly
-        m_pMap->SetPathBasePose( Eigen::Matrix4d::Identity() );
         m_dGlobalPose.setIdentity();
 
     } else {
@@ -127,11 +126,27 @@ bool DenseFrontEnd::Init(
     }
 
     if( bNewFrame ) {
-        m_pCurKeyframe = _GenerateKeyframe( vImages );
-        if( m_pCurKeyframe == NULL ) {
+
+        // TODO get this from the camera directly.. the property map should have it
+        double dSensorTime = mvl::Tic();
+
+        // allocate thumb images
+        cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
+        cv::Mat DepthThumb( m_nThumbHeight, m_nThumbWidth, CV_32FC1 );
+
+        // generate thumbnails
+        GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
+        GenerateDepthThumbnail( m_cdTemp, vImages[1].Image, DepthThumb );
+
+        m_pCurFrame = m_pMap->NewKeyframe( dSensorTime, vImages[0].Image, vImages[1].Image, GreyThumb, DepthThumb );
+
+        if( m_pCurFrame == NULL ) {
             return false;
         }
-        m_pMap->SetKeyframe( m_pCurKeyframe );
+        m_pMap->SetKeyframe( m_pCurFrame );
+
+        // since this is a new keyframe, reset last pose
+        m_dLastEstimate.setIdentity();
     }
 
     return true;
@@ -166,18 +181,19 @@ bool DenseFrontEnd::Iterate(
 
     // FOR NOW
     // run ESM between current and previous frame
-    Eigen::Matrix4d Tpc;
+
+    // adjust Tpc to our previous estimate from keyframe
+    Eigen::Matrix4d Tpc = m_dLastEstimate;
 
     // use constant velocity motion model??
     if( feConfig.g_bConstantVelocityMotionModel == true ) {
-        if( m_pMap->GetTransformFromParent( m_pCurKeyframe->GetId(), Tpc ) == false ) {
-            Tpc.setIdentity();
+        if( m_pMap->GetTransformFromParent( m_pCurFrame->GetId(), Tpc ) == true ) {
+            Tpc = m_dLastEstimate * Tpc;
         }
-    } else {
-        Tpc.setIdentity();
     }
 
-    double dTrackingError = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc );
+    unsigned int nNumObservations;
+    double dTrackingError = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc, nNumObservations );
     ui_fRMSE = dTrackingError;
 
     std::cout << "Estimate was: " << mvl::T2Cart(Tpc).transpose() << std::endl << std::endl;
@@ -187,37 +203,84 @@ bool DenseFrontEnd::Iterate(
     } else if( dTrackingError < 20 ) {
         m_eTrackingState = eTrackingPoor;
     } else if( dTrackingError < 35 ) {
-        std::cerr << "warning: tracking is bad." << std::endl;
+        std::cerr << "warning: tracking is bad. (RMSE: " << dTrackingError << ")" << std::endl;
         m_eTrackingState = eTrackingBad;
     } else {
+        std::cerr << "warning: tracking failed. (RMSE: " << dTrackingError << ")" << std::endl;
         m_eTrackingState = eTrackingFail;
         return false;
     }
 
-    // drop estimate into path vector
-    m_pMap->AddPathPose( Tpc );
-
     // update global pose
     m_dGlobalPose = m_dGlobalPose * Tpc;
 
-    // drop new keyframe ALWAYS
-    FramePtr pNewKeyframe = _GenerateKeyframe( vImages );
-    if( pNewKeyframe == NULL ) {
-        std::cerr << "error: generating new keyframe." << std::endl;
-        return false;
+    // TODO get this from the camera directly.. the property map should have it
+    double dSensorTime = mvl::Tic();
+
+    // drop new keyframe if number of observations is too low
+    if( nNumObservations < (feConfig.g_fKeyframePtsThreshold * m_nImageHeight * m_nImageWidth) ) {
+
+        // allocate thumb images
+        cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
+        cv::Mat DepthThumb( m_nThumbHeight, m_nThumbWidth, CV_32FC1 );
+
+        // generate thumbnails
+        GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
+        GenerateDepthThumbnail( m_cdTemp, vImages[1].Image, DepthThumb );
+
+        FramePtr pNewKeyframe = m_pMap->NewKeyframe( dSensorTime, vImages[0].Image, vImages[1].Image, GreyThumb, DepthThumb );
+
+        if( pNewKeyframe == NULL ) {
+            std::cerr << "error: generating new keyframe." << std::endl;
+            return false;
+        }
+
+        // link previous frame with new frame (relative pose)
+        m_pMap->LinkFrames( m_pCurFrame, pNewKeyframe, mvl::TInv(m_dLastEstimate) * Tpc );
+
+        // update current frame
+        m_pCurFrame = pNewKeyframe;
+
+        // set new keyframe as current keyframe
+        m_pMap->SetKeyframe( m_pCurFrame );
+
+        // since this is a new keyframe, reset last pose
+        m_dLastEstimate.setIdentity();
+
+    } else {
+
+        // allocate thumb image
+        cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
+
+        // generate thumbnail
+        GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
+
+        // otherwise drop a regular frame
+        FramePtr pNewFrame = m_pMap->NewFrame( dSensorTime, vImages[0].Image, GreyThumb );
+
+        if( pNewFrame == NULL ) {
+            std::cerr << "error: generating new frame." << std::endl;
+            return false;
+        }
+
+        // link previous frame with new frame (relative pose)
+        m_pMap->LinkFrames( m_pCurFrame, pNewFrame, mvl::TInv(m_dLastEstimate) * Tpc );
+
+        // update last pose as a cummulative pose
+        m_dLastEstimate = m_dLastEstimate * Tpc;
+
+        // update current frame
+        m_pCurFrame = pNewFrame;
+
     }
 
-    // link previous frame with new frame (relative pose)
-    m_pMap->LinkFrames( m_pCurKeyframe, pNewKeyframe, Tpc );
-
-    // set new keyframe as current keyframe
-    m_pCurKeyframe = pNewKeyframe;
-    m_pMap->SetKeyframe( m_pCurKeyframe );
 
     // check for loop closure
+    // TODO update this to reflect the new changes in keyframes and regular frames
+    // I assume the LC can only happen against keyframes, so validate that?
     double          dLoopClosureError;
     Eigen::Matrix4d LoopClosureT;
-    int nLoopClosureFrameId = _LoopClosure( m_pCurKeyframe, LoopClosureT, dLoopClosureError );
+    int nLoopClosureFrameId = _LoopClosure( m_pCurFrame, LoopClosureT, dLoopClosureError );
     if( nLoopClosureFrameId != -1 && dLoopClosureError < feConfig.g_dLoopClosureThreshold ) {
         std::cout << "Loop Closure Detected!!! Frame: " << nLoopClosureFrameId << " Error: " << dLoopClosureError << std::endl;
         m_eTrackingState = eTrackingLoopClosure;
@@ -225,12 +288,10 @@ bool DenseFrontEnd::Iterate(
         // link frames
         // TODO Ask Steeeeeeevveeeee!! Why the hell is this weird behaviour happening? Comment the top line
         // and uncomment the bottom, and no loop closure is found.. WTF?!?!?!?
-        m_pMap->LinkFrames( m_pMap->GetFramePtr(nLoopClosureFrameId), m_pCurKeyframe, LoopClosureT );
+        m_pMap->LinkFrames( m_pMap->GetFramePtr(nLoopClosureFrameId), m_pCurFrame, LoopClosureT );
 //        m_pMap->LinkFrames( m_pCurKeyframe, m_pMap->GetFramePtr(nLoopClosureFrameId),  LoopClosureT.inverse() );
     }
 
-    // TODO kinda hacky, but check if frame ID is too "close" to our current frame
-    // have some sort of margin variable controlled by CVar
 
     return true;
 }
@@ -242,34 +303,11 @@ bool DenseFrontEnd::Iterate(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-FramePtr DenseFrontEnd::_GenerateKeyframe(
-        const CamImages&    vImages     //< Input: Images used to generate new keyframe
-    )
-{
-    // check if two images (grey and depth) were provided
-    if( vImages.size() < 2 ) {
-        std::cerr << "error: Could not create keyframe since two images are required!" << std::endl;
-        return FramePtr( (ReferenceFrame*)NULL );
-    }
-
-    // allocate thumb images
-    cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
-    cv::Mat DepthThumb( m_nThumbHeight, m_nThumbWidth, CV_32FC1 );
-
-    GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
-    GenerateDepthThumbnail( m_cdTemp, vImages[1].Image, DepthThumb );
-
-    // TODO get this from the camera directly.. the property map should have it
-    double dSensorTime = mvl::Tic();
-
-    return m_pMap->NewFrame( dSensorTime, vImages[0].Image, vImages[1].Image, GreyThumb, DepthThumb );
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 double DenseFrontEnd::_EstimateRelativePose(
         const cv::Mat&          GreyImg,        //< Input: Greyscale image
         FramePtr                pKeyframe,      //< Input: Keyframe we are localizing against
-        Eigen::Matrix4d&        Tkc             //< Input/Output: the estimated relative transform (input is used as a hint)
+        Eigen::Matrix4d&        Tkc,            //< Input/Output: the estimated relative transform (input is used as a hint)
+        unsigned int&           nNumObs         //< Output: Number of observations used for estimate
         )
 {
     // get GUI variables
@@ -316,7 +354,7 @@ double DenseFrontEnd::_EstimateRelativePose(
     // convert initial pose to VISION reference frame
     Tkc = Tvr * Tkc * Tvr.inverse();
 
-    double dLastError;
+    double          dLastError;
 
     for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
         dLastError = DBL_MAX;
@@ -410,8 +448,9 @@ double DenseFrontEnd::_EstimateRelativePose(
                 break;
             }
 
-            // update error
+            // update error & number of observations
             dLastError = dNewError;
+            nNumObs = LSS.obs;
         }
     }
 
@@ -470,6 +509,11 @@ int DenseFrontEnd::_LoopClosure(
         // get frame pointer
         FramePtr pMatchFrame = m_pMap->GetFramePtr( ii );
 
+        // do not compare with non-keyframes
+        if( pMatchFrame->IsKeyframe() == false ) {
+            continue;
+        }
+
         float fScore = ScoreImages<unsigned char>( pFrame->GetGreyThumbRef(), pMatchFrame->GetGreyThumbRef() );
 
         if( fScore < fBestScore ) {
@@ -478,7 +522,7 @@ int DenseFrontEnd::_LoopClosure(
         }
     }
 
-    // if no match is found, return 0
+    // if no match is found, return -1
     if( fBestScore > (feConfig.g_nLoopClosureSAD * (m_nThumbHeight * m_nThumbWidth)) ) {
         return -1;
     }
@@ -486,7 +530,8 @@ int DenseFrontEnd::_LoopClosure(
     std::cout << "Found a candidate with score: " << fBestScore << std::endl;
 
     // calculate transform between best match and input frame
-    dError = _EstimateRelativePose( pFrame->GetGreyImageRef(), pBestMatch, T );
+    unsigned int nNumObservations;
+    dError = _EstimateRelativePose( pFrame->GetGreyImageRef(), pBestMatch, T, nNumObservations );
 
     return pBestMatch->GetId();
 }

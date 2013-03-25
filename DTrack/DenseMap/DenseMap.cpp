@@ -21,6 +21,24 @@ DenseMap::~DenseMap()
 FramePtr DenseMap::NewFrame(
         double          dTime,                  //< Input: Sensor time
         const cv::Mat&  GreyImage,              //< Input: Greyscale image
+        const cv::Mat&  GreyThumb               //< Input: Greyscale thumbnail
+    )
+{
+    FramePtr pFrame( new ReferenceFrame );
+    pFrame->SetId( m_vFrames.size() );
+    pFrame->SetTime( dTime );
+    pFrame->SetGreyImage( GreyImage );
+    pFrame->SetGreyThumb( GreyThumb );
+    m_vFrames.push_back( pFrame );
+    _UpdateModifiedTime();
+    return pFrame;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// allocate a new keyframe, but do not link it into the graph
+FramePtr DenseMap::NewKeyframe(
+        double          dTime,                  //< Input: Sensor time
+        const cv::Mat&  GreyImage,              //< Input: Greyscale image
         const cv::Mat&  DepthImage,             //< Input: Depth image
         const cv::Mat&  GreyThumb,              //< Input: Greyscale thumbnail
         const cv::Mat&  DepthThumb              //< Input: Depth thumbnail
@@ -29,8 +47,11 @@ FramePtr DenseMap::NewFrame(
     FramePtr pFrame( new ReferenceFrame );
     pFrame->SetId( m_vFrames.size() );
     pFrame->SetTime( dTime );
-    pFrame->SetImages( GreyImage, DepthImage );
-    pFrame->SetThumbs( GreyThumb, DepthThumb );
+    pFrame->SetKeyframeFlag();
+    pFrame->SetGreyImage( GreyImage );
+    pFrame->SetDepthImage( DepthImage );
+    pFrame->SetGreyThumb( GreyThumb );
+    pFrame->SetDepthThumb( DepthThumb );
     m_vFrames.push_back( pFrame );
     _UpdateModifiedTime();
     return pFrame;
@@ -195,22 +216,6 @@ FramePtr DenseMap::GetParentFramePtr(
     FramePtr pParentFrame;
     pParentFrame = pEdge->GetEndId() == nChildFrameId ? GetFramePtr(pEdge->GetStartId()) : GetFramePtr(pEdge->GetEndId());
     return pParentFrame;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseMap::SetPathBasePose(
-        const Eigen::Matrix4d&      Pose        //< Input: Base pose of path
-    )
-{
-    m_dBasePose = Pose;
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseMap::AddPathPose(
-        const Eigen::Matrix4d&      Tab         //< Input: Relative transform
-    )
-{
-    m_vPath.push_back( Tab );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

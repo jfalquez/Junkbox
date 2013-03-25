@@ -5,6 +5,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ReferenceFrame::ReferenceFrame()
                : m_nParentEdgeId(NO_PARENT),
+                 m_bKeyframe(false),
                  m_nColor(0),
                  m_nDepth(0)
 {
@@ -39,23 +40,37 @@ void ReferenceFrame::SetTime(
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void ReferenceFrame::SetImages(
-        const cv::Mat&      GreyImage,      //< Input: Greyscale image
-        const cv::Mat&      DepthImage      //< Input: Depth image
+void ReferenceFrame::SetGreyImage(
+        const cv::Mat&      GreyImage       //< Input: Greyscale image
     )
 {
     m_GreyImage     = GreyImage.clone();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReferenceFrame::SetDepthImage(
+        const cv::Mat&      DepthImage      //< Input: Depth image
+    )
+{
     m_DepthImage    = DepthImage.clone();
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void ReferenceFrame::SetThumbs(
-        const cv::Mat&      GreyThumb,      //< Input: Greyscale image
-        const cv::Mat&      DepthThumb      //< Input: Depth image
+void ReferenceFrame::SetGreyThumb(
+        const cv::Mat&      GreyThumb       //< Input: Greyscale thumb image
     )
 {
     m_GreyThumb     = GreyThumb.clone();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReferenceFrame::SetDepthThumb(
+        const cv::Mat&      DepthThumb      //< Input: Depth thumb image
+    )
+{
     m_DepthThumb    = DepthThumb.clone();
 }
 
@@ -125,6 +140,13 @@ void ReferenceFrame::SetBlack( )
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReferenceFrame::SetKeyframeFlag( bool bFlag )
+{
+    m_bKeyframe = bFlag;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void ReferenceFrame::SetDepth( unsigned int nDepth )
 {
     m_nDepth = nDepth;
@@ -167,12 +189,26 @@ bool ReferenceFrame::IsBlack()
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void ReferenceFrame::CopyImages(
-        cv::Mat&      GreyImage,      //< Output: Greyscale image
-        cv::Mat&      DepthImage      //< Output: Depth image
+bool ReferenceFrame::IsKeyframe()
+{
+    return m_bKeyframe;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReferenceFrame::CopyGreyImageTo(
+        cv::Mat&      GreyImage       //< Output: Greyscale image
     )
 {
     GreyImage   = m_GreyImage.clone();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void ReferenceFrame::CopyDepthImageTo(
+        cv::Mat&      DepthImage      //< Output: Depth image
+    )
+{
     DepthImage  = m_DepthImage.clone();
 }
 
@@ -199,6 +235,7 @@ void ReferenceFrame::_Copy(
     m_nColor        = rRHS.m_nColor;
     m_nDepth        = rRHS.m_nDepth;
 
+    m_bKeyframe   = rRHS.m_bKeyframe;
     m_dSensorTime   = rRHS.m_dSensorTime;
     m_GreyImage     = rRHS.m_GreyImage.clone();
     m_DepthImage    = rRHS.m_DepthImage.clone();

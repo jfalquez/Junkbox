@@ -21,13 +21,15 @@ public:
 
     void InitReset( DenseMap* pMap )
     {
-        m_bInitIBO  = false;
-        m_pMap      = pMap;
+        m_bInitIBO          = false;
+        m_pMap              = pMap;
+        m_dLastModifiedTime = 0;
     }
 
     void DrawCanonicalObject()
     {
-        if( m_pVBO.size() < m_pMap->GetNumFrames() ) {
+        // check if mas has changed since last we updated VBOs
+        if( m_dLastModifiedTime != m_pMap->GetLastModifiedTime() ) {
 
             // get image dimensions
             FramePtr pFrame = m_pMap->GetFramePtr(0);
@@ -48,23 +50,33 @@ public:
             for( int ii = m_pVBO.size(); ii < m_pMap->GetNumFrames(); ++ii ) {
                 pFrame = m_pMap->GetFramePtr( ii );
 
-                pangolin::GlBuffer* pVBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_FLOAT, 4, GL_STREAM_DRAW );
-                pangolin::GlBuffer* pCBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_UNSIGNED_BYTE, 4, GL_STREAM_DRAW );
+                // check if this frame is keyframe
+                if( pFrame->IsKeyframe() ) {
 
-                float VBO[nImgWidth * nImgHeight * 4];
-                // TODO obtain these intrinsics from SOMEWHERE
-//                _DepthToVBO( (float*)pFrame->GetDepthImagePtr(), nImgWidth, nImgHeight, 570, 570, 320, 240, VBO );
-                _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, 570/16, 570/16, 320/16, 240/16, VBO );
-                pVBO->Upload( VBO, nImgWidth * nImgHeight * 4 * 4);
+                    const unsigned int nId = pFrame->GetId();
 
-                unsigned char CBO[nImgWidth * nImgHeight * 4];
-//                _GreyToCBO( (unsigned char*)pFrame->GetGreyImagePtr(), nImgWidth, nImgHeight, CBO );
-                _GreyToCBO( (unsigned char*)pFrame->GetGreyThumbPtr(), nImgWidth, nImgHeight, CBO );
-                pCBO->Upload( CBO, nImgWidth * nImgHeight * 4);
+                    // check if we have already created a VBO for this keyframe
+                    if( m_pVBO.find( nId ) == m_pVBO.end() ) {
 
-                m_pVBO.push_back( pVBO );
-                m_pCBO.push_back( pCBO );
+                        pangolin::GlBuffer* pVBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_FLOAT, 4, GL_STREAM_DRAW );
+                        pangolin::GlBuffer* pCBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_UNSIGNED_BYTE, 4, GL_STREAM_DRAW );
 
+                        float VBO[nImgWidth * nImgHeight * 4];
+                        // TODO obtain these intrinsics from SOMEWHERE
+//                        _DepthToVBO( (float*)pFrame->GetDepthImagePtr(), nImgWidth, nImgHeight, 570, 570, 320, 240, VBO );
+                        _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, 570/16, 570/16, 320/16, 240/16, VBO );
+                        pVBO->Upload( VBO, nImgWidth * nImgHeight * 4 * 4);
+
+                        unsigned char CBO[nImgWidth * nImgHeight * 4];
+//                        _GreyToCBO( (unsigned char*)pFrame->GetGreyImagePtr(), nImgWidth, nImgHeight, CBO );
+                        _GreyToCBO( (unsigned char*)pFrame->GetGreyThumbPtr(), nImgWidth, nImgHeight, CBO );
+                        pCBO->Upload( CBO, nImgWidth * nImgHeight * 4);
+
+                        m_pVBO[ nId ] = pVBO;
+                        m_pCBO[ nId ] = pCBO;
+
+                    }
+                }
             }
         }
 
@@ -85,10 +97,12 @@ public:
                 unsigned int        nId = it->first;
                 Eigen::Matrix4d&    Pose = it->second;
 
-                glPushMatrix();
-                glMultMatrixd( MAT4_COL_MAJOR_DATA( dOrigin * Pose ) );
-                pangolin::RenderVboIboCbo( *m_pVBO[nId], *m_pIBO, *m_pCBO[nId], true, true );
-                glPopMatrix();
+                if( m_pVBO.find( nId ) != m_pVBO.end() ) {
+                    glPushMatrix();
+                    glMultMatrixd( MAT4_COL_MAJOR_DATA( dOrigin * Pose ) );
+                    pangolin::RenderVboIboCbo( *m_pVBO[nId], *m_pIBO, *m_pCBO[nId], true, true );
+                    glPopMatrix();
+                }
             }
         }
 
@@ -163,12 +177,12 @@ private:
 
 
 protected:
-    bool                                    m_bInitIBO;
-    DenseMap*                               m_pMap;
-    pangolin::GlBuffer*                     m_pIBO;
-    std::deque < pangolin::GlBuffer* >      m_pVBO;
-    std::deque < pangolin::GlBuffer* >      m_pCBO;
-    std::deque < Eigen::Matrix4d >          m_vPoses;
+    DenseMap*                                           m_pMap;
+    double                                              m_dLastModifiedTime;
+    bool                                                m_bInitIBO;
+    pangolin::GlBuffer*                                 m_pIBO;
+    std::map< unsigned int, pangolin::GlBuffer* >       m_pVBO;
+    std::map< unsigned int, pangolin::GlBuffer* >       m_pCBO;
 };
 
 #endif

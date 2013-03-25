@@ -42,14 +42,14 @@ public:
     //
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void SetId( unsigned int uId );
+    void SetId( unsigned int nId );
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void SetParentEdgeId( unsigned int uEdgeId );
+    void SetParentEdgeId( unsigned int nEdgeId );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     void AddNeighbor(
-            unsigned int    uEdgeId     //< Input: Edge that links to the new neighbor
+            unsigned int    nEdgeId     //< Input: Edge that links to the new neighbor
         );
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -61,18 +61,25 @@ public:
     void SetBlack();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void SetDepth( unsigned int uDepth );
+    void SetKeyframeFlag( bool bFlag = true );
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void SetImages(
-            const cv::Mat&      GreyImage,      //< Input: Greyscale image
+    void SetDepth( unsigned int nDepth );
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void SetGreyImage(
+            const cv::Mat&      GreyImage       //< Input: Greyscale image
+        );
+    void SetDepthImage(
             const cv::Mat&      DepthImage      //< Input: Depth image
         );
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void SetThumbs(
-            const cv::Mat&      GreyThumb,      //< Input: Greyscale image
-            const cv::Mat&      DepthThumb      //< Input: Depth image
+    void SetGreyThumb(
+            const cv::Mat&      GreyThumb       //< Input: Greyscale thumb image
+        );
+    void SetDepthThumb(
+            const cv::Mat&      DepthThumb      //< Input: Depth thumb image
         );
 
 
@@ -132,6 +139,9 @@ public:
     bool IsBlack();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    bool IsKeyframe();
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     unsigned int GetColor();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -146,8 +156,10 @@ public:
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    void CopyImages(
-            cv::Mat&      GreyImage,      //< Output: A full copy of the greyscale image
+    void CopyGreyImageTo(
+            cv::Mat&      GreyImage       //< Output: A full copy of the greyscale image
+        );
+    void CopyDepthImageTo(
             cv::Mat&      DepthImage      //< Output: A full copy of the depth image
         );
 
@@ -173,10 +185,11 @@ private:
     unsigned int                            m_nColor;
     unsigned int                            m_nDepth;
 
+    // KEYFRAME VARIABLES
+    bool                                    m_bKeyframe;          // true if frame is a keyframe
     double                                  m_dSensorTime;          // time measurements were made
     cv::Mat                                 m_GreyImage;
     cv::Mat                                 m_GreyThumb;
-
     cv::Mat                                 m_DepthImage;
     cv::Mat                                 m_DepthThumb;
 

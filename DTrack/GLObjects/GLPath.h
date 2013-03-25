@@ -63,7 +63,6 @@ public:
 
         // draw at base pose
         glPushMatrix();
-        glMultMatrixd( MAT4_COL_MAJOR_DATA( m_pMap->GetPathBasePose() ) );
         glCallList( m_nDrawListId );
 
 

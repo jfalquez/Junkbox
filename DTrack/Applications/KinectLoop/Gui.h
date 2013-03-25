@@ -263,7 +263,8 @@ void Gui::UpdateImages( const cv::Mat& LiveGrey )
     FramePtr pKeyframe = m_pRenderMap->GetCurrentKeyframe();
     if( pKeyframe ) {
         cv::Mat KeyGrey, KeyDepth;
-        pKeyframe->CopyImages( KeyGrey, KeyDepth );
+        pKeyframe->CopyGreyImageTo( KeyGrey );
+        pKeyframe->CopyDepthImageTo( KeyDepth );
         m_KeyGrey.SetImage( KeyGrey.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_BYTE );
         // TODO currently a rough normalization.. make it nicer
         KeyDepth = KeyDepth / 20.0;
