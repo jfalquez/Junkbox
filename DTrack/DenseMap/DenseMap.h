@@ -174,16 +174,12 @@ private:
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
-    double                              m_dLastModifiedTime;        // crucial that we keep this up-to date
 
-    std::vector< FramePtr >             m_vFrames;                  // list of map's reference frames
-    std::vector< EdgePtr >              m_vEdges;                   // list of map's edges
+    FramePtr                                    m_pCurKeyframe;
+    double                                      m_dLastModifiedTime;    // crucial that we keep this up-to date
 
-    // this perhaps shouldn't be here, since it is not really part of the map
-    // but since the GUI already has a pointer to the map, it is easier for visualization
-    FramePtr                            m_pCurKeyframe;
-    Eigen::Matrix4d                     m_dBasePose;                // base pose from which path starts
-    std::vector < Eigen::Matrix4d >     m_vPath;                    // vector of poses being estimated
+    std::vector< FramePtr >                     m_vFrames;              // list of map's reference frames
+    std::vector< EdgePtr >                      m_vEdges;               // list of map's edges
 
 };
 

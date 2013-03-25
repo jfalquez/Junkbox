@@ -149,6 +149,9 @@ bool DenseFrontEnd::Init(
         m_dLastEstimate.setIdentity();
     }
 
+    // update path relative to this new frame
+    m_pMap->GenerateAbsolutePoses( m_vPath );
+
     return true;
 }
 
@@ -286,12 +289,12 @@ bool DenseFrontEnd::Iterate(
         m_eTrackingState = eTrackingLoopClosure;
 
         // link frames
-        // TODO Ask Steeeeeeevveeeee!! Why the hell is this weird behaviour happening? Comment the top line
-        // and uncomment the bottom, and no loop closure is found.. WTF?!?!?!?
         m_pMap->LinkFrames( m_pMap->GetFramePtr(nLoopClosureFrameId), m_pCurFrame, LoopClosureT );
-//        m_pMap->LinkFrames( m_pCurKeyframe, m_pMap->GetFramePtr(nLoopClosureFrameId),  LoopClosureT.inverse() );
+//        m_pMap->LinkFrames( m_pCurFrame, m_pMap->GetFramePtr(nLoopClosureFrameId),  LoopClosureT.inverse() );
     }
 
+    // update path relative to this new frame
+    m_pMap->GenerateAbsolutePoses( m_vPath );
 
     return true;
 }

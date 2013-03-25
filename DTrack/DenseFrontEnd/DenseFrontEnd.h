@@ -102,24 +102,26 @@ private:
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
-    FramePtr                            m_pCurFrame;
-    Eigen::Matrix4d                     m_dLastEstimate;
-    eTrackingState                      m_eTrackingState;
+    FramePtr                                m_pCurFrame;
+    Eigen::Matrix4d                         m_dLastEstimate;
+    eTrackingState                          m_eTrackingState;
 
-    unsigned int                        m_nImageWidth;
-    unsigned int                        m_nImageHeight;
-    unsigned int                        m_nThumbWidth;
-    unsigned int                        m_nThumbHeight;
+    DenseMap*                               m_pMap;             // map use for estimating poses
 
-    CameraModelPyramid                  m_CModPyrGrey;
-    CameraModelPyramid                  m_CModPyrDepth;
+    unsigned int                            m_nImageWidth;
+    unsigned int                            m_nImageHeight;
+    unsigned int                            m_nThumbWidth;
+    unsigned int                            m_nThumbHeight;
 
-    Eigen::Matrix4d                     m_dGlobalPose;              // current global pose w.r.t the map
-    DenseMap*                           m_pMap;                     // map use for estimating poses
+    CameraModelPyramid                      m_CModPyrGrey;
+    CameraModelPyramid                      m_CModPyrDepth;
 
-    Timer*                              m_pTimer;
+    Eigen::Matrix4d                         m_dGlobalPose;      // current global pose w.r.t the map
+    std::map<unsigned int, Eigen::Matrix4d> m_vPath;            // absolute poses relative to a particular keyframe
 
-    boost::mutex                        m_Mutex;
+    Timer*                                  m_pTimer;
+
+    boost::mutex                            m_Mutex;
 
     // GPU Variables
     Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdGreyPyr;
@@ -128,7 +130,7 @@ private:
     Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage>                       m_cdWorkspace;
     Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>                              m_cdDebug;
     GpuVars_t                                                                       m_cdTemp;
-};
 
+};
 
 #endif
