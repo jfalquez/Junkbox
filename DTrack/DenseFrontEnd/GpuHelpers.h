@@ -39,17 +39,17 @@ unsigned int CheckMemoryCUDA();
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // converts disparities into depth values
 inline void Disp2Depth(
-        GpuVars_t&                      Wksp,               //< Input: GPU workspace
-        float                           fLength,            //< Input: Focal length
+        GpuVars_t&                      Scrap,              //< Input: GPU workspace
+        float                           fFocalLength,       //< Input: Focal length
         float                           fBaseline,          //< Input: Baseline
         cv::Mat&                        Image               //< Input/Output: Disparity image, Depth image.
         )
 {
-    Gpu::Image< float, Gpu::TargetDevice, Gpu::Manage >& dImage = Wksp.fPyr1[0];
+    Gpu::Image< float, Gpu::TargetDevice, Gpu::Manage >& dImage = Scrap.fPyr1[0];
 
     dImage.MemcpyFromHost( Image.data );
 
-    Gpu::Disp2Depth( dImage, dImage, fLength, fBaseline );
+    Gpu::Disp2Depth( dImage, dImage, fFocalLength, fBaseline );
 
     dImage.MemcpyToHost( Image.data );
 }
@@ -58,35 +58,35 @@ inline void Disp2Depth(
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // generates a thumbnail given an input image - the thumbnail is the smallest resolution in the pyramid
 inline void GenerateGreyThumbnail(
-        GpuVars_t&                      Wksp,               //< Input: GPU workspace
+        GpuVars_t&                      Scrap,              //< Input: GPU workspace
         const cv::Mat&                  Image,              //< Input: Original image
         cv::Mat&                        ThumbImage          //< Output: Thumbnail image
         )
 {
     // upload grey image
-    Wksp.uPyr1[0].MemcpyFromHost( Image.data );
+    Scrap.uPyr1[0].MemcpyFromHost( Image.data );
 
     // reduce
-    Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( Wksp.uPyr1, Wksp.uImg1, Wksp.uImg2 );
+    Gpu::BlurReduce<unsigned char, MAX_PYR_LEVELS, unsigned int>( Scrap.uPyr1, Scrap.uImg1, Scrap.uImg2 );
 
     // copy image from GPU
     assert( ThumbImage.empty() == false );
-    Wksp.uPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
+    Scrap.uPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // generates a thumbnail given an input image - the thumbnail is the smallest resolution in the pyramid
 inline void GenerateDepthThumbnail(
-        GpuVars_t&                      Wksp,               //< Input: GPU workspace
+        GpuVars_t&                      Scrap,              //< Input: GPU workspace
         const cv::Mat&                  Image,              //< Input: Original image
         cv::Mat&                        ThumbImage          //< Output: Thumbnail image
         )
 {
     // upload depth image
-    Wksp.fPyr1[0].MemcpyFromHost( Image.data );
+    Scrap.fPyr1[0].MemcpyFromHost( Image.data );
 
     // downsample depth map
-    Gpu::BoxReduce< float, MAX_PYR_LEVELS, float >( Wksp.fPyr1 );
+    Gpu::BoxReduce< float, MAX_PYR_LEVELS, float >( Scrap.fPyr1 );
 
     /*
     TODO enable this if it is worth it
@@ -102,7 +102,7 @@ inline void GenerateDepthThumbnail(
     */
 
     assert( ThumbImage.empty() == false );
-    Wksp.fPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
+    Scrap.fPyr1[MAX_PYR_LEVELS-1].MemcpyToHost( ThumbImage.data );
 }
 
 

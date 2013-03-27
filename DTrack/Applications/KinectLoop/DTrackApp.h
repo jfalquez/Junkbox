@@ -90,6 +90,7 @@ class DTrackApp
                     rGui.SetState( PAUSED );
                 }
             } else {
+                // no more images, pause
                 rGui.SetState( PAUSED );
             }
         }
@@ -114,6 +115,17 @@ class DTrackApp
                 CamImages&          vImages    //< Input/Output
             )
         {
+
+            /*
+            cv::Mat Tmp;
+
+            cv::resize( vImages[0].Image, Tmp, cv::Size(0,0), 0.5, 0.5 );
+
+            vImages[0].Image = Tmp;
+
+//            vImages[1].Image = vImages[1].Image * 255;
+            /* */
+
             /*
 
             // this converts images from the kinect to the expected format of DTrack
@@ -143,6 +155,7 @@ class DTrackApp
 
         CameraDevice                m_Cam;          // camera handler
         CamImages                   m_vImages;      // camera images
+
         Eigen::Matrix3d             m_Kg;           // intensity (ie. greyscale) camera's intrinsics
         Eigen::Matrix3d             m_Kd;           // depth camera's intrinsics
         Eigen::Matrix4d             m_Tgd;          // depth camera's pose w.r.t. the greyscale camera

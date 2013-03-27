@@ -66,11 +66,16 @@ public:
         glCallList( m_nDrawListId );
 
 
-        std::map<unsigned int, Eigen::Matrix4d> vPoses;
-
-        m_pMap->GenerateAbsolutePoses( vPoses );
+//        std::map<unsigned int, Eigen::Matrix4d> vPoses;
+//        m_pMap->GenerateAbsolutePoses( vPoses );
+        std::map<unsigned int, Eigen::Matrix4d>& vPoses = m_pMap->GetInternalPath();
 
         if( !vPoses.empty() ) {
+
+            Eigen::Matrix4d& dPathOrientation =  m_pMap->GetPathOrientation();
+            glPushMatrix();
+            glMultMatrixd( MAT4_COL_MAJOR_DATA( dPathOrientation ) );
+
             // look for first pose of map, which is our "true" origin
             Eigen::Matrix4d dOrigin = _TInv( vPoses[0] );
 
@@ -87,6 +92,7 @@ public:
             }
 
             if( m_bDrawLines ) {
+                glPushMatrix();
                 glEnable( GL_LINE_SMOOTH );
                 glLineWidth( 1 );
                 glColor4f( m_fLineColor(0), m_fLineColor(1), m_fLineColor(2), m_fLineColor(3) );
@@ -98,7 +104,9 @@ public:
                     glVertex3f( Pose(0,3), Pose(1,3), Pose(2,3) );
                 }
                 glEnd();
+                glPopMatrix();
             }
+            glPopMatrix();
         }
         /* */
 
@@ -255,6 +263,7 @@ private:
         invT.row(3) = Eigen::Vector4d( 0, 0, 0, 1 );
         return invT;
     }
+
 
 
 private:

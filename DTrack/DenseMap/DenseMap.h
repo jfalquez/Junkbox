@@ -100,6 +100,7 @@ public:
     bool GetRelativeTransform( int nStartId, int nEndId, Eigen::Matrix4d& Tab );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // get transform between input ID and its parent
     bool GetTransformFromParent(
             unsigned int        nChildFrameId,  //< Input: Child ID we will find parent of
             Eigen::Matrix4d&    dTab            //< Output: Found transform from parent to child
@@ -108,9 +109,6 @@ public:
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // return smart pointer to frames "parent"
     FramePtr GetParentFramePtr( unsigned int nChildFrameId );
-
-
-
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // traverse the graph via BFS up to input depth and store relative poses relative to input root
@@ -128,11 +126,14 @@ public:
             int                                         nDepth = -1     //< Input: Grapth depth search from root [default: max depth]
         );
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void UpdateInternalPath();
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    std::map< unsigned int, Eigen::Matrix4d >& GetInternalPath();
 
-
-
-
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    Eigen::Matrix4d& GetPathOrientation();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //    std::vector<EdgePtr>& GetEdges() { return m_vEdges; }
@@ -170,6 +171,10 @@ private:
     // reset color and depth of all of the map's frames
     void _ResetNodes();
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // estimate dominant plane using PCA
+    void _DynamicGroundPlaneEstimation();
+
 
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -178,6 +183,11 @@ private:
     FramePtr                                    m_pCurKeyframe;
     double                                      m_dLastModifiedTime;    // crucial that we keep this up-to date
 
+    bool                                        m_bFitPlane;
+    Eigen::Matrix4d                             m_dPathOrientation;
+    std::map< unsigned int, Eigen::Matrix4d >   m_vPath;                // absolute poses relative to a particular keyframe
+
+    // actual map graph
     std::vector< FramePtr >                     m_vFrames;              // list of map's reference frames
     std::vector< EdgePtr >                      m_vEdges;               // list of map's edges
 

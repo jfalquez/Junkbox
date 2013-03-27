@@ -44,7 +44,6 @@ enum eTrackingState
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class DenseFrontEnd
 {
-
 public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -59,7 +58,7 @@ public:
     bool Init(
             std::string             sGreyCModFilename,  //< Input: Greyscale camera model file
             std::string             sDepthCModFilename, //< Input: Depth camera model file
-            const CamImages&        vImages,            //< Input: Camera Capture
+            /*const */CamImages&        vImages,            //< Input: Camera Capture
             DenseMap*               pMap,               //< Input: Pointer to the map that should be used
             Timer*                  pTimer              //< Input: Pointer to timer
         );
@@ -68,7 +67,7 @@ public:
     // iterate through the captured images
     // returns: true if no errors were encountered
     bool Iterate(
-            const CamImages&        vImages     //< Input: Camera Capture
+            /*const */CamImages&        vImages     //< Input: Camera Capture
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -117,7 +116,6 @@ private:
     CameraModelPyramid                      m_CModPyrDepth;
 
     Eigen::Matrix4d                         m_dGlobalPose;      // current global pose w.r.t the map
-    std::map<unsigned int, Eigen::Matrix4d> m_vPath;            // absolute poses relative to a particular keyframe
 
     Timer*                                  m_pTimer;
 

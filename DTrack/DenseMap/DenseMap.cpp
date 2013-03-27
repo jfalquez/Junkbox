@@ -9,6 +9,8 @@
 DenseMap::DenseMap()
 {
     m_dLastModifiedTime = 0;
+    m_bFitPlane = true;
+    m_dPathOrientation.setIdentity();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -243,12 +245,12 @@ bool DenseMap::CopyMapChanges(
     m_vEdges.resize( rRHS.m_vEdges.size() );
     m_vFrames.resize( rRHS.m_vFrames.size() );
 
-    for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-5, 0 ); ii-- ){
+    for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-5, 0 ); ii-- ) {
         m_vEdges[ii] = boost::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
         //m_vEdges[ii] = rRHS.m_vEdges[ii]; // will do a deep copy
     }
 
-    for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-5, 0 ); ii-- ){
+    for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-5, 0 ); ii-- ) {
         m_vFrames[ii] = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
         //m_vFrames[ii] = rRHS.m_vFrames[ii]; // will do a deep copy
     }
@@ -256,6 +258,16 @@ bool DenseMap::CopyMapChanges(
     m_pCurKeyframe = rRHS.m_pCurKeyframe;
 //    m_pCurKeyframe = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *(rRHS.m_pCurKeyframe) ) );
 
+    // copy internal path and orientation
+    m_dPathOrientation = rRHS.m_dPathOrientation;
+    m_vPath.clear();
+    for( int ii = 0; ii < rRHS.m_vPath.size(); ++ii ) {
+        m_vPath[ii] = rRHS.m_vPath[ii];
+    }
+
+
+    // TODO add a mutex around this whole call, and use it also in _UpdateModifiedTime()
+    // this way modifications of the map during copy are still preserved by the ModifiedTime discrepancy??
     m_dLastModifiedTime = rRHS.m_dLastModifiedTime;
 
     return true;
@@ -448,6 +460,29 @@ void DenseMap::GenerateAbsolutePoses(
 }
 
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::UpdateInternalPath()
+{
+    m_vPath.clear();
+    GenerateAbsolutePoses( m_vPath );
+    _DynamicGroundPlaneEstimation();
+    _UpdateModifiedTime();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+std::map< unsigned int, Eigen::Matrix4d >& DenseMap::GetInternalPath()
+{
+    return m_vPath;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Eigen::Matrix4d& DenseMap::GetPathOrientation()
+{
+    return m_dPathOrientation;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -471,3 +506,91 @@ void DenseMap::_ResetNodes()
         (*it)->SetDepth(0);
     }
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::_DynamicGroundPlaneEstimation() {
+
+    if( m_vPath.size() < 50  || m_bFitPlane == false ) {
+        return;
+    }
+
+    Eigen::Matrix4d dOrigin = mvl::TInv( m_vPath[0] );
+
+    std::vector< Eigen::Vector3d > vPoints;
+    for( int ii = 0; ii < m_vPath.size(); ++ii ) {
+        Eigen::Matrix4d Pose4 = dOrigin * m_vPath[ii];
+        Eigen::Vector3d Pose3 = Pose4.block<3,1>(0,3);
+        vPoints.push_back( Pose3 );
+    }
+
+    double distance = 0.0;
+
+    // compute mean
+    Eigen::Vector3d mean(0.0, 0.0, 0.0);
+    mean += vPoints[0];
+    for( unsigned int ii = 1; ii < vPoints.size(); ++ii ) {
+        mean += vPoints[ii];
+        Eigen::Vector3d diff = vPoints[ii] - vPoints[ii-1];
+        distance += diff.norm();
+    }
+    mean /= vPoints.size();
+
+    // compute covariance matrix
+    Eigen::Matrix3d cov;
+    cov.setZero();
+    for( unsigned int ii = 0; ii < vPoints.size(); ++ii ) {
+        Eigen::Vector3d p = vPoints[ii] - mean;
+        cov(0,0) += p(0)*p(0);
+        cov(1,1) += p(1)*p(1);
+        cov(2,2) += p(2)*p(2);
+        cov(0,1) += p(0)*p(1);
+        cov(0,2) += p(0)*p(2);
+        cov(1,2) += p(1)*p(2);
+    }
+    cov(1,0) = cov(0,1);
+    cov(2,0) = cov(0,2);
+    cov(2,1) = cov(1,2);
+    cov /= (vPoints.size() - 1);
+
+    // compute principal components using svd
+    Eigen::JacobiSVD<Eigen::Matrix3d> svd(cov, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    Eigen::Matrix3d V = svd.matrixV();
+    Eigen::Vector3d S = svd.singularValues();
+
+    double threshold = 1e-4;
+    if( S(0) < threshold || S(1) < threshold ) {
+        return;
+    }
+
+    if( V.determinant() < 0.0 ) {
+        return;
+    }
+
+    // the normal of the plane is the singular vector with the smallest
+    // singular value (direction of least variance)
+    Eigen::Vector3d down = V.block<3,1>(0,2).normalized();
+
+    // check that vector is pointing down
+    Eigen::Vector3d z( 0.0, 0.0, 1.0 );
+    if( down.dot( z ) < 0.0 ) {
+        return;
+    }
+
+    // compute path transformation
+    Eigen::Vector3d forward( 1.0, 0.0, 0.0 );
+    Eigen::Vector3d right = down.cross( forward );
+    right.normalize();
+    forward = right.cross( down );
+    forward.normalize();
+
+    m_dPathOrientation.block<1,3>(0,0) = forward;
+    m_dPathOrientation.block<1,3>(1,0) = right;
+    m_dPathOrientation.block<1,3>(2,0) = down;
+
+    // if we travelled more than 50 m stop fitting the plane
+    if( distance > 50.0 ) {
+        m_bFitPlane = false;
+    }
+
+}
+

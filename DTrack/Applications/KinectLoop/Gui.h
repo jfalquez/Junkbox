@@ -8,6 +8,7 @@
 #include <SceneGraph/SceneGraph.h>
 
 #include <DenseMap/DenseMap.h>
+#include <DenseFrontEnd/DenseFrontEnd.h>
 
 #include <GLObjects/GLPath.h>
 #include <GLObjects/GLMap.h>
@@ -76,9 +77,10 @@ public:
     volatile GuiState               State;
 
 
-//private:
+private:
     bool                            m_bMapDirty;
 
+    DenseFrontEnd*                  m_pFrontEnd;
     DenseMap*                       m_pRenderMap;          // re-allocated on reset. for now.
     DenseMap*                       m_pChangesBufferMap;   // re-allocated on reset. for now.
 
@@ -167,7 +169,7 @@ void Gui::Init()
     m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000) );
     m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-20, 0, -30, 0, 0, 0, pangolin::AxisNegZ) );
 
-    m_View3d.SetBounds( 0.4, 1.0, pangolin::Attach::Pix(280), 1.0, 640.0f/480.0f );
+    m_View3d.SetBounds( 0.25, 1.0, pangolin::Attach::Pix(280), 1.0, 640.0f/480.0f );
     m_View3d.SetAspect( 640.0 / 480.0 );
     m_View3d.SetHandler( new SceneGraph::HandlerSceneGraph( m_gl3dGraph, m_gl3dRenderState, pangolin::AxisNone ) );
     m_View3d.SetDrawFunction( SceneGraph::ActivateDrawFunctor( m_gl3dGraph, m_gl3dRenderState ) );
@@ -175,7 +177,7 @@ void Gui::Init()
 
 
     // configure view container
-    m_ViewContainer.SetBounds( 0, 0.4, pangolin::Attach::Pix(280), 1 );
+    m_ViewContainer.SetBounds( 0, 0.25, pangolin::Attach::Pix(280), 1 );
     m_ViewContainer.SetLayout( pangolin::LayoutEqual );
     m_LiveGrey.SetAspect(1.0);
     m_ViewContainer.AddDisplay( m_LiveGrey );
@@ -249,6 +251,7 @@ void Gui::CopyMapChanges(
     boost::mutex::scoped_lock lock(m_Mutex);
     m_bMapDirty = m_pChangesBufferMap->CopyMapChanges( rMap );
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::UpdateImages( const cv::Mat& LiveGrey )

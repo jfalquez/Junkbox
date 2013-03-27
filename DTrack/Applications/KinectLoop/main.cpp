@@ -43,7 +43,7 @@ void DTrackThread( Gui& gui, int argc, char** argv)
 int main( int argc, char** argv )
 {
     // create GUI window
-    Gui gui("KinectLoop", 1280, 800);
+    Gui gui("DTrack", 1280, 800);
     gui.Init();
 
     /// two threads

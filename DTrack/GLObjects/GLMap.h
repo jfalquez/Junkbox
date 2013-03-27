@@ -65,6 +65,8 @@ public:
                         // TODO obtain these intrinsics from SOMEWHERE
 //                        _DepthToVBO( (float*)pFrame->GetDepthImagePtr(), nImgWidth, nImgHeight, 570, 570, 320, 240, VBO );
                         _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, 570/16, 570/16, 320/16, 240/16, VBO );
+//                        _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, 352.0/16, 414.4/16, 262.4/16, 150.4/16, VBO );
+//                        _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, 505.1974/16, 530.4231/16, 266.0871/16, 190.1686/16, VBO );
                         pVBO->Upload( VBO, nImgWidth * nImgHeight * 4 * 4);
 
                         unsigned char CBO[nImgWidth * nImgHeight * 4];
@@ -80,11 +82,16 @@ public:
             }
         }
 
-        std::map<unsigned int, Eigen::Matrix4d> vPoses;
+//        std::map<unsigned int, Eigen::Matrix4d> vPoses;
+//        m_pMap->GenerateAbsolutePoses( vPoses );
+        std::map<unsigned int, Eigen::Matrix4d>& vPoses = m_pMap->GetInternalPath();
 
-        m_pMap->GenerateAbsolutePoses( vPoses );
 
         if( !vPoses.empty() ) {
+            Eigen::Matrix4d& dPathOrientation =  m_pMap->GetPathOrientation();
+            glPushMatrix();
+            glMultMatrixd( MAT4_COL_MAJOR_DATA( dPathOrientation ) );
+
             // look for first pose of map, which is our "true" origin
             Eigen::Matrix4d dOrigin = _TInv( vPoses[0] );
 
@@ -104,6 +111,7 @@ public:
                     glPopMatrix();
                 }
             }
+            glPopMatrix();
         }
 
         glPopAttrib();
@@ -124,6 +132,7 @@ private:
             float*      pVBO
         )
     {
+        /*
         const float fMaxDistance = 5.0;
         for( int ii = 0; ii < nHeight; ++ii ) {
             for( int jj = 0; jj < nWidth; ++jj ) {
@@ -140,6 +149,29 @@ private:
                     pVBO[nVboIdx+2] = pDepth[nIdx] * (ii-cy) / fy;
                 }
                 pVBO[nVboIdx+3] = 1;
+            }
+        }
+        /* */
+
+        for( int ii = 0; ii < nHeight; ++ii ) {
+            float lastDepth = -1;
+            for( int jj = 0; jj < nWidth; ++jj ) {
+                const unsigned int nIdx = (ii * nWidth) + jj;
+                const unsigned int nVboIdx = nIdx * 4;
+                if( lastDepth == -1 ) {
+                    lastDepth = pDepth[nIdx];
+                }
+                if( fabs(lastDepth - pDepth[nIdx] ) > 0.5 ) {
+                    pVBO[nVboIdx]   = 0.0/0.0;
+                    pVBO[nVboIdx+1] = 0.0/0.0;
+                    pVBO[nVboIdx+2] = 0.0/0.0;
+                } else {
+                    pVBO[nVboIdx]   = pDepth[nIdx];
+                    pVBO[nVboIdx+1] = pDepth[nIdx] * (jj-cx) / fx;
+                    pVBO[nVboIdx+2] = pDepth[nIdx] * (ii-cy) / fy;
+                }
+                pVBO[nVboIdx+3] = 1;
+                lastDepth = pDepth[nIdx];
             }
         }
     }
