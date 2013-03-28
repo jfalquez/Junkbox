@@ -65,11 +65,6 @@ private:
         State = PAUSED;
     }
 
-    void _KEYBOARD_H()
-    {
-        //m_HelpView.ToggleShow();
-    }
-
 
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -291,8 +286,8 @@ void Gui::_RegisterKeyboardCallbacks()
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'r',
                                         boost::bind( &Gui::_CTRL_R, this) );
 
-     // toggle help
-    pangolin::RegisterKeyPressCallback( 'h', boost::bind( &Gui::_KEYBOARD_H, this ) );
+     // toggle showing map
+    pangolin::RegisterKeyPressCallback( '1', [this](){ m_glMap.ToggleShow(); } );
 }
 
 

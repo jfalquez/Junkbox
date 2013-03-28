@@ -26,6 +26,7 @@ class CameraModelPyramid : public mvl::CameraModel
 
         inline bool Read(const std::string& filename)
         {
+            m_sCamModFilename = filename;
             bool ret = mvl::CameraModel::Read(filename);
             if( ret ) {
                 PopulatePyramid();
@@ -66,6 +67,16 @@ class CameraModelPyramid : public mvl::CameraModel
             }
         }
 
+        inline bool IsInit()
+        {
+            return !m_K.empty();
+        }
+
+        inline std::string GetCamModFilename()
+        {
+            return m_sCamModFilename;
+        }
+
 
     private:
 
@@ -90,7 +101,8 @@ class CameraModelPyramid : public mvl::CameraModel
 
 
     protected:
-        std::vector<Eigen::Matrix3d> m_K;
-        std::vector<Eigen::Matrix3d> m_Kinv;
+        std::string                     m_sCamModFilename;
+        std::vector<Eigen::Matrix3d>    m_K;
+        std::vector<Eigen::Matrix3d>    m_Kinv;
 };
 

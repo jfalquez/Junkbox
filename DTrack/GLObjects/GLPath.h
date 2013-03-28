@@ -66,8 +66,6 @@ public:
         glCallList( m_nDrawListId );
 
 
-//        std::map<unsigned int, Eigen::Matrix4d> vPoses;
-//        m_pMap->GenerateAbsolutePoses( vPoses );
         std::map<unsigned int, Eigen::Matrix4d>& vPoses = m_pMap->GetInternalPath();
 
         if( !vPoses.empty() ) {

@@ -2,6 +2,7 @@ SET( DENSE_FRONT_END_HDRS
         DenseFrontEnd.h
         DenseFrontEndConfig.h
         GpuHelpers.h
+        ImageHelpers.h
         Timer.h
    )
 

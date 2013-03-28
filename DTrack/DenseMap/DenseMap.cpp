@@ -13,10 +13,32 @@ DenseMap::DenseMap()
     m_dPathOrientation.setIdentity();
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 DenseMap::~DenseMap()
 {
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// load camera model files into a camera model pyramid
+bool DenseMap::LoadCameraModels(
+        const std::string&          GreyCModFile,       //< Input: Grey camera model file name
+        const std::string&          DepthCModFile       //< Input: Depth camera model file name
+    )
+{
+    // get intrinsics
+    if( !m_CModPyrGrey.Read( GreyCModFile ) ) {
+        return false;
+    }
+
+    if( !m_CModPyrDepth.Read( DepthCModFile ) ) {
+        return false;
+    }
+
+    return true;
+}
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // allocate a new frame, but do not link it into the graph
@@ -35,6 +57,7 @@ FramePtr DenseMap::NewFrame(
     _UpdateModifiedTime();
     return pFrame;
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // allocate a new keyframe, but do not link it into the graph
@@ -59,6 +82,7 @@ FramePtr DenseMap::NewKeyframe(
     return pFrame;
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::FindEdgeId(
         unsigned int        nStartId,       //< Input:
@@ -82,6 +106,7 @@ bool DenseMap::FindEdgeId(
     printf("ERROR: edge not found!\n" );
     return false;
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::LinkFrames(
@@ -119,6 +144,7 @@ bool DenseMap::FrameExists(
     return nId < m_vFrames.size() && m_vFrames[nId] != NULL;
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::EdgeExists(
         unsigned int    nGetStartId,    //< Input:
@@ -129,12 +155,54 @@ bool DenseMap::EdgeExists(
     return FindEdgeId( nGetStartId, nEndId, tmp );
 }
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Eigen::Matrix3d DenseMap::GetGreyCameraK(
+        unsigned int    nLevel          //< Input: Pyramid level intrinsic
+    )
+{
+    if( m_CModPyrGrey.IsInit() == false ) {
+        std::cerr << "abort: Camera model files have not been initialized but are being requested. Was LoadCameraModels called?" << std::endl;
+        exit(1);
+    }
+    return m_CModPyrGrey.K( nLevel );
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Eigen::Matrix3d DenseMap::GetDepthCameraK(
+        unsigned int    nLevel          //< Input: Pyramid level intrinsic
+    )
+{
+    if( m_CModPyrGrey.IsInit() == false ) {
+        std::cerr << "abort: Camera model files have not been initialized but are being requested. Was LoadCameraModels called?" << std::endl;
+        exit(1);
+    }
+    return m_CModPyrDepth.K( nLevel );
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Eigen::Matrix4d DenseMap::GetGreyCameraPose()
+{
+    return m_CModPyrGrey.GetPose();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Eigen::Matrix4d DenseMap::GetDepthCameraPose()
+{
+    return m_CModPyrDepth.GetPose();
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 EdgePtr DenseMap::GetEdgePtr( unsigned int nEdgeId )
 {
     assert( nEdgeId < m_vEdges.size() );
     return m_vEdges[ nEdgeId ];
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 EdgePtr DenseMap::GetEdgePtr( unsigned int nGetStartId, unsigned int nEndId )
@@ -161,6 +229,7 @@ FramePtr DenseMap::GetFirstFramePtr()
 }
 */
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 FramePtr DenseMap::GetFramePtr( unsigned int nFrameId )
 {
@@ -173,6 +242,7 @@ FramePtr DenseMap::GetFramePtr( unsigned int nFrameId )
     return FramePtr( (ReferenceFrame*)NULL );
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::SetRelativeTransform( int nGetStartId, int nEndId, Eigen::Matrix4d& Tab )
 {
@@ -181,12 +251,14 @@ void DenseMap::SetRelativeTransform( int nGetStartId, int nEndId, Eigen::Matrix4
     _UpdateModifiedTime();
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::GetRelativeTransform( int nGetStartId, int nEndId, Eigen::Matrix4d& Tab )
 {
     EdgePtr pEdge = GetEdgePtr( nGetStartId, nEndId );
     return pEdge->GetTransform( nGetStartId, nEndId, Tab );
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::GetTransformFromParent(
@@ -205,6 +277,7 @@ bool DenseMap::GetTransformFromParent(
     return false;
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 FramePtr DenseMap::GetParentFramePtr(
         unsigned int        nChildFrameId       //< Input: Child ID we will find parent of
@@ -220,11 +293,13 @@ FramePtr DenseMap::GetParentFramePtr(
     return pParentFrame;
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 FramePtr DenseMap::GetCurrentKeyframe()
 {
     return m_pCurKeyframe;
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::CopyMapChanges(
@@ -233,6 +308,14 @@ bool DenseMap::CopyMapChanges(
 {
     if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
         return false; // nothing to do, map is up-to date
+    }
+
+    if( m_CModPyrGrey.IsInit() == false ) {
+        m_CModPyrGrey.Read( rRHS.m_CModPyrGrey.GetCamModFilename() );
+    }
+
+    if( m_CModPyrDepth.IsInit() == false ) {
+        m_CModPyrDepth.Read( rRHS.m_CModPyrDepth.GetCamModFilename() );
     }
 
     // make sure we're dealing with the same map?
@@ -273,6 +356,7 @@ bool DenseMap::CopyMapChanges(
     return true;
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::SetKeyframe(
         FramePtr    pKeyframe       //< Input: Pointer to keyframe
@@ -280,6 +364,7 @@ void DenseMap::SetKeyframe(
 {
     m_pCurKeyframe = pKeyframe;
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::Print()
@@ -297,7 +382,6 @@ void DenseMap::Print()
     for( unsigned int ii=0; ii < m_vFrames.size(); ii++ ) {
     }
 }
-
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -593,4 +677,3 @@ void DenseMap::_DynamicGroundPlaneEstimation() {
     }
 
 }
-

@@ -32,7 +32,7 @@ class DTrackApp
 
             // initialize camera
             if( !rpg::InitCam( m_Cam, clArgs ) ) {
-                exit(0);
+                exit(1);
             }
 
             // capture check
@@ -65,15 +65,16 @@ class DTrackApp
             sCModFile = clArgs.follow( "cmod_d.xml", "-dcmod" );
             std::string sDepthCModFilename = sSrcDir + "/" + sCModFile;
 
-            // TODO load files here so that GUI is aware of intrinsics or something
-            // perhaps store it in the map??
-
+            if (m_pMap->LoadCameraModels( sGreyCModFilename, sDepthCModFilename ) == false ) {
+                std::cerr << "abort: There was a problem loading the camera model files!" << std::endl;
+                exit(1);
+            }
 
             if( m_pFrontEnd ) {
                 delete m_pFrontEnd;
             }
             m_pFrontEnd = new DenseFrontEnd( m_vImages[0].width(), m_vImages[0].height() );
-            return m_pFrontEnd->Init( sGreyCModFilename, sDepthCModFilename, m_vImages, m_pMap, m_pTimer );
+            return m_pFrontEnd->Init( m_vImages, m_pMap, m_pTimer );
         }
 
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -82,7 +83,7 @@ class DTrackApp
             if( m_Cam.Capture( m_vImages ) ) {
                 _UnpackImages( m_vImages );
                 if( m_pFrontEnd->Iterate( m_vImages ) == false) {
-                    std::cerr << "critical warning: something went wrong during the last iteration." << std::endl;
+                    std::cerr << "critical: something went wrong during the last iteration." << std::endl;
                     rGui.SetState( PAUSED );
                 }
 
@@ -122,8 +123,6 @@ class DTrackApp
             cv::resize( vImages[0].Image, Tmp, cv::Size(0,0), 0.5, 0.5 );
 
             vImages[0].Image = Tmp;
-
-//            vImages[1].Image = vImages[1].Image * 255;
             /* */
 
             /*

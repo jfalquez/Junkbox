@@ -32,6 +32,8 @@ public:
         if( m_dLastModifiedTime != m_pMap->GetLastModifiedTime() ) {
 
             // get image dimensions
+            // TODO add an option to see hi res versus low res VBOs
+            // for hi res, not all can be displayed so do something
             FramePtr pFrame = m_pMap->GetFramePtr(0);
 //            const unsigned int nImgWidth    = pFrame->GetImageWidth();
             const unsigned int nImgWidth    = pFrame->GetThumbWidth();
@@ -62,15 +64,11 @@ public:
                         pangolin::GlBuffer* pCBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_UNSIGNED_BYTE, 4, GL_STREAM_DRAW );
 
                         float VBO[nImgWidth * nImgHeight * 4];
-                        // TODO obtain these intrinsics from SOMEWHERE
-//                        _DepthToVBO( (float*)pFrame->GetDepthImagePtr(), nImgWidth, nImgHeight, 570, 570, 320, 240, VBO );
-                        _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, 570/16, 570/16, 320/16, 240/16, VBO );
-//                        _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, 352.0/16, 414.4/16, 262.4/16, 150.4/16, VBO );
-//                        _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, 505.1974/16, 530.4231/16, 266.0871/16, 190.1686/16, VBO );
+                        Eigen::Matrix3d DepthK = m_pMap->GetDepthCameraK( 4 );
+                        _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, DepthK(0,0), DepthK(1,1), DepthK(0,2), DepthK(1,2), VBO );
                         pVBO->Upload( VBO, nImgWidth * nImgHeight * 4 * 4);
 
                         unsigned char CBO[nImgWidth * nImgHeight * 4];
-//                        _GreyToCBO( (unsigned char*)pFrame->GetGreyImagePtr(), nImgWidth, nImgHeight, CBO );
                         _GreyToCBO( (unsigned char*)pFrame->GetGreyThumbPtr(), nImgWidth, nImgHeight, CBO );
                         pCBO->Upload( CBO, nImgWidth * nImgHeight * 4);
 
@@ -82,8 +80,6 @@ public:
             }
         }
 
-//        std::map<unsigned int, Eigen::Matrix4d> vPoses;
-//        m_pMap->GenerateAbsolutePoses( vPoses );
         std::map<unsigned int, Eigen::Matrix4d>& vPoses = m_pMap->GetInternalPath();
 
 
@@ -115,6 +111,15 @@ public:
         }
 
         glPopAttrib();
+    }
+
+    void ToggleShow()
+    {
+        if( IsVisible() ) {
+            SetVisible( false );
+        } else {
+            SetVisible( true );
+        }
     }
 
 
