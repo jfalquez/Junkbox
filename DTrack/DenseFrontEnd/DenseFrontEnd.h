@@ -69,6 +69,29 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // returns a map with info of the state of several varibles in the engine
+    void GetAnalytics(
+            std::map< std::string, double >&    mData
+        );
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // timer auxilary functions
+    void Tic( const std::string& sName = "" )
+    {
+        if( m_pTimer ){
+            m_pTimer->Tic( sName );
+        }
+    }
+
+    void Toc( const std::string& sName = "" )
+    {
+        if( m_pTimer ){
+            m_pTimer->Toc( sName );
+        }
+    }
+
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // returns current tracking state
     eTrackingState TrackingState()
     {
@@ -113,6 +136,7 @@ private:
     Eigen::Matrix4d                         m_dGlobalPose;      // current global pose w.r.t the map
 
     Timer*                                  m_pTimer;
+    std::map< std::string, double >         m_Analytics;        // statistics for display
 
     boost::mutex                            m_Mutex;
 

@@ -81,12 +81,21 @@ class DTrackApp
         void StepOnce( Gui& rGui )
         {
             if( m_Cam.Capture( m_vImages ) ) {
+
+                m_pFrontEnd->Tic();
                 _UnpackImages( m_vImages );
                 if( m_pFrontEnd->Iterate( m_vImages ) == false) {
                     std::cerr << "critical: something went wrong during the last iteration." << std::endl;
                     rGui.SetState( PAUSED );
                 }
+                m_pFrontEnd->Toc();
 
+                // update analytics
+                m_pFrontEnd->GetAnalytics( m_Analytics );
+                rGui.UpdateAnalytics( m_Analytics );
+                rGui.UpdateTimer( m_pTimer->GetWindowSize(), m_pTimer->GetNames(3), m_pTimer->GetTimes(3) );
+
+                // pause if certain conditions are met
                 if( m_pFrontEnd->TrackingState() == eTrackingBad || m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
                     rGui.SetState( PAUSED );
                 }
@@ -102,11 +111,7 @@ class DTrackApp
             rGui.CopyMapChanges( *m_pMap );
 
             rGui.UpdateImages( m_vImages[0].Image );
-
-//            rGui.UpdateTimer( m_pTimer->GetWindowSize(), m_pTimer->GetNames(3), m_pTimer->GetTimes(3) );
-
         }
-
 
 
     private:
@@ -152,16 +157,14 @@ class DTrackApp
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     private:
 
-        CameraDevice                m_Cam;          // camera handler
-        CamImages                   m_vImages;      // camera images
+        CameraDevice                    m_Cam;          // camera handler
+        CamImages                       m_vImages;      // camera images
 
-        Eigen::Matrix3d             m_Kg;           // intensity (ie. greyscale) camera's intrinsics
-        Eigen::Matrix3d             m_Kd;           // depth camera's intrinsics
-        Eigen::Matrix4d             m_Tgd;          // depth camera's pose w.r.t. the greyscale camera
+        DenseFrontEnd*                  m_pFrontEnd;
+        DenseMap*                       m_pMap;
+        Timer*                          m_pTimer;
+        std::map< std::string, double > m_Analytics;
 
-        DenseFrontEnd*              m_pFrontEnd;
-        DenseMap*                   m_pMap;
-        Timer*                      m_pTimer;
 };
 
 #endif

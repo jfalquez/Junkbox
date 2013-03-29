@@ -10,8 +10,10 @@
 #include <DenseMap/DenseMap.h>
 #include <DenseFrontEnd/DenseFrontEnd.h>
 
-#include <GLObjects/GLPath.h>
-#include <GLObjects/GLMap.h>
+#include <GUI/GLPath.h>
+#include <GUI/GLMap.h>
+#include <GUI/AnalyticsView.h>
+#include <GUI/TimerView.h>
 
 #include "GuiConfig.h"
 
@@ -35,6 +37,14 @@ public:
 
     // data updates
     void UpdateImages( const cv::Mat& LiveGrey );
+
+    void UpdateTimer(
+                    int                                      nTimeWindowSize,
+                    std::vector< std::string>                vNames,
+                    std::vector< std::pair<double,double> >  vTimes
+                    );
+
+    void UpdateAnalytics( std::map< std::string, double >& mData );
 
     void SetState( GuiState s )
     {
@@ -100,7 +110,11 @@ private:
     SceneGraph::ImageView           m_LiveGrey;
     SceneGraph::ImageView           m_KeyGrey;
     SceneGraph::ImageView           m_KeyDepth;
-    SceneGraph::ImageView           m_Debug;
+    SceneGraph::ImageView           m_LoopClosure;
+
+    // extras
+    AnalyticsView                   m_AnalyticsView;
+    TimerView                       m_TimerView;
 
     boost::mutex                    m_Mutex;
 };
@@ -145,14 +159,12 @@ void Gui::Init()
     _RegisterKeyboardCallbacks();
 
     // side panel
-    pangolin::CreatePanel("ui").SetBounds( 0, 1, 0, pangolin::Attach::Pix(280) );
-    pangolin::Var<float>            ui_fRMSE( "ui.RMSE" );
+    pangolin::CreatePanel("ui").SetBounds( 0, 1, 0, pangolin::Attach::Pix(300) ).Show(false);
     pangolin::Var<unsigned int>     ui_nBlur( "ui.Blur", 1, 0, 5 );
     pangolin::Var<bool>             ui_bBreakEarly( "ui.Break Early", false, true );
     pangolin::Var<float>            ui_fBreakErrorThreshold( "ui.Break Early Error Threshold", 0.8, 0, 2 );
     pangolin::Var<float>            ui_fNormC( "ui.Norm C", 10, 0, 100);
     pangolin::Var<bool>             ui_bDiscardMaxMin( "ui.Discard Max-Min Pix Values", true, true );
-
 
     // configure 3d view
     SceneGraph::GLSceneGraph::ApplyPreferredGlSettings();
@@ -169,21 +181,23 @@ void Gui::Init()
     m_View3d.SetHandler( new SceneGraph::HandlerSceneGraph( m_gl3dGraph, m_gl3dRenderState, pangolin::AxisNone ) );
     m_View3d.SetDrawFunction( SceneGraph::ActivateDrawFunctor( m_gl3dGraph, m_gl3dRenderState ) );
 
-
-
-    // configure view container
-    m_ViewContainer.SetBounds( 0, 0.25, pangolin::Attach::Pix(280), 1 );
+    // configure view container -- for images
+    m_ViewContainer.SetBounds( 0, 0.25, pangolin::Attach::Pix(300), 1 );
     m_ViewContainer.SetLayout( pangolin::LayoutEqual );
     m_LiveGrey.SetAspect(1.0);
     m_ViewContainer.AddDisplay( m_LiveGrey );
     m_ViewContainer.AddDisplay( m_KeyGrey );
     m_ViewContainer.AddDisplay( m_KeyDepth );
-    m_ViewContainer.AddDisplay( m_Debug );
 
+    // configure extras
+    m_TimerView.SetBounds( 0.4, 1.0, 0, pangolin::Attach::Pix(300) );
+    m_AnalyticsView.SetBounds( 0, 0.4, 0, pangolin::Attach::Pix(300) );
 
     // add views to base window
     pangolin::DisplayBase().AddDisplay( m_View3d );
     pangolin::DisplayBase().AddDisplay( m_ViewContainer );
+    pangolin::DisplayBase().AddDisplay( m_AnalyticsView );
+    pangolin::DisplayBase().AddDisplay( m_TimerView );
 
     InitReset();
 }
@@ -200,12 +214,15 @@ void Gui::InitReset()
     m_bMapDirty         = false;
     m_Mutex.unlock();
 
-    // initreset objects
+    // init-reset objects
     m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
     m_glGrid.SetLineSpacing( 10.0 );
     m_glMap.InitReset( m_pRenderMap );
     m_glPath.InitReset( m_pRenderMap );
 
+    // init-reset extras
+    m_TimerView.InitReset();
+    m_AnalyticsView.InitReset();
 
     // hide or show things
 //    m_PrevImageLeft.Show( false );
@@ -249,7 +266,9 @@ void Gui::CopyMapChanges(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void Gui::UpdateImages( const cv::Mat& LiveGrey )
+void Gui::UpdateImages(
+        const cv::Mat&      LiveGrey
+    )
 {
     if( m_nImageWidth == 0 ) {
         m_nImageWidth  = LiveGrey.cols;
@@ -272,6 +291,26 @@ void Gui::UpdateImages( const cv::Mat& LiveGrey )
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void Gui::UpdateTimer(
+        int                                     nTimeWindowSize,
+        std::vector< std::string >              vsNames,
+        std::vector< std::pair<double,double> > vTimes
+        )
+{
+    m_TimerView.Update( nTimeWindowSize, vsNames, vTimes );
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void Gui::UpdateAnalytics(
+        std::map< std::string, double >&    mData
+    )
+{
+    m_AnalyticsView.Update( mData );
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::_RegisterKeyboardCallbacks()
 {
     // step once
@@ -285,6 +324,13 @@ void Gui::_RegisterKeyboardCallbacks()
     // reset app
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'r',
                                         boost::bind( &Gui::_CTRL_R, this) );
+
+    // toggle showing side panel
+    pangolin::RegisterKeyPressCallback('~', [this](){ static bool showpanel = false; showpanel = !showpanel;
+        if(showpanel) { m_TimerView.Show(false); m_AnalyticsView.Show(false);  } else
+            { m_TimerView.Show(true); m_AnalyticsView.Show(true); }
+                    pangolin::Display("ui").Show(showpanel); } );
+
 
      // toggle showing map
     pangolin::RegisterKeyPressCallback( '1', [this](){ m_glMap.ToggleShow(); } );

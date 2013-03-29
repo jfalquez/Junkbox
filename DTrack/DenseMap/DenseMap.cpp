@@ -335,11 +335,9 @@ bool DenseMap::CopyMapChanges(
 
     for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-5, 0 ); ii-- ) {
         m_vFrames[ii] = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
-        //m_vFrames[ii] = rRHS.m_vFrames[ii]; // will do a deep copy
     }
 
-    m_pCurKeyframe = rRHS.m_pCurKeyframe;
-//    m_pCurKeyframe = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *(rRHS.m_pCurKeyframe) ) );
+    m_pCurKeyframe = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *(rRHS.m_pCurKeyframe) ) );
 
     // copy internal path and orientation
     m_dPathOrientation = rRHS.m_dPathOrientation;

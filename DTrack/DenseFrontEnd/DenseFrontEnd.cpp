@@ -145,9 +145,6 @@ bool DenseFrontEnd::Iterate(
         const CamImages&    vImages     //< Input: Camera capture
     )
 {
-    // get GUI variables
-    pangolin::Var<float>            ui_fRMSE("ui.RMSE");
-
     // update error level in case user changed it
     mvl::PrintHandlerSetErrorLevel( feConfig.g_nErrorLevel );
 
@@ -179,11 +176,13 @@ bool DenseFrontEnd::Iterate(
         }
     }
 
+    Tic("PoseEstimate");
     unsigned int nNumObservations;
     double dTrackingError = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc, nNumObservations );
-    ui_fRMSE = dTrackingError;
-
+    m_Analytics["RMSE"] = dTrackingError;
     std::cout << "Estimate was: " << mvl::T2Cart(Tpc).transpose() << std::endl << std::endl;
+    Toc("PoseEstimate");
+
 
     if( dTrackingError < 5 ) {
         m_eTrackingState = eTrackingGood;
@@ -198,7 +197,7 @@ bool DenseFrontEnd::Iterate(
 
         // discard estimate and hope our constant velocity model carries us through
         m_pMap->GetTransformFromParent( m_pCurFrame->GetId(), Tpc );
-//        return false;
+        return false;
     }
 
     // update global pose
@@ -209,6 +208,8 @@ bool DenseFrontEnd::Iterate(
 
     // drop new keyframe if number of observations is too low
     if( nNumObservations < (feConfig.g_fKeyframePtsThreshold * m_nImageHeight * m_nImageWidth) ) {
+
+        Tic("GenKeyframe");
 
         // allocate thumb images
         cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
@@ -222,6 +223,7 @@ bool DenseFrontEnd::Iterate(
 
         if( pNewKeyframe == NULL ) {
             std::cerr << "error: generating new keyframe." << std::endl;
+            Toc("GenKeyframe");
             return false;
         }
 
@@ -237,6 +239,7 @@ bool DenseFrontEnd::Iterate(
         // since this is a new keyframe, reset last pose
         m_dLastEstimate.setIdentity();
 
+        Toc("GenKeyframe");
     } else {
 
         // allocate thumb image
@@ -266,6 +269,7 @@ bool DenseFrontEnd::Iterate(
 
 
     // check for loop closure
+    Tic("LoopClosure");
     double          dLoopClosureError;
     Eigen::Matrix4d LoopClosureT;
     int nLoopClosureFrameId = _LoopClosure( m_pCurFrame, LoopClosureT, dLoopClosureError );
@@ -277,6 +281,7 @@ bool DenseFrontEnd::Iterate(
         m_pMap->LinkFrames( m_pMap->GetFramePtr(nLoopClosureFrameId), m_pCurFrame, LoopClosureT );
 //        m_pMap->LinkFrames( m_pCurFrame, m_pMap->GetFramePtr(nLoopClosureFrameId),  LoopClosureT.inverse() );
     }
+    Toc("LoopClosure");
 
     // keep internal map's path up to date
     m_pMap->UpdateInternalPath();
@@ -286,8 +291,19 @@ bool DenseFrontEnd::Iterate(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// returns a map with info of the state of several varibles in the engine
+void DenseFrontEnd::GetAnalytics(
+        std::map< std::string, double >&    mData
+    )
+{
+    mData = m_Analytics;
+}
+
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
