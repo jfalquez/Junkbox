@@ -127,6 +127,7 @@ class DTrackApp
             )
         {
 
+            /// for JPL data
             /*
             cv::Mat Tmp;
 
@@ -135,8 +136,8 @@ class DTrackApp
             vImages[0].Image = Tmp;
             /* */
 
-            /* */
-
+            /// for KINECT data
+            /*
             // this converts images from the kinect to the expected format of DTrack
             cv::Mat Tmp;
 
@@ -153,7 +154,6 @@ class DTrackApp
 
                 vImages[1].Image = Tmp;
             }
-
             /* */
         }
 
@@ -167,8 +167,9 @@ class DTrackApp
 
         DenseFrontEnd*                  m_pFrontEnd;
         DenseMap*                       m_pMap;
-        Timer*                          m_pTimer;
-        std::map< std::string, double > m_Analytics;
+
+        Timer*                                                  m_pTimer;
+        std::map< std::string,  std::pair< double, double > >   m_Analytics;
 
 };
 

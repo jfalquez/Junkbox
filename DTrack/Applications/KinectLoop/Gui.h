@@ -44,7 +44,7 @@ public:
                     std::vector< std::pair<double,double> >  vTimes
                     );
 
-    void UpdateAnalytics( std::map< std::string, double >& mData );
+    void UpdateAnalytics( std::map< std::string,  std::pair< double, double > >& mData );
 
     void SetState( GuiState s )
     {
@@ -203,6 +203,7 @@ void Gui::Init()
     InitReset();
 }
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::InitReset()
 {
@@ -224,10 +225,8 @@ void Gui::InitReset()
     // init-reset extras
     m_TimerView.InitReset();
     m_AnalyticsView.InitReset();
-
-    // hide or show things
-//    m_PrevImageLeft.Show( false );
 }
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::Run()
@@ -304,7 +303,7 @@ void Gui::UpdateTimer(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::UpdateAnalytics(
-        std::map< std::string, double >&    mData
+        std::map< std::string, std::pair< double, double > >&    mData
     )
 {
     m_AnalyticsView.Update( mData );

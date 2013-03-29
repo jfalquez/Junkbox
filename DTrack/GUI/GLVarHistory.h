@@ -35,12 +35,13 @@ class GLVarHistory
         {
             m_sVarName          = sVarName;
             m_nMaxHistoryLength = nMaxLength;
+            m_dThreshold = 0;
 
             m_vHistory.clear();
         }
 
         ////////////////////////////////////////////////////////////////////////
-        void Update(double dVarValue)
+        void Update(double dVarValue, double dThreshold)
         {
             m_vHistory.push_back(dVarValue);
 
@@ -50,6 +51,7 @@ class GLVarHistory
             std::deque<double> orderedHistory = m_vHistory;
             std::sort(orderedHistory.begin(), orderedHistory.end() );
             m_dMedian = orderedHistory[ orderedHistory.size()/2 ];
+            m_dThreshold = dThreshold;
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -123,6 +125,13 @@ class GLVarHistory
             float fScaledMedian = (float)(fScale*m_dMedian);
             drawLine( fLeft, fBottom - fScaledMedian, fRight, fBottom - fScaledMedian);
 
+            // draw threshold (if exists)
+            if( m_dThreshold != 0 ) {
+                glColor4f( 1.0, 1.0, 102.0/255.0, 1.0);
+                float fScaledThreshold = (float)(fScale*m_dThreshold);
+                drawLine( fLeft, fBottom - fScaledThreshold, fRight, fBottom - fScaledThreshold);
+            }
+
             // draw globject bounding box
             glLineWidth(1);
             glColor4f(1.0,1.0,1.0,1.0);
@@ -140,6 +149,7 @@ class GLVarHistory
         std::string         m_sVarName;
         unsigned int        m_nMaxHistoryLength;
         double              m_dMedian;
+        double              m_dThreshold;
         std::deque<double>  m_vHistory;
         SceneGraph::GLText  m_glText;
 

@@ -179,7 +179,7 @@ bool DenseFrontEnd::Iterate(
     Tic("PoseEstimate");
     unsigned int nNumObservations;
     double dTrackingError = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc, nNumObservations );
-    m_Analytics["RMSE"] = dTrackingError;
+    m_Analytics["RMSE"] = std::pair<double, double>( dTrackingError, 0 );
     std::cout << "Estimate was: " << mvl::T2Cart(Tpc).transpose() << std::endl << std::endl;
     Toc("PoseEstimate");
 
@@ -207,7 +207,9 @@ bool DenseFrontEnd::Iterate(
     double dSensorTime = mvl::Tic();
 
     // drop new keyframe if number of observations is too low
-    if( nNumObservations < (feConfig.g_fKeyframePtsThreshold * m_nImageHeight * m_nImageWidth) ) {
+    double dObsThreshold = feConfig.g_fKeyframePtsThreshold * m_nImageHeight * m_nImageWidth;
+    m_Analytics["Num Obs"] = std::pair<double, double>( nNumObservations, dObsThreshold );
+    if( nNumObservations < dObsThreshold ) {
 
         Tic("GenKeyframe");
 
@@ -273,6 +275,7 @@ bool DenseFrontEnd::Iterate(
     double          dLoopClosureError;
     Eigen::Matrix4d LoopClosureT;
     int nLoopClosureFrameId = _LoopClosure( m_pCurFrame, LoopClosureT, dLoopClosureError );
+    m_Analytics["LC RMSE"] = std::pair<double, double>( dLoopClosureError, feConfig.g_dLoopClosureThreshold );
     if( nLoopClosureFrameId != -1 && dLoopClosureError < feConfig.g_dLoopClosureThreshold ) {
         std::cout << "Loop Closure Detected!!! Frame: " << nLoopClosureFrameId << " Error: " << dLoopClosureError << std::endl;
         m_eTrackingState = eTrackingLoopClosure;
@@ -293,7 +296,7 @@ bool DenseFrontEnd::Iterate(
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // returns a map with info of the state of several varibles in the engine
 void DenseFrontEnd::GetAnalytics(
-        std::map< std::string, double >&    mData
+        std::map< std::string, std::pair< double, double > >&    mData
     )
 {
     mData = m_Analytics;
@@ -513,8 +516,12 @@ int DenseFrontEnd::_LoopClosure(
         }
     }
 
+    double dSADThreshold = feConfig.g_nLoopClosureSAD * (m_nThumbHeight * m_nThumbWidth);
+
+    m_Analytics["LC SAD"] = std::pair<double, double>( fBestScore, dSADThreshold );
+
     // if no match is found, return -1
-    if( fBestScore > (feConfig.g_nLoopClosureSAD * (m_nThumbHeight * m_nThumbWidth)) ) {
+    if( fBestScore >  dSADThreshold ) {
         return -1;
     }
 

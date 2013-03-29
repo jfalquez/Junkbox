@@ -113,23 +113,23 @@ class AnalyticsView : public pangolin::View
 
 
         ///////////////////////////////////////////////////////////////////////////////
-        void Update( std::map< std::string, double >& mData )
+        void Update( std::map< std::string, std::pair< double, double > >& mData )
         {
             boost::mutex::scoped_lock lock(m_Mutex);
 
-            std::map< std::string, double >::iterator itInput;
-            std::map< std::string, GLVarHistory* >::iterator it;
+            for( auto itInput = mData.begin(); itInput != mData.end(); ++itInput ) {
+                const std::string&  sVar = itInput->first;
+                std::pair<double, double>& dVal = itInput->second;
 
-            for( itInput = mData.begin(); itInput != mData.end(); ++itInput ) {
-                it = m_mData.find( itInput->first );
+                auto it = m_mData.find( sVar );
 
                 if( it == m_mData.end() ) {
                     // create variable
-                    m_mData[ itInput->first ] = new GLVarHistory;
-                    m_mData[ itInput->first ]->InitReset( itInput->first, m_uVarHistoryLength );
+                    m_mData[ sVar ] = new GLVarHistory;
+                    m_mData[ sVar ]->InitReset( sVar, m_uVarHistoryLength );
                 }
 
-                m_mData[ itInput->first]->Update( itInput->second );
+                m_mData[ sVar ]->Update( dVal.first, dVal.second );
             }
         }
 

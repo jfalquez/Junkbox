@@ -71,7 +71,7 @@ public:
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // returns a map with info of the state of several varibles in the engine
     void GetAnalytics(
-            std::map< std::string, double >&    mData
+            std::map< std::string, std::pair< double, double > >&    mData
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -135,17 +135,17 @@ private:
 
     Eigen::Matrix4d                         m_dGlobalPose;      // current global pose w.r.t the map
 
-    Timer*                                  m_pTimer;
-    std::map<std::string, double>           m_Analytics;        // statistics for display
+    Timer*                                                  m_pTimer;
+    std::map< std::string, std::pair< double, double > >    m_Analytics;        // statistics for display
 
     boost::mutex                            m_Mutex;
 
     // GPU Variables
-    Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdGreyPyr;
-    Gpu::Pyramid<unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>     m_cdKeyGreyPyr;
-    Gpu::Pyramid<float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage>             m_cdKeyDepthPyr;
-    Gpu::Image<unsigned char, Gpu::TargetDevice, Gpu::Manage>                       m_cdWorkspace;
-    Gpu::Image<float4, Gpu::TargetDevice, Gpu::Manage>                              m_cdDebug;
+    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cdGreyPyr;
+    Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cdKeyGreyPyr;
+    Gpu::Pyramid< float, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >           m_cdKeyDepthPyr;
+    Gpu::Image< unsigned char, Gpu::TargetDevice, Gpu::Manage >                     m_cdWorkspace;
+    Gpu::Image< float4, Gpu::TargetDevice, Gpu::Manage >                            m_cdDebug;
     GpuVars_t                                                                       m_cdTemp;
 
 };
