@@ -159,7 +159,8 @@ void Gui::Init()
     _RegisterKeyboardCallbacks();
 
     // side panel
-    pangolin::CreatePanel("ui").SetBounds( 0, 1, 0, pangolin::Attach::Pix(300) ).Show(false);
+    const unsigned int nPanelSize = 350;
+    pangolin::CreatePanel("ui").SetBounds( 0, 1, 0, pangolin::Attach::Pix(nPanelSize) ).Show(false);
     pangolin::Var<unsigned int>     ui_nBlur( "ui.Blur", 1, 0, 5 );
     pangolin::Var<bool>             ui_bBreakEarly( "ui.Break Early", false, true );
     pangolin::Var<float>            ui_fBreakErrorThreshold( "ui.Break Early Error Threshold", 0.8, 0, 2 );
@@ -182,7 +183,7 @@ void Gui::Init()
     m_View3d.SetDrawFunction( SceneGraph::ActivateDrawFunctor( m_gl3dGraph, m_gl3dRenderState ) );
 
     // configure view container -- for images
-    m_ViewContainer.SetBounds( 0, 0.25, pangolin::Attach::Pix(300), 1 );
+    m_ViewContainer.SetBounds( 0, 0.25, pangolin::Attach::Pix(nPanelSize), 1 );
     m_ViewContainer.SetLayout( pangolin::LayoutEqual );
     m_LiveGrey.SetAspect(1.0);
     m_ViewContainer.AddDisplay( m_LiveGrey );
@@ -190,8 +191,8 @@ void Gui::Init()
     m_ViewContainer.AddDisplay( m_KeyDepth );
 
     // configure extras
-    m_TimerView.SetBounds( 0.4, 1.0, 0, pangolin::Attach::Pix(300) );
-    m_AnalyticsView.SetBounds( 0, 0.4, 0, pangolin::Attach::Pix(300) );
+    m_TimerView.SetBounds( 0.4, 1.0, 0, pangolin::Attach::Pix(nPanelSize) );
+    m_AnalyticsView.SetBounds( 0, 0.4, 0, pangolin::Attach::Pix(nPanelSize) );
 
     // add views to base window
     pangolin::DisplayBase().AddDisplay( m_View3d );

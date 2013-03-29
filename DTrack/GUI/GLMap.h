@@ -95,8 +95,7 @@ public:
             glPushAttrib( GL_ENABLE_BIT );
             glDisable( GL_LIGHTING );
 
-            std::map<unsigned int, Eigen::Matrix4d>::iterator it;
-            for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
+            for( auto it = vPoses.begin(); it != vPoses.end(); ++it ) {
                 unsigned int        nId = it->first;
                 Eigen::Matrix4d&    Pose = it->second;
 

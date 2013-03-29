@@ -69,7 +69,7 @@ class TimerView : public pangolin::View
             // init accTimes and string vector
             for(int ii=0; ii <(int)vTimes.size(); ++ii) {
                 vdAccTimes.push_back(vTimes[ii].second);
-                sprintf(cBuff, "%.3f", vTimes[ii].first);
+                sprintf(cBuff, "%.2f", vTimes[ii].first);
                 m_vsTimes[ii].assign(cBuff);
             }
 

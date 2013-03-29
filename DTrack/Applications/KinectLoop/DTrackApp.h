@@ -83,7 +83,12 @@ class DTrackApp
             if( m_Cam.Capture( m_vImages ) ) {
 
                 m_pFrontEnd->Tic();
+
+                // unpack images to what the front end expects
+                m_pFrontEnd->Tic("Unpack");
                 _UnpackImages( m_vImages );
+                m_pFrontEnd->Toc("Unpack");
+
                 if( m_pFrontEnd->Iterate( m_vImages ) == false) {
                     std::cerr << "critical: something went wrong during the last iteration." << std::endl;
                     rGui.SetState( PAUSED );
@@ -130,7 +135,7 @@ class DTrackApp
             vImages[0].Image = Tmp;
             /* */
 
-            /*
+            /* */
 
             // this converts images from the kinect to the expected format of DTrack
             cv::Mat Tmp;

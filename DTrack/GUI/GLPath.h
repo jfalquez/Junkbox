@@ -78,8 +78,7 @@ public:
             Eigen::Matrix4d dOrigin = _TInv( vPoses[0] );
 
             if( m_bDrawAxis ) {
-                std::map<unsigned int, Eigen::Matrix4d>::iterator it;
-                for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
+                for( auto it = vPoses.begin(); it != vPoses.end(); ++it ) {
                     Eigen::Matrix4d&    Pose = it->second;
 
                     glPushMatrix();
@@ -96,8 +95,7 @@ public:
                 glColor4f( m_fLineColor(0), m_fLineColor(1), m_fLineColor(2), m_fLineColor(3) );
 
                 glBegin( GL_LINE_STRIP );
-                std::map<unsigned int, Eigen::Matrix4d>::iterator it;
-                for( it = vPoses.begin(); it != vPoses.end(); it++ ) {
+                for( auto it = vPoses.begin(); it != vPoses.end(); ++it ) {
                     Eigen::Matrix4d    Pose = dOrigin * it->second;
                     glVertex3f( Pose(0,3), Pose(1,3), Pose(2,3) );
                 }

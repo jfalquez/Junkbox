@@ -136,7 +136,7 @@ private:
     Eigen::Matrix4d                         m_dGlobalPose;      // current global pose w.r.t the map
 
     Timer*                                  m_pTimer;
-    std::map< std::string, double >         m_Analytics;        // statistics for display
+    std::map<std::string, double>           m_Analytics;        // statistics for display
 
     boost::mutex                            m_Mutex;
 

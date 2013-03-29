@@ -326,6 +326,7 @@ double DenseFrontEnd::_EstimateRelativePose(
     BrightnessCorrectionImagePair( lGreyImg.data, pKeyframe->GetGreyImagePtr(), m_nImageHeight*m_nImageWidth );
 
 
+    Tic("Upload");
     //--- upload GREYSCALE data to GPU as a pyramid
     m_cdGreyPyr[0].MemcpyFromHost( lGreyImg.data, m_nImageWidth );
     m_cdKeyGreyPyr[0].MemcpyFromHost( pKeyframe->GetGreyImagePtr() );
@@ -345,7 +346,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
     // downsample depth maps
     Gpu::BoxReduce<float, MAX_PYR_LEVELS, float>( m_cdKeyDepthPyr );
-
+    Toc("Upload");
 
     //--- localize
     // IMPORTANT!!!!!!!
@@ -364,6 +365,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
     double          dLastError;
 
+    Tic("Localize");
     for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
         dLastError = DBL_MAX;
         for(int ii = 0; ii < feConfig.g_vPyrMaxIters[PyrLvl]; ii++ ) {
@@ -461,6 +463,7 @@ double DenseFrontEnd::_EstimateRelativePose(
             nNumObs = LSS.obs;
         }
     }
+    Toc("Localize");
 
     // convert estimate to ROBOTICS frame
     Tkc = Tvr.inverse() * Tkc * Tvr;
