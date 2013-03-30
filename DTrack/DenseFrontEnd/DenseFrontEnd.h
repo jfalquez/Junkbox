@@ -118,23 +118,24 @@ private:
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
-    FramePtr                                m_pCurFrame;
-    Eigen::Matrix4d                         m_dLastKeyframeEstimate;
-    eTrackingState                          m_eTrackingState;
+    eTrackingState                                          m_eTrackingState;
 
-    DenseMap*                               m_pMap;             // map use for estimating poses
+    FramePtr                                                m_pCurFrame;
+    FramePtr                                                m_pPrevFrame;
 
-    unsigned int                            m_nImageWidth;
-    unsigned int                            m_nImageHeight;
-    unsigned int                            m_nThumbWidth;
-    unsigned int                            m_nThumbHeight;
+    Eigen::Matrix4d                                         m_Tpc;              // estimate from previous to current frame
 
-    Eigen::Matrix4d                         m_dGlobalPose;      // current global pose w.r.t the map
+    DenseMap*                                               m_pMap;             // map use for estimating poses
+
+    unsigned int                                            m_nImageWidth;
+    unsigned int                                            m_nImageHeight;
+    unsigned int                                            m_nThumbWidth;
+    unsigned int                                            m_nThumbHeight;
 
     Timer*                                                  m_pTimer;
     std::map< std::string, std::pair< double, double > >    m_Analytics;        // statistics for display
 
-    boost::mutex                            m_Mutex;
+    boost::mutex                                            m_Mutex;
 
     // GPU Variables
     Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cdGreyPyr;

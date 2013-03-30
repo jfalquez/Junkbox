@@ -101,7 +101,7 @@ class DTrackApp
                 rGui.UpdateTimer( m_pTimer->GetWindowSize(), m_pTimer->GetNames(3), m_pTimer->GetTimes(3) );
 
                 // pause if certain conditions are met
-                if( m_pFrontEnd->TrackingState() == eTrackingBad || m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
+                if( m_pFrontEnd->TrackingState() == eTrackingFail || m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
                     rGui.SetState( PAUSED );
                 }
             } else {
@@ -128,7 +128,7 @@ class DTrackApp
         {
 
             /// for JPL data
-            /*
+            /* */
             cv::Mat Tmp;
 
             cv::resize( vImages[0].Image, Tmp, cv::Size(0,0), 0.5, 0.5 );

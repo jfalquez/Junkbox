@@ -362,6 +362,24 @@ void DenseMap::SetKeyframe(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+bool DenseMap::SetKeyframe(
+        unsigned int    nKeyframeId       //< Input: Keyframe ID
+    )
+{
+    if( nKeyframeId >= m_vFrames.size() ) {
+        return false;
+    }
+
+    FramePtr pKeyframe = GetFramePtr( nKeyframeId );
+    if( pKeyframe->IsKeyframe() == false ) {
+        return false;
+    }
+
+    m_pCurKeyframe = pKeyframe;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::FindClosestKeyframes(
         const Eigen::Matrix4d&                              dPose,          //< Input
         float                                               fMaxNorm,       //< Input
