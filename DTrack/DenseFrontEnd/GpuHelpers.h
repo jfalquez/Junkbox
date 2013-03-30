@@ -32,12 +32,12 @@ struct GpuVars_t
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// performs CUDA memory check and returns amount of free GPU memory
+/// performs CUDA memory check and returns amount of free GPU memory
 unsigned int CheckMemoryCUDA();
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// converts disparities into depth values
+/// converts disparities into depth values
 inline void Disp2Depth(
         GpuVars_t&                      Scrap,              //< Input: GPU workspace
         float                           fFocalLength,       //< Input: Focal length
@@ -56,7 +56,7 @@ inline void Disp2Depth(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// generates a thumbnail given an input image - the thumbnail is the smallest resolution in the pyramid
+/// generates a thumbnail given an input image - the thumbnail is the smallest resolution in the pyramid
 inline void GenerateGreyThumbnail(
         GpuVars_t&                      Scrap,              //< Input: GPU workspace
         const cv::Mat&                  Image,              //< Input: Original image
@@ -75,7 +75,7 @@ inline void GenerateGreyThumbnail(
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// generates a thumbnail given an input image - the thumbnail is the smallest resolution in the pyramid
+/// generates a thumbnail given an input image - the thumbnail is the smallest resolution in the pyramid
 inline void GenerateDepthThumbnail(
         GpuVars_t&                      Scrap,              //< Input: GPU workspace
         const cv::Mat&                  Image,              //< Input: Original image

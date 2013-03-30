@@ -55,7 +55,6 @@ DenseFrontEnd::~DenseFrontEnd()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Given a camera, initialize and reset the slam engine
 bool DenseFrontEnd::Init(
         const CamImages&        vImages,            //< Input: Camera capture
         DenseMap*               pMap,               //< Input: Pointer to the map that should be used
@@ -130,7 +129,7 @@ bool DenseFrontEnd::Init(
         m_pMap->SetKeyframe( m_pCurFrame );
 
         // since this is a new keyframe, reset last pose
-        m_dLastEstimate.setIdentity();
+        m_dLastKeyframeEstimate.setIdentity();
     }
 
     // keep internal map's path up to date
@@ -140,7 +139,6 @@ bool DenseFrontEnd::Init(
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// this is the main entry point that the enclosing application calls to advance the engine forward
 bool DenseFrontEnd::Iterate(
         const CamImages&    vImages     //< Input: Camera capture
     )
@@ -159,28 +157,41 @@ bool DenseFrontEnd::Iterate(
 
     // check point threshold to see if new keyframe must be added to the map
 
-    //
+    ///
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //
+    ///
 
     // FOR NOW
     // run ESM between current and previous frame
 
     // adjust Tpc to our previous estimate from keyframe
-    Eigen::Matrix4d Tpc = m_dLastEstimate;
+    Eigen::Matrix4d Tpc = m_dLastKeyframeEstimate;
 
     // use constant velocity motion model??
     if( feConfig.g_bConstantVelocityMotionModel == true ) {
+        // TODO this is broken with the new keyframe format
+        // add LastRelativeEstimate? and use it???
         if( m_pMap->GetTransformFromParent( m_pCurFrame->GetId(), Tpc ) == true ) {
-            Tpc = m_dLastEstimate * Tpc;
+            Tpc = m_dLastKeyframeEstimate * Tpc;
         }
     }
+
+    // "CURRENT" Keyframe is now "Closest" keyframe or "Best" keyframe
+    // the use of the SAD score would help "align" keyframes with different orientations
+    // THEN we localize against this keyframe
+    std::vector< std::pair< unsigned int, float > > vNearKeyframes;
+    m_pMap->FindClosestKeyframes( Eigen::Matrix4d::Identity(), feConfig.g_fCloseKeyframeNorm, vNearKeyframes );
+    // TODO if this returns empty, run fast relocalizer (ie. all thumbnails).. if fast reloc fails, then break the map
+    // and run a slower relocalizer in the background
 
     Tic("PoseEstimate");
     unsigned int nNumObservations;
     double dTrackingError = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tpc, nNumObservations );
     m_Analytics["RMSE"] = std::pair<double, double>( dTrackingError, 0 );
-    std::cout << "Estimate was: " << mvl::T2Cart(Tpc).transpose() << std::endl << std::endl;
+    {
+        Eigen::Vector6d E = mvl::T2Cart(Tpc);
+        PrintMessage( 1, "--- Estimate: [ %f, %f, %f, %f, %f, %f ]\n", E(0), E(1), E(2), E(3), E(4), E(5) );
+    }
     Toc("PoseEstimate");
 
 
@@ -189,10 +200,10 @@ bool DenseFrontEnd::Iterate(
     } else if( dTrackingError < 20 ) {
         m_eTrackingState = eTrackingPoor;
     } else if( dTrackingError < 35 ) {
-        std::cerr << "warning: tracking is bad. (RMSE: " << dTrackingError << ")" << std::endl;
+        PrintMessage( 1, "warning: tracking is bad. (RMSE: %f)\n", dTrackingError );
 //        m_eTrackingState = eTrackingBad;
     } else {
-        std::cerr << "warning: tracking failed. (RMSE: " << dTrackingError << ")" << std::endl;
+        PrintMessage( 1, "warning: tracking failed. (RMSE: %f)\n", dTrackingError );
         m_eTrackingState = eTrackingFail;
 
         // discard estimate and hope our constant velocity model carries us through
@@ -230,7 +241,7 @@ bool DenseFrontEnd::Iterate(
         }
 
         // link previous frame with new frame (relative pose)
-        m_pMap->LinkFrames( m_pCurFrame, pNewKeyframe, mvl::TInv(m_dLastEstimate) * Tpc );
+        m_pMap->LinkFrames( m_pCurFrame, pNewKeyframe, mvl::TInv(m_dLastKeyframeEstimate) * Tpc );
 
         // update current frame
         m_pCurFrame = pNewKeyframe;
@@ -239,10 +250,12 @@ bool DenseFrontEnd::Iterate(
         m_pMap->SetKeyframe( m_pCurFrame );
 
         // since this is a new keyframe, reset last pose
-        m_dLastEstimate.setIdentity();
+        m_dLastKeyframeEstimate.setIdentity();
+
+        m_Analytics["Keyframes"] = std::pair<double, double>( 1.0, 0 );
 
         Toc("GenKeyframe");
-    } else {
+    } else {        // otherwise drop a regular frame
 
         // allocate thumb image
         cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
@@ -250,7 +263,6 @@ bool DenseFrontEnd::Iterate(
         // generate thumbnail
         GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
 
-        // otherwise drop a regular frame
         FramePtr pNewFrame = m_pMap->NewFrame( dSensorTime, vImages[0].Image, GreyThumb );
 
         if( pNewFrame == NULL ) {
@@ -259,14 +271,15 @@ bool DenseFrontEnd::Iterate(
         }
 
         // link previous frame with new frame (relative pose)
-        m_pMap->LinkFrames( m_pCurFrame, pNewFrame, mvl::TInv(m_dLastEstimate) * Tpc );
+        m_pMap->LinkFrames( m_pCurFrame, pNewFrame, mvl::TInv(m_dLastKeyframeEstimate) * Tpc );
 
         // update last pose as a cummulative pose
-        m_dLastEstimate = m_dLastEstimate * Tpc;
+        m_dLastKeyframeEstimate = m_dLastKeyframeEstimate * Tpc;
 
         // update current frame
         m_pCurFrame = pNewFrame;
 
+        m_Analytics["Keyframes"] = std::pair<double, double>( 0, 0 );
     }
 
 
@@ -277,7 +290,7 @@ bool DenseFrontEnd::Iterate(
     int nLoopClosureFrameId = _LoopClosure( m_pCurFrame, LoopClosureT, dLoopClosureError );
     m_Analytics["LC RMSE"] = std::pair<double, double>( dLoopClosureError, feConfig.g_dLoopClosureThreshold );
     if( nLoopClosureFrameId != -1 && dLoopClosureError < feConfig.g_dLoopClosureThreshold ) {
-        std::cout << "Loop Closure Detected!!! Frame: " << nLoopClosureFrameId << " Error: " << dLoopClosureError << std::endl;
+        PrintMessage( 1, "Loop Closure Detected!!! Matching Frame: %d (RMSE: %f)\n", nLoopClosureFrameId, dLoopClosureError );
         m_eTrackingState = eTrackingLoopClosure;
 
         // link frames
@@ -294,13 +307,13 @@ bool DenseFrontEnd::Iterate(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// returns a map with info of the state of several varibles in the engine
 void DenseFrontEnd::GetAnalytics(
         std::map< std::string, std::pair< double, double > >&    mData
     )
 {
     mData = m_Analytics;
 }
+
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -354,7 +367,7 @@ double DenseFrontEnd::_EstimateRelativePose(
     //--- localize
     // IMPORTANT!!!!!!!
     // The localization code operates in VISION frame. Thus, we convert our initial pose from ROBOTICS to VISION
-    // and once the solution is found, we convert it from VISION to ROBOTICS.
+    // and once the solution is found, we convert it back from VISION to ROBOTICS.
 
     // vision-robotics permutation matrix
     Eigen::Matrix4d Tvr;
@@ -533,3 +546,4 @@ int DenseFrontEnd::_LoopClosure(
 
     return pBestMatch->GetId();
 }
+

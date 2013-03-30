@@ -23,14 +23,14 @@ public:
     ~DenseMap();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // load camera model files into a camera model pyramid
+    /// load camera model files into a camera model pyramid
     bool LoadCameraModels(
             const std::string&          GreyCModFile,       //< Input: Grey camera model file name
             const std::string&          DepthCModFile       //< Input: Depth camera model file name
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // allocate a new frame, but do not link it into the graph
+    /// allocate a new frame, but do not link it into the graph
     FramePtr NewFrame(
             double          dTime,                  //< Input: Sensor time
             const cv::Mat&  GreyImage,              //< Input: Greyscale image
@@ -38,7 +38,7 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // allocate a new frame, but do not link it into the graph
+    /// allocate a new frame, but do not link it into the graph
     FramePtr NewKeyframe(
             double              dTime,              //< Input: Sensor time
             const cv::Mat&      GreyImage,          //< Input: Greyscale image
@@ -48,7 +48,7 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // creates a new edge with the provided transform linking frame A to frame B
+    /// creates a new edge with the provided transform linking frame A to frame B
     void LinkFrames(
             FramePtr                    pA,         //< Input:
             FramePtr                    pB,         //< Input:
@@ -56,7 +56,7 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // lookup the id of edge between start and end frame (if it exists)
+    /// lookup the id of edge between start and end frame (if it exists)
     bool FindEdgeId(
             unsigned int        nStartId,       //< Input:
             unsigned int        nEndId,         //< Input:
@@ -64,23 +64,26 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // true if ID of frame exists
+    /// true if ID of frame exists
     bool FrameExists(
             unsigned int    nId     //< Input:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // true if there is an edge between start and end frame
+    /// true if there is an edge between start and end frame
     bool EdgeExists(
-            unsigned int    nStartId,       //< Input:
-            unsigned int    nEndId          //< Input:
+            unsigned int    nStartId,       //< Input
+            unsigned int    nEndId          //< Input
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//    FramePtr GetFirstFramePtr( );
+    /// returns true if frame matching ID is a keyframe.
+    bool IsKeyframe(
+            unsigned int    nFrameId        //< Input
+        );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // get camera intrinsics
+    /// get camera intrinsics
     Eigen::Matrix3d GetGreyCameraK(
             unsigned int    nLevel = 0      //< Input: Pyramid level intrinsic
         );
@@ -96,16 +99,16 @@ public:
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     Eigen::Matrix4d GetDepthCameraPose();
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // get pointer of edge given ID
     EdgePtr GetEdgePtr( unsigned int nEdgeId );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // get pointer of edge between start and end frame
+    /// get pointer of edge between start and end frame
     EdgePtr GetEdgePtr( unsigned int nStartId, unsigned int nEndId );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // get pointer of frame given ID
+    /// get pointer of frame given ID
     FramePtr GetFramePtr( unsigned int nFrameId );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -118,26 +121,26 @@ public:
     double GetLastModifiedTime() { return m_dLastModifiedTime; }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // set the transform between two frames
+    /// set the transform between two frames
     void SetRelativeTransform( int nStartId, int nEndId, Eigen::Matrix4d& Tab );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // get the transform between two frames
+    /// get the transform between two frames
     bool GetRelativeTransform( int nStartId, int nEndId, Eigen::Matrix4d& Tab );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // get transform between input ID and its parent
+    /// get transform between input ID and its parent
     bool GetTransformFromParent(
             unsigned int        nChildFrameId,      //< Input: Child ID we will find parent of
             Eigen::Matrix4d&    dTab                //< Output: Found transform from parent to child
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // return smart pointer to frames "parent"
+    /// return smart pointer to frames "parent"
     FramePtr GetParentFramePtr( unsigned int nChildFrameId );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // traverse the graph via BFS up to input depth and store relative poses relative to input root
+    /// traverse the graph via BFS up to input depth and store relative poses relative to input root
     void GenerateRelativePoses(
             std::map<unsigned int, Eigen::Matrix4d>&    vPoses,         //< Output: Poses id and relative poses from input root
             int                                         nRootId = -1,   //< Input: Frame that will be the origin [default: last frame]
@@ -145,7 +148,7 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // traverse the graph via BFS up to input depth and store absolute poses relative to input root
+    /// traverse the graph via BFS up to input depth and store absolute poses relative to input root
     void GenerateAbsolutePoses(
             std::map<unsigned int, Eigen::Matrix4d>&    vPoses,         //< Output: Poses id and absolute poses from input root
             int                                         nRootId = -1,   //< Input: Frame that will be the origin [default: last frame]
@@ -153,57 +156,69 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // updates internal path with absolute poses relative to last frame -- also does plane fit
+    /// updates internal path with absolute poses relative to last frame -- also does plane fit
     void UpdateInternalPath();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // get reference to internal path variable
+    /// get reference to internal path variable
     std::map< unsigned int, Eigen::Matrix4d >& GetInternalPath();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // get reference to path orientation from plane fit
+    /// get reference to path orientation from plane fit
     Eigen::Matrix4d& GetPathOrientation();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//    std::vector<EdgePtr>& GetEdges() { return m_vEdges; }
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // set frame as current keyframe
+    /// set frame as current keyframe
     void SetKeyframe(
             FramePtr    pKeyframe       //< Input: Pointer to keyframe
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // get pointer to current keyframe
+    /// get pointer to current keyframe
     FramePtr GetCurrentKeyframe();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // Copy changes from RHS into this
-    // TODO for large copies, this could break the front end update speed.  Fix this by making
-    // the copy process a separate thread and having it only copy for a fixed amount of time
-    // until giving up control to the front end.
+    /// find all the closest keyframes given an input pose and a norm -- searches through the internal path poses
+    void FindClosestKeyframes(
+            const Eigen::Matrix4d&                              dPose,
+            float                                               fNorm,
+            std::vector< std::pair< unsigned int, float > >&    vKeyframes
+        );
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// Copy changes from RHS into this
+    /// TODO for large copies, this could break the front end update speed.  Fix this by making
+    /// the copy process a separate thread and having it only copy for a fixed amount of time
+    /// until giving up control to the front end.
     bool CopyMapChanges(
             DenseMap&       rRHS        //< Input: Map to copy from
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // print map
+    /// print map
     void Print();
 
 
 private:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // updates the map's modified time -- to be called whenever a change occurs in the map
+    /// updates the map's modified time -- to be called whenever a change occurs in the map
     void _UpdateModifiedTime();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // reset color and depth of all of the map's frames
+    /// reset color and depth of all of the map's frames
     void _ResetNodes();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // estimate dominant plane using PCA
+    /// estimate dominant plane using PCA
     void _DynamicGroundPlaneEstimation();
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// auxilary function used for sorting elements by their distance in FindClosestKeyframes()
+    static bool _CompareNorm(
+            std::pair< unsigned int, float > lhs,
+            std::pair< unsigned int, float > rhs
+        );
 
 
 /////

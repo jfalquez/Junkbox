@@ -3,7 +3,7 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// adjust mean and variance of Image1 brightness to be closer to Image2
+/// adjust mean and variance of Image1 brightness to be closer to Image2
 inline void BrightnessCorrectionImagePair(
         unsigned char *pData1,                  //< Input: Pointer 1
         unsigned char *pData2,                  //< Input: Pointer 2
@@ -61,8 +61,8 @@ inline void BrightnessCorrectionImagePair(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// SAD score image1 with image2 -- images are assumed to be same type & dimensions
-// returns: SAD score
+/// SAD score image1 with image2 -- images are assumed to be same type & dimensions
+/// returns: SAD score
 template < typename T >
 inline float ScoreImages(
         const cv::Mat&              Image1,

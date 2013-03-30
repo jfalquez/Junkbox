@@ -21,7 +21,6 @@ DenseMap::~DenseMap()
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// load camera model files into a camera model pyramid
 bool DenseMap::LoadCameraModels(
         const std::string&          GreyCModFile,       //< Input: Grey camera model file name
         const std::string&          DepthCModFile       //< Input: Depth camera model file name
@@ -41,7 +40,6 @@ bool DenseMap::LoadCameraModels(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// allocate a new frame, but do not link it into the graph
 FramePtr DenseMap::NewFrame(
         double          dTime,                  //< Input: Sensor time
         const cv::Mat&  GreyImage,              //< Input: Greyscale image
@@ -60,7 +58,6 @@ FramePtr DenseMap::NewFrame(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// allocate a new keyframe, but do not link it into the graph
 FramePtr DenseMap::NewKeyframe(
         double          dTime,                  //< Input: Sensor time
         const cv::Mat&  GreyImage,              //< Input: Greyscale image
@@ -147,12 +144,24 @@ bool DenseMap::FrameExists(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::EdgeExists(
-        unsigned int    nGetStartId,    //< Input:
-        unsigned int    nEndId          //< Input:
+        unsigned int    nGetStartId,    //< Input
+        unsigned int    nEndId          //< Input
     )
 {
     unsigned int tmp;
     return FindEdgeId( nGetStartId, nEndId, tmp );
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+bool DenseMap::IsKeyframe(
+        unsigned int    nFrameId        //< Input
+    )
+{
+    if( nFrameId >= m_vFrames.size() ) {
+        return false;
+    }
+    return m_vFrames[nFrameId]->IsKeyframe();
 }
 
 
@@ -216,18 +225,6 @@ EdgePtr DenseMap::GetEdgePtr( unsigned int nGetStartId, unsigned int nEndId )
     }
     return EdgePtr( (TransformEdge*)NULL ); // like null
 }
-
-/*
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-FramePtr DenseMap::GetFirstFramePtr()
-{
-    if( m_vFrames.size() > 0) {
-        return m_vFrames.front();
-    }else {
-        return FramePtr( (ReferenceFrame*)NULL );
-    }
-}
-*/
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -361,6 +358,30 @@ void DenseMap::SetKeyframe(
     )
 {
     m_pCurKeyframe = pKeyframe;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::FindClosestKeyframes(
+        const Eigen::Matrix4d&                              dPose,          //< Input
+        float                                               fMaxNorm,       //< Input
+        std::vector< std::pair< unsigned int, float > >&    vKeyframes      //< Output
+    )
+{
+
+    for( int ii = 0; ii < m_vPath.size(); ++ii ) {
+        if( IsKeyframe(ii) ) {
+            Eigen::Matrix4d TdeltaPose = dPose - m_vPath[ii];
+            Eigen::Vector6d deltaPose = mvl::T2Cart( TdeltaPose );
+            float fNorm = deltaPose.norm();
+            if( fNorm < fMaxNorm ) {
+                vKeyframes.push_back( std::pair<unsigned int, float>( ii, fNorm ) );
+            }
+        }
+    }
+
+    // sort vector
+    std::sort( vKeyframes.begin(), vKeyframes.end(), _CompareNorm );
 }
 
 
@@ -566,9 +587,11 @@ Eigen::Matrix4d& DenseMap::GetPathOrientation()
 }
 
 
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -674,4 +697,13 @@ void DenseMap::_DynamicGroundPlaneEstimation() {
         m_bFitPlane = false;
     }
 
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+bool DenseMap::_CompareNorm(
+        std::pair< unsigned int, float > lhs,
+        std::pair< unsigned int, float > rhs
+    )
+{
+    return std::get<1>(lhs) < std::get<1>(rhs);
 }

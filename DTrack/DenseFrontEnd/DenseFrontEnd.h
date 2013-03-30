@@ -53,29 +53,25 @@ public:
     ~DenseFrontEnd();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // initialize the engine
-    // returns: true if no errors were encountered
-    bool Init(
-            const CamImages&        vImages,            //< Input: Camera Capture
-            DenseMap*               pMap,               //< Input: Pointer to the map that should be used
-            Timer*                  pTimer              //< Input: Pointer to timer
-        );
+    /// given a camera, initialize and reset the slam engine
+    /// returns: true if no errors were encountered during initialization
+    bool Init( const CamImages& vImages, DenseMap* pMap, Timer* pTimer );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // iterate through the captured images
-    // returns: true if no errors were encountered
+    /// this is the main entry point that the enclosing application calls to advance the engine forward
+    /// returns: true if no errors were encountered
     bool Iterate(
             const CamImages&        vImages     //< Input: Camera Capture
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // returns a map with info of the state of several varibles in the engine
+    /// returns a map with info of the state of several varibles in the engine
     void GetAnalytics(
             std::map< std::string, std::pair< double, double > >&    mData
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // timer auxilary functions
+    /// timer auxilary functions
     void Tic( const std::string& sName = "" )
     {
         if( m_pTimer ){
@@ -92,7 +88,7 @@ public:
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // returns current tracking state
+    /// returns current tracking state
     eTrackingState TrackingState()
     {
         return m_eTrackingState;
@@ -101,8 +97,8 @@ public:
 private:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // this function will localize an image against a keyframe
-    // returns: root mean square error
+    /// this function will localize an image against a keyframe
+    /// returns: root mean square error
     double _EstimateRelativePose(
             const cv::Mat&          GreyImg,        //< Input: Greyscale image
             FramePtr                pKeyframe,      //< Input: Keyframe we are localizing against
@@ -111,8 +107,8 @@ private:
             );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // this function will try to find a loop closure between the provided keyframe and the map
-    // returns: frame ID of loop closure -- returns -1 if no frame is found
+    /// this function will try to find a loop closure between the provided keyframe and the map
+    /// returns: frame ID of loop closure -- returns -1 if no frame is found
     int _LoopClosure(
             FramePtr                pFrame,         //< Input: Frame we are attempting to find a loop closure
             Eigen::Matrix4d&        T,              //< Output: Transform between input frame and closest matching frame
@@ -123,7 +119,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
     FramePtr                                m_pCurFrame;
-    Eigen::Matrix4d                         m_dLastEstimate;
+    Eigen::Matrix4d                         m_dLastKeyframeEstimate;
     eTrackingState                          m_eTrackingState;
 
     DenseMap*                               m_pMap;             // map use for estimating poses

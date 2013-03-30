@@ -21,6 +21,7 @@ public:
                                                 "Set 1 for full estimate, 0 for rotation only estimates." ) ),
 
         // KEYFRAME OPTIONS
+        g_fCloseKeyframeNorm( CVarUtils::CreateCVar<>( "tracker.CloseKeyframeNorm", 3.0f, "Maximum norm for keyframes to be selected in a neighborhood." ) ),
         g_fKeyframePtsThreshold( CVarUtils::CreateCVar<>( "tracker.KeyframePtsThreshold", 1.0f, "Minimum percentage of points before a new keyframe is added to the map." ) ),
 
         // LOOP CLOSURE OPTIONS
@@ -39,6 +40,7 @@ public:
     bool&                                   g_bConstantVelocityMotionModel;
     Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrMaxIters;
     Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrFullMask;
+    float&                                  g_fCloseKeyframeNorm;
     float&                                  g_fKeyframePtsThreshold;
     unsigned int&                           g_nLoopClosureMargin;
     unsigned int&                           g_nLoopClosureSAD;
