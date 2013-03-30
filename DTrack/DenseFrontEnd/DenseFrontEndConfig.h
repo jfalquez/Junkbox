@@ -13,6 +13,7 @@ public:
 
         // MOTION MODEL OPTIONS
         g_bConstantVelocityMotionModel( CVarUtils::CreateCVar<>( "tracker.UseConstantVelocityMotionModel", false, "Use constant velocity motion model." ) ),
+        g_bAlwaysUseLastKeyframe( CVarUtils::CreateCVar<>( "tracker.AlwaysUseLastKeyframe", false, "Do not search for closest keyframe, but rather choose last keyframe used." ) ),
 
         // LOCALIZATION OPTIONS
         g_vPyrMaxIters( CVarUtils::CreateCVar( "tracker.ESM.PyrMaxIters", Eigen::Matrix<int,1,Eigen::Dynamic>(),
@@ -25,9 +26,10 @@ public:
         g_fKeyframePtsThreshold( CVarUtils::CreateCVar<>( "tracker.KeyframePtsThreshold", 1.0f, "Minimum percentage of points before a new keyframe is added to the map." ) ),
 
         // LOOP CLOSURE OPTIONS
+        g_fLoopClosureRadius( CVarUtils::CreateCVar<>( "tracker.LoopClosure.Radius", 5.0f, "Norm radius for frames to be taken in consideration for loop closure." ) ),
         g_nLoopClosureMargin( CVarUtils::CreateCVar<>( "tracker.LoopClosure.FrameMargin", 20u, "Number of frames between current frame which will not be taken in consideration for loop closure." ) ),
         g_nLoopClosureSAD( CVarUtils::CreateCVar<>( "tracker.LoopClosure.SAD", 5u, "Maximum SAD score for loop closure candidates. This value is multiplied by number of pixels in thumbnail." ) ),
-        g_dLoopClosureThreshold( CVarUtils::CreateCVar<>( "tracker.LoopClosure.MaximumRMSE", 5.0, "Maximum RMSE in order to accept a loop closure." ) ),
+        g_dLoopClosureThreshold( CVarUtils::CreateCVar<>( "tracker.LoopClosure.MaximumRMSE", 8.0, "Maximum RMSE in order to accept a loop closure." ) ),
 
         // DEBUG OPTIONS
         g_nErrorLevel( CVarUtils::CreateCVar<>( "debug.ErrorLevel", 0, "Verbosity level for printing errors." ) ),
@@ -38,10 +40,12 @@ public:
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     bool&                                   g_bConstantVelocityMotionModel;
+    bool&                                   g_bAlwaysUseLastKeyframe;
     Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrMaxIters;
     Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrFullMask;
     float&                                  g_fCloseKeyframeNorm;
     float&                                  g_fKeyframePtsThreshold;
+    float&                                  g_fLoopClosureRadius;
     unsigned int&                           g_nLoopClosureMargin;
     unsigned int&                           g_nLoopClosureSAD;
     double&                                 g_dLoopClosureThreshold;

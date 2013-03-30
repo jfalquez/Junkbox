@@ -128,7 +128,7 @@ class DTrackApp
         {
 
             /// for JPL data
-            /* */
+            /*
             cv::Mat Tmp;
 
             cv::resize( vImages[0].Image, Tmp, cv::Size(0,0), 0.5, 0.5 );

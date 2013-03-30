@@ -157,7 +157,10 @@ bool DenseFrontEnd::Iterate(
 
     // based on this pose, load closest keyframe (euclidean distance including rotation of sorts)
     std::vector< std::pair< unsigned int, float > > vNearKeyframes;
-    m_pMap->FindClosestKeyframes( Twc, feConfig.g_fCloseKeyframeNorm, vNearKeyframes );
+
+    if( feConfig.g_bAlwaysUseLastKeyframe == false ) {
+        m_pMap->FindClosestKeyframes( Twc, feConfig.g_fCloseKeyframeNorm, vNearKeyframes );
+    }
 
     // TODO: if this returns empty, run fast relocalizer (ie. all thumbnails).. if fast reloc fails, then break the map
     // and run a slower relocalizer in the background
@@ -271,6 +274,8 @@ bool DenseFrontEnd::Iterate(
         m_Analytics["Keyframes"] = std::pair<double, double>( 0, 0 );
     }
 
+    // update internal path based on this new frame added
+    m_pMap->UpdateInternalPath();
 
     // check for loop closure
     Tic("LoopClosure");
@@ -285,11 +290,11 @@ bool DenseFrontEnd::Iterate(
         // link frames
         m_pMap->LinkFrames( m_pMap->GetFramePtr(nLoopClosureFrameId), m_pCurFrame, LoopClosureT );
 //        m_pMap->LinkFrames( m_pCurFrame, m_pMap->GetFramePtr(nLoopClosureFrameId),  LoopClosureT.inverse() );
+
+        // update internal path based on the loop closure
+        m_pMap->UpdateInternalPath();
     }
     Toc("LoopClosure");
-
-    // keep internal map's path up to date
-    m_pMap->UpdateInternalPath();
 
     return true;
 }
@@ -484,26 +489,34 @@ int DenseFrontEnd::_LoopClosure(
         double&                 dError          //< Output: RMSE of estimated transform
     )
 {
-    // TODO use frame's global pose to find closest frames and from there do DFS? some sort of Kd-tree?
-    // this is only for speed-up purposes to achieve near RT loop closure
+    const unsigned int nFrameId = pFrame->GetId();
 
-    // TODO add a vector of "top" matches so we can compare with multiple frames instead of just 1
-//    std::vector< FramePtr >     vMatches;
+    std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
+    Eigen::Matrix4d Pose = vPath[nFrameId];
+
+    // find closest frames around our current position
+    std::vector< std::pair< unsigned int, float > > vNearKeyframes;
+    m_pMap->FindClosestKeyframes( Pose, feConfig.g_fLoopClosureRadius, vNearKeyframes );
+    if( vNearKeyframes.empty() ) {
+        return -1;
+    }
 
     // TODO add grey-depth contribution ratio for matching
 
     float       fBestScore = FLT_MAX;
     FramePtr    pBestMatch;
 
-    for( int ii = 0; ii < m_pMap->GetNumFrames(); ii++ ) {
+    for( int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
+
+        const unsigned int nId = std::get<0>( vNearKeyframes[ii] );
 
         // do not try to compare with frames too close too us
-        if( abs(ii - pFrame->GetId()) <= feConfig.g_nLoopClosureMargin ) {
+        if( abs(nId - nFrameId) <= feConfig.g_nLoopClosureMargin ) {
             continue;
         }
 
         // get frame pointer
-        FramePtr pMatchFrame = m_pMap->GetFramePtr( ii );
+        FramePtr pMatchFrame = m_pMap->GetFramePtr( nId );
 
         // do not compare with non-keyframes
         if( pMatchFrame->IsKeyframe() == false ) {
