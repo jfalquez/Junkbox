@@ -161,7 +161,7 @@ int main(int argc, char** argv)
         // which one is it?
 //        ColorImg1 = vImages1[0].Image;
 //        cv::resize( vImages1[0].Image, ColorImg1, cv::Size(0,0), 0.5, 0.5 );
-        cv::undistort( vImages1[0].Image, GreyImg1, Intrinsics1, Distortion1);
+        cv::undistort( vImages1[0].Image, GreyImg1, Intrinsics1, Distortion1 );
 //        GreyImg1 = vImages1[0].Image;
 //        cv::resize( vImages1[0].Image, GreyImg1, cv::Size(0,0), 0.5, 0.5 );
 

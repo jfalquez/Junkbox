@@ -26,6 +26,15 @@ target_link_libraries( Calibrate
                         ${RPG_LIBRARIES}
                      )
 
+# Calibrate Circles
+add_executable( CalibrateCircles CalibrateCircles.cpp )
+
+target_link_libraries( CalibrateCircles
+                        ${Pangolin_LIBRARIES}
+                        ${SceneGraph_LIBRARIES}
+                        ${RPG_LIBRARIES}
+                     )
+
 # Stereo Calibrate
 add_executable( StereoCalibrate StereoCalibrate.cpp )
 

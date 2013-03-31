@@ -17,10 +17,10 @@ int main(int argc, char** argv)
     GetPot clArgs( argc, argv );
 
     // using the default OpenCV checkerboard pattern
-    int nBoardWidth     = 9;
-    int nBoardHeight    = 6;
-    int nBoardTotal     = nBoardWidth * nBoardHeight;           // total enclosed corners on the board
-    CvSize nBoardSize = cvSize( nBoardWidth, nBoardHeight );
+    int nCircleWidth     = 4;
+    int nCircleHeight    = 11;
+    int nGridTotal     = nCircleWidth * nCircleHeight;           // total enclosed corners on the board
+    CvSize nGridSize = cvSize( nCircleWidth, nCircleHeight );
 
     // initialize camera
     CameraDevice                        Cam;
@@ -88,8 +88,8 @@ int main(int argc, char** argv)
     vector< vector< cv::Point2f > > vImagePts;
 
     vector< cv::Point3f > vObj;
-    for(int ii = 0; ii < nBoardTotal; ii++) {
-        vObj.push_back( cv::Point3f( ii / nBoardWidth, ii % nBoardWidth, 0.0f));
+    for(int ii = 0; ii < nGridTotal; ii++) {
+        vObj.push_back( cv::Point3f( ii / nCircleWidth, ii % nCircleWidth, 0.0f));
     }
 
     cv::Mat             Intrinsics = cv::Mat( 3, 3, CV_32FC1 );
@@ -121,10 +121,9 @@ int main(int argc, char** argv)
 
 
         // find for chessboard pattern
-        vector< cv::Point2f > vCorners; // this will be filled by the detected corners
+        vector< cv::Point2f > vCenters;     // this will be filled by the detector
 
-        bool bPatternFound = cv::findChessboardCorners( GreyImg, nBoardSize, vCorners,
-                cv::CALIB_CB_ADAPTIVE_THRESH + cv::CALIB_CB_NORMALIZE_IMAGE + cv::CALIB_CB_FAST_CHECK );
+        bool bPatternFound = cv::findCirclesGrid( GreyImg, nGridSize, vCenters, cv::CALIB_CB_ASYMMETRIC_GRID );
 
         if( bPatternFound ) {
             ui_Status = "OK";
@@ -132,15 +131,12 @@ int main(int argc, char** argv)
             // only snapshot if pattern is found
             if( bSnapshot ) {
 
-                cv::cornerSubPix( GreyImg, vCorners, cv::Size(11, 11), cv::Size(-1, -1),
-                               cv::TermCriteria( CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1) );
-
-                cv::drawChessboardCorners( ColorImg, nBoardSize, cv::Mat(vCorners), true );
+                cv::drawChessboardCorners( ColorImg, nGridSize, cv::Mat(vCenters), true );
 
                 nNumSnapshots++;
                 ui_nNumSnapshots = nNumSnapshots;
                 Snapshot = ColorImg;
-                vImagePts.push_back( vCorners );
+                vImagePts.push_back( vCenters );
                 vObjectPts.push_back( vObj );
                 glSnapshot.SetImage( Snapshot.data, nImgWidth, nImgHeight, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE );
             }
