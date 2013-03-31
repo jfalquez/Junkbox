@@ -78,6 +78,20 @@ public:
             Eigen::Matrix4d dOrigin = _TInv( vPoses[0] );
 
             if( m_bDrawAxis ) {
+                int start = 0;
+                if( m_nPoseDisplay != 0 ) {
+                    if( vPoses.size() > m_nPoseDisplay ) {
+                        start = vPoses.size() - m_nPoseDisplay;
+                    }
+                }
+                for( int ii = start; ii < (int)vPoses.size(); ++ii ) {
+                    Eigen::Matrix4d&    Pose = vPoses[ii];
+                    glPushMatrix();
+                    glMultMatrixd( MAT4_COL_MAJOR_DATA( dOrigin * Pose ) );
+                    glCallList( m_nDrawListId );
+                    glPopMatrix();
+                }
+                /*
                 for( auto it = vPoses.begin(); it != vPoses.end(); ++it ) {
                     Eigen::Matrix4d&    Pose = it->second;
 
@@ -86,6 +100,7 @@ public:
                     glCallList( m_nDrawListId );
                     glPopMatrix();
                 }
+                */
             }
 
             if( m_bDrawLines ) {
