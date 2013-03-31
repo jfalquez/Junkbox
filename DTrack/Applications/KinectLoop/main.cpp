@@ -8,7 +8,8 @@ void DTrackThread( Gui& gui, int argc, char** argv)
         if( !app.InitReset( argc, argv ) ) {
             gui.SetState( QUIT );   // this will notify the GUI to die
         } else {
-            gui.SetState( PAUSED );
+//            gui.SetState( PAUSED );
+            gui.SetState( PLAYING );
         }
 
         while( gui.State != QUIT ) {

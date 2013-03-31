@@ -7,6 +7,8 @@
 
 #include "Gui.h"
 
+//#define CAMAUX
+
 class DTrackApp
 {
     public:
@@ -38,6 +40,22 @@ class DTrackApp
             // capture check
             m_vImages.clear();
             m_Cam.Capture( m_vImages );
+
+#ifdef CAMAUX
+            m_CamAux.SetProperty( "GetRGB", false );
+            m_CamAux.SetProperty( "GetDepth", true );
+            m_CamAux.SetProperty( "GetIr", false );
+            m_CamAux.SetProperty( "Resolution", "QVGA" );
+            m_CamAux.InitDriver( "Kinect" );
+
+            CamImages   vImages;      // camera images
+
+            vImages.clear();
+            m_CamAux.Capture( vImages );
+            m_vImages.resize( 2 );
+
+            m_vImages[1] = vImages[0];
+#endif
 
             // prepare images as expected by the FrontEnd
             _UnpackImages( m_vImages );
@@ -82,6 +100,15 @@ class DTrackApp
         {
             if( m_Cam.Capture( m_vImages ) ) {
 
+#ifdef CAMAUX
+            CamImages   vImages;      // camera images
+
+            m_CamAux.Capture( vImages );
+            m_vImages.resize( 2 );
+
+            m_vImages[1] = vImages[0];
+#endif
+
                 m_pFrontEnd->Tic();
 
                 // unpack images to what the front end expects
@@ -102,7 +129,7 @@ class DTrackApp
 
                 // pause if certain conditions are met
                 if( m_pFrontEnd->TrackingState() == eTrackingFail || m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
-                    rGui.SetState( PAUSED );
+//                    rGui.SetState( PAUSED );
                 }
             } else {
                 // no more images, pause
@@ -126,6 +153,40 @@ class DTrackApp
                 CamImages&          vImages    //< Input/Output
             )
         {
+
+#ifdef CAMAUX
+            /// for LIVE handheld
+
+            /*
+            Eigen::Matrix4d Ext;
+            Ext(0,3) =  -0.01912135240773571;
+            Ext(1,3) = -0.04023697389323921;
+            Ext(2,3) = 0.03031353438241784;
+
+            Ext.block<3,3>(0,0) << 0.9965421258143921, -0.005812579181767699, 0.08288549571902262,
+                                    0.002862221277912812, 0.9993595214306352, 0.03567008011328222,
+                                    -0.08303974450038187, -0.03530950083458261, 0.9959204988271524;
+
+            std::cout << "Extrinsics: " << mvl::T2Cart(Ext).transpose() << std::endl;
+            /* */
+
+            // rgb image
+            cv::Mat Tmp1, Tmp2;
+
+            cv::Mat Intrinsics = (cv::Mat_<float>(3,3) <<    655.0681058933573, 0, 329.3888800064832,
+                                                              0, 651.5601207003715, 249.7271121691255,
+                                                              0, 0, 1);
+            cv::Mat Distortion = (cv::Mat_<float>(1,5) <<   -0.4309355351200019, 0.2749971654145275, 0.002517876773074356, -0.0003738676467441764, -0.1696187437955576);
+
+            cv::undistort( vImages[0].Image, Tmp1, Intrinsics, Distortion );
+            cv::resize( Tmp1, vImages[0].Image, cv::Size(0,0), 0.5, 0.5 );
+//            vImages[0].Image = Tmp1;
+
+            // depth image
+            vImages[1].Image.convertTo( Tmp2, CV_32FC1 );
+            Tmp2 = Tmp2 / 1000;
+            vImages[1].Image = Tmp2;
+#endif
 
             /// for JPL data
             /*
@@ -164,6 +225,10 @@ class DTrackApp
 
         CameraDevice                    m_Cam;          // camera handler
         CamImages                       m_vImages;      // camera images
+
+#ifdef CAMAUX
+        CameraDevice                    m_CamAux;       // camera handler
+#endif
 
         DenseFrontEnd*                  m_pFrontEnd;
         DenseMap*                       m_pMap;

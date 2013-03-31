@@ -107,6 +107,15 @@ private:
             );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// this function will try to relocalize the input image against the map
+    /// returns: frame ID of keyframe used for relocalization -- returns -1 if no frame is found
+    int _Relocalize(
+            const cv::Mat&          Image,          //< Input: Image from which we want to relocalize
+            Eigen::Matrix4d&        T,              //< Output: Transform between input frame and closest matching frame
+            double&                 dError          //< Output: RMSE of estimated transform
+        );
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// this function will try to find a loop closure between the provided keyframe and the map
     /// returns: frame ID of loop closure -- returns -1 if no frame is found
     int _LoopClosure(

@@ -199,6 +199,7 @@ bool DenseFrontEnd::Iterate(
     Toc("PoseEstimate");
 
 
+    Tic("Relocalizer");
     if( dTrackingError < 5 ) {
         m_eTrackingState = eTrackingGood;
     } else if( dTrackingError < 20 ) {
@@ -207,10 +208,20 @@ bool DenseFrontEnd::Iterate(
         PrintMessage( 1, "warning: tracking is bad. (RMSE: %f)\n", dTrackingError );
         m_eTrackingState = eTrackingBad;
     } else {
-        PrintMessage( 1, "warning: tracking failed. (RMSE: %f)\n", dTrackingError );
-        m_eTrackingState = eTrackingFail;
+        PrintMessage( 1, "warning: tracking is failing (RMSE: %f)!! Calling relocalizer... \n", dTrackingError );
         // TODO if here, run some sort of relocalizer?
+        double          dRelocError;
+        Eigen::Matrix4d Tpc_r;
+        int nRelocFrameId = _Relocalize( vImages[0].Image, Tpc_r, dRelocError );
+        if( nRelocFrameId != -1 && dRelocError < dTrackingError ) {
+            PrintMessage( 0, "Relocalizer successful! Matching Frame: %d (RMSE: %f)\n", nRelocFrameId, dRelocError );
+            Tpc = Tpc_r;
+        } else {
+            PrintMessage( 0, "critical: Relocalizer failed!\n" );
+            m_eTrackingState = eTrackingFail;
+        }
     }
+    Toc("Relocalizer");
 
     // TODO get this from the camera directly.. the property map should have it
     double dSensorTime = mvl::Tic();
@@ -278,6 +289,7 @@ bool DenseFrontEnd::Iterate(
     m_pMap->UpdateInternalPath();
 
     // check for loop closure
+    /* */
     Tic("LoopClosure");
     double          dLoopClosureError;
     Eigen::Matrix4d LoopClosureT;
@@ -295,6 +307,7 @@ bool DenseFrontEnd::Iterate(
         m_pMap->UpdateInternalPath();
     }
     Toc("LoopClosure");
+    /* */
 
     return true;
 }
@@ -483,6 +496,65 @@ double DenseFrontEnd::_EstimateRelativePose(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+int DenseFrontEnd::_Relocalize(
+        const cv::Mat&          Image,          //< Input: Image from which we want to relocalize
+        Eigen::Matrix4d&        T,              //< Output: Transform between input frame and closest matching frame
+        double&                 dError          //< Output: RMSE of estimated transform
+    )
+{
+    // find closest frames around our current position
+    std::vector< std::pair< unsigned int, float > > vNearKeyframes;
+    m_pMap->FindClosestKeyframes( Eigen::Matrix4d::Identity(), feConfig.g_fLoopClosureRadius, vNearKeyframes );
+    if( vNearKeyframes.empty() ) {
+        return -1;
+    }
+
+    // allocate thumb images
+    cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
+
+    // generate thumbnails
+    GenerateGreyThumbnail( m_cdTemp, Image, GreyThumb );
+
+
+    float       fBestScore = FLT_MAX;
+    FramePtr    pBestMatch;
+
+    for( int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
+
+        const unsigned int nId = std::get<0>( vNearKeyframes[ii] );
+
+        // get frame pointer
+        FramePtr pMatchFrame = m_pMap->GetFramePtr( nId );
+
+        // do not compare with non-keyframes
+        if( pMatchFrame->IsKeyframe() == false ) {
+            continue;
+        }
+
+        float fScore = ScoreImages<unsigned char>( GreyThumb, pMatchFrame->GetGreyThumbRef() );
+
+        if( fScore < fBestScore ) {
+            fBestScore = fScore;
+            pBestMatch = pMatchFrame;
+        }
+    }
+
+    double dSADThreshold = feConfig.g_nLoopClosureSAD * (m_nThumbHeight * m_nThumbWidth);
+
+    // if no match is found, return -1
+    if( fBestScore >  dSADThreshold ) {
+        return -1;
+    }
+
+    // calculate transform between best match and input frame
+    unsigned int nNumObservations;
+    dError = _EstimateRelativePose( Image, pBestMatch, T, nNumObservations );
+
+    return pBestMatch->GetId();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 int DenseFrontEnd::_LoopClosure(
         FramePtr                pFrame,         //< Input: Frame we are attempting to find a loop closure
         Eigen::Matrix4d&        T,              //< Output: Transform between input frame and closest matching frame
@@ -548,4 +620,3 @@ int DenseFrontEnd::_LoopClosure(
 
     return pBestMatch->GetId();
 }
-

@@ -23,7 +23,7 @@ public:
 
         // KEYFRAME OPTIONS
         g_fCloseKeyframeNorm( CVarUtils::CreateCVar<>( "tracker.CloseKeyframeNorm", 3.0f, "Maximum norm for keyframes to be selected in a neighborhood." ) ),
-        g_fKeyframePtsThreshold( CVarUtils::CreateCVar<>( "tracker.KeyframePtsThreshold", 1.0f, "Minimum percentage of points before a new keyframe is added to the map." ) ),
+        g_fKeyframePtsThreshold( CVarUtils::CreateCVar<>( "tracker.KeyframePtsThreshold", 0.8f, "Minimum percentage of points before a new keyframe is added to the map." ) ),
 
         // LOOP CLOSURE OPTIONS
         g_fLoopClosureRadius( CVarUtils::CreateCVar<>( "tracker.LoopClosure.Radius", 5.0f, "Norm radius for frames to be taken in consideration for loop closure." ) ),
