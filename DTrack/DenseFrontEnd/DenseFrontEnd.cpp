@@ -227,7 +227,8 @@ bool DenseFrontEnd::Iterate(
     double dSensorTime = mvl::Tic();
 
     // drop new keyframe if number of observations is too low
-    double dObsThreshold = feConfig.g_fKeyframePtsThreshold * m_nImageHeight * m_nImageWidth;
+    const unsigned int nNumPts = cv::countNonZero( vImages[1].Image );
+    double dObsThreshold = feConfig.g_fKeyframePtsThreshold * nNumPts;
     m_Analytics["Num Obs"] = std::pair<double, double>( nNumObservations, dObsThreshold );
     if( nNumObservations < dObsThreshold ) {
 
@@ -289,7 +290,7 @@ bool DenseFrontEnd::Iterate(
     m_pMap->UpdateInternalPath();
 
     // check for loop closure
-    /* */
+    /*
     Tic("LoopClosure");
     double          dLoopClosureError;
     Eigen::Matrix4d LoopClosureT;

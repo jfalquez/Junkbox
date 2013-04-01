@@ -7,8 +7,6 @@
 
 #include "Gui.h"
 
-//#define CAMAUX
-
 class DTrackApp
 {
     public:
@@ -30,6 +28,7 @@ class DTrackApp
             // parse command line arguments
             GetPot clArgs( argc, argv );
 
+            //----- init camera 1 with default initializer
             m_Cam.SetProperty("BufferSize", 20);
 
             // initialize camera
@@ -41,21 +40,43 @@ class DTrackApp
             m_vImages.clear();
             m_Cam.Capture( m_vImages );
 
-#ifdef CAMAUX
-            m_CamAux.SetProperty( "GetRGB", false );
-            m_CamAux.SetProperty( "GetDepth", true );
-            m_CamAux.SetProperty( "GetIr", false );
-            m_CamAux.SetProperty( "Resolution", "QVGA" );
-            m_CamAux.InitDriver( "Kinect" );
+            //----- get extra parameters of our own making
+            m_bConvertGrey = clArgs.search( "-rgb-to-grey" );
+            m_bRectify = clArgs.search( "-rectify" );
+            m_bResize = clArgs.search( "-resize" );
+            m_bConvertToM = clArgs.search( "-depth-to-m" );
 
-            CamImages   vImages;      // camera images
 
-            vImages.clear();
-            m_CamAux.Capture( vImages );
-            m_vImages.resize( 2 );
+            //----- init camera 2 if necessary
+            std::string sDDev = clArgs.follow( "", "-ddev" );
 
-            m_vImages[1] = vImages[0];
-#endif
+            m_bAuxCam = false;
+            if( sDDev.empty() == false ) {
+                m_bAuxCam = true;
+                std::cout << "External camera provided." << std::endl;
+
+                bool            bGetDepth   = !clArgs.search( "-no-depth" );
+                bool            bGetRGB     = !clArgs.search( "-no-rgb" );
+                bool            bGetIr      = clArgs.search( "-with-ir" );
+                bool            bAlignDepth = clArgs.search( "-align-depth" );
+                unsigned int    nFPS        = clArgs.follow( 30, "-fps"  );
+                std::string     sResolution = clArgs.follow( "VGA", "-res"  );
+
+                m_CamAux.SetProperty( "GetRGB", bGetRGB );
+                m_CamAux.SetProperty( "GetDepth", bGetDepth );
+                m_CamAux.SetProperty( "GetIr", bGetIr );
+                m_CamAux.SetProperty( "AlignDepth", bAlignDepth );
+                m_CamAux.SetProperty( "FPS", nFPS );
+                m_CamAux.SetProperty( "Resolution", sResolution );
+
+                m_CamAux.InitDriver( sDDev );
+
+                CamImages   vImages;      // camera images
+                m_CamAux.Capture( vImages );
+                m_vImages.resize( 2 );
+                m_vImages[1] = vImages[0];
+            }
+
 
             // prepare images as expected by the FrontEnd
             _UnpackImages( m_vImages );
@@ -100,14 +121,12 @@ class DTrackApp
         {
             if( m_Cam.Capture( m_vImages ) ) {
 
-#ifdef CAMAUX
-            CamImages   vImages;      // camera images
-
-            m_CamAux.Capture( vImages );
-            m_vImages.resize( 2 );
-
-            m_vImages[1] = vImages[0];
-#endif
+                if( m_bAuxCam ) {
+                    CamImages   vImages;      // camera images
+                    m_CamAux.Capture( vImages );
+                    m_vImages.resize( 2 );
+                    m_vImages[1] = vImages[0];
+                }
 
                 m_pFrontEnd->Tic();
 
@@ -153,69 +172,36 @@ class DTrackApp
                 CamImages&          vImages    //< Input/Output
             )
         {
+            if( m_bConvertGrey ) {
+                // convert RGB to GREYSCALE
+                cv::cvtColor( vImages[0].Image, vImages[0].Image, CV_RGB2GRAY, 1 );
+            }
 
-#ifdef CAMAUX
-            /// for LIVE handheld
+            // TODO this ONLY works with fireyfly atm
+            if( m_bRectify ) {
+                cv::Mat Tmp;
+                cv::Mat Intrinsics = (cv::Mat_<float>(3,3) <<    655.0681058933573, 0, 329.3888800064832,
+                                                                  0, 651.5601207003715, 249.7271121691255,
+                                                                  0, 0, 1);
+                cv::Mat Distortion = (cv::Mat_<float>(1,5) <<   -0.4309355351200019, 0.2749971654145275, 0.002517876773074356, -0.0003738676467441764, -0.1696187437955576);
 
-            /*
-            Eigen::Matrix4d Ext;
-            Ext(0,3) =  -0.01912135240773571;
-            Ext(1,3) = -0.04023697389323921;
-            Ext(2,3) = 0.03031353438241784;
+                cv::undistort( vImages[0].Image, Tmp, Intrinsics, Distortion );
+                vImages[0].Image = Tmp;
+            }
 
-            Ext.block<3,3>(0,0) << 0.9965421258143921, -0.005812579181767699, 0.08288549571902262,
-                                    0.002862221277912812, 0.9993595214306352, 0.03567008011328222,
-                                    -0.08303974450038187, -0.03530950083458261, 0.9959204988271524;
+            if( m_bResize ) {
+                cv::Mat Tmp;
+                cv::resize( vImages[0].Image, Tmp, cv::Size(0,0), 0.5, 0.5 );
+                vImages[0].Image = Tmp;
+            }
 
-            std::cout << "Extrinsics: " << mvl::T2Cart(Ext).transpose() << std::endl;
-            /* */
-
-            // rgb image
-            cv::Mat Tmp1, Tmp2;
-
-            cv::Mat Intrinsics = (cv::Mat_<float>(3,3) <<    655.0681058933573, 0, 329.3888800064832,
-                                                              0, 651.5601207003715, 249.7271121691255,
-                                                              0, 0, 1);
-            cv::Mat Distortion = (cv::Mat_<float>(1,5) <<   -0.4309355351200019, 0.2749971654145275, 0.002517876773074356, -0.0003738676467441764, -0.1696187437955576);
-
-            cv::undistort( vImages[0].Image, Tmp1, Intrinsics, Distortion );
-            cv::resize( Tmp1, vImages[0].Image, cv::Size(0,0), 0.5, 0.5 );
-//            vImages[0].Image = Tmp1;
-
-            // depth image
-            vImages[1].Image.convertTo( Tmp2, CV_32FC1 );
-            Tmp2 = Tmp2 / 1000;
-            vImages[1].Image = Tmp2;
-#endif
-
-            /// for JPL data
-            /*
-            cv::Mat Tmp;
-
-            cv::resize( vImages[0].Image, Tmp, cv::Size(0,0), 0.5, 0.5 );
-
-            vImages[0].Image = Tmp;
-            /* */
-
-            /// for KINECT data
-            /*
-            // this converts images from the kinect to the expected format of DTrack
-            cv::Mat Tmp;
-
-            // convert RGB to GREYSCALE
-            cv::cvtColor( vImages[0].Image, vImages[0].Image, CV_RGB2GRAY, 1 );
-
-            // check if second image is provided, if so we assume it is the DEPTH image
-            if( vImages.size() > 1 ) {
-                // convert 16U to 32FC1
+            if( m_bConvertToM ) {
+                cv::Mat Tmp;
                 vImages[1].Image.convertTo( Tmp, CV_32FC1 );
-
-                // convert mm to m
                 Tmp = Tmp / 1000;
-
                 vImages[1].Image = Tmp;
             }
-            /* */
+
         }
 
 
@@ -226,9 +212,13 @@ class DTrackApp
         CameraDevice                    m_Cam;          // camera handler
         CamImages                       m_vImages;      // camera images
 
-#ifdef CAMAUX
+        /// auxilary variables to support multiple cameras, image pre-processing, etc.
+        bool                            m_bAuxCam;      // if external (auxilary) camera is being used
+        bool                            m_bRectify;     // rectify image
+        bool                            m_bConvertGrey; // convert to greyscale
+        bool                            m_bResize;     // reduce greyscale
+        bool                            m_bConvertToM;  // convert to meters ... usually used for kinect
         CameraDevice                    m_CamAux;       // camera handler
-#endif
 
         DenseFrontEnd*                  m_pFrontEnd;
         DenseMap*                       m_pMap;
