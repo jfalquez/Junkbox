@@ -66,7 +66,6 @@ enum eLocType { VT_AIR, VT_GROUND, VT_REC_RAMP, VT_CIR_RAMP };
 #define ACCEL_INDEX 4 //the index of the acceleration
 #define POSE2D_DIM 4
 #define POSE_DIM 5
-#define OPT_DIM 5
 namespace Eigen {
     //typedef Eigen::Matrix<double, 5, 1 >  Vector5d;
     //typedef Eigen::Matrix<double, 6, 1 >  Vector6d;
@@ -74,8 +73,6 @@ namespace Eigen {
     typedef Matrix<double,POSE_DIM,1> VectorPose; // defined as X,Y,Theta,V,Curvature
     typedef Matrix<double,CURVE_DIM,1> VectorCubic2D;
     typedef Matrix<double,POSE2D_DIM,1> VectorPose2D;
-    typedef Matrix<double, OPT_DIM,1> VectorOpt; // defined as s,a,b,c,accel
-    typedef Matrix<double, POSE_DIM-1,OPT_DIM> MatrixJac;
     typedef Matrix<double, POSE_DIM-1,POSE_DIM-1> MatrixJtJ;
     typedef Matrix<double, POSE_DIM-1,POSE_DIM-1> MatrixWeights;
     typedef Matrix<double, 3,4> MatrixCubicJac;
