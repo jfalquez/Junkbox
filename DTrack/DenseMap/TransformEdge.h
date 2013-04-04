@@ -11,7 +11,7 @@ public:
     TransformEdge(
             const unsigned int          nStartId,                           //< Input: Frame ID of edge start
             const unsigned int          nEndId,                             //< Input: Frame ID of edge end
-            Eigen::Matrix4d             Tab = Eigen::Matrix4d::Identity()   //< Input: Optional transform
+            Eigen::Matrix4d             Tse = Eigen::Matrix4d::Identity()   //< Input: Optional transform
             );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -21,7 +21,8 @@ public:
     {
         m_nStartId  = rRHS.m_nStartId;
         m_nEndId    = rRHS.m_nEndId;
-        m_dTab      = rRHS.m_dTab;
+        m_dTse      = rRHS.m_dTse;
+        m_dTse_orig = rRHS.m_dTse_orig;
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -34,13 +35,14 @@ public:
         }
         m_nStartId  = rRHS.m_nStartId;
         m_nEndId    = rRHS.m_nEndId;
-        m_dTab      = rRHS.m_dTab;
+        m_dTse      = rRHS.m_dTse;
+        m_dTse_orig = rRHS.m_dTse_orig;
         return *this;
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     void SetTransform(
-            const Eigen::Matrix4d&  Tab         //< Input: Transform
+            const Eigen::Matrix4d&  Tse         //< Input: Transform
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -54,7 +56,7 @@ public:
     bool GetTransform(
             unsigned int            nStartId,       //< Input: Frame ID of edge start
             unsigned int            nEndId,         //< Input Frame ID of edge end
-            Eigen::Matrix4d&        Tab             //< Output: Transform
+            Eigen::Matrix4d&        Tse             //< Output: Transform
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -66,9 +68,10 @@ public:
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
-    unsigned int           m_nStartId;
-    unsigned int           m_nEndId;
-    Eigen::Matrix4d        m_dTab;
+    unsigned int            m_nStartId;
+    unsigned int            m_nEndId;
+    Eigen::Matrix4d         m_dTse;             // transform
+    Eigen::Matrix4d         m_dTse_orig;        // original transform estimated
 };
 
 #endif

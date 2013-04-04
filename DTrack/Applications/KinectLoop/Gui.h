@@ -1,7 +1,8 @@
 #ifndef __GUI_H_
 #define	__GUI_H_
 
-#include <boost/bind.hpp>
+#include <mutex>
+
 #include <opencv.hpp>
 
 #include <pangolin/pangolin.h>
@@ -116,7 +117,7 @@ private:
     AnalyticsView                   m_AnalyticsView;
     TimerView                       m_TimerView;
 
-    boost::mutex                    m_Mutex;
+    std::mutex                      m_Mutex;
 };
 
 
@@ -260,7 +261,7 @@ void Gui::CopyMapChanges(
         DenseMap&       rMap        //< Input: Map we are copying from
     )
 {
-    boost::mutex::scoped_lock lock(m_Mutex);
+    std::lock_guard<std::mutex> lock(m_Mutex);
     m_bMapDirty = m_pChangesBufferMap->CopyMapChanges( rMap );
 }
 
@@ -315,15 +316,15 @@ void Gui::_RegisterKeyboardCallbacks()
 {
     // step once
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_SPECIAL + GLUT_KEY_RIGHT,
-                                        boost::bind( &Gui::_RIGHT_ARROW, this) );
+                                        std::bind( &Gui::_RIGHT_ARROW, this) );
 
     // play / pause
     pangolin::RegisterKeyPressCallback( ' ',
-                                        boost::bind( &Gui::_SPACE_BAR, this) );
+                                        std::bind( &Gui::_SPACE_BAR, this) );
 
     // reset app
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'r',
-                                        boost::bind( &Gui::_CTRL_R, this) );
+                                        std::bind( &Gui::_CTRL_R, this) );
 
     // toggle showing side panel
     pangolin::RegisterKeyPressCallback('~', [this](){ static bool showpanel = false; showpanel = !showpanel;

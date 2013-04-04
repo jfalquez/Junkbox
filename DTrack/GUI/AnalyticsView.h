@@ -12,6 +12,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <mutex>
 
 #include <pangolin/pangolin.h>
 #include <SceneGraph/SceneGraph.h>
@@ -73,7 +74,7 @@ class AnalyticsView : public pangolin::View
         ///////////////////////////////////////////////////////////////////////////////
         void Render()
         {
-            boost::mutex::scoped_lock lock(m_Mutex);
+            std::lock_guard<std::mutex> lock(m_Mutex);
 
             _SetRenderingState();
 
@@ -115,7 +116,7 @@ class AnalyticsView : public pangolin::View
         ///////////////////////////////////////////////////////////////////////////////
         void Update( std::map< std::string, std::pair< double, double > >& mData )
         {
-            boost::mutex::scoped_lock lock(m_Mutex);
+            std::lock_guard<std::mutex> lock(m_Mutex);
 
             for( auto itInput = mData.begin(); itInput != mData.end(); ++itInput ) {
                 const std::string&  sVar = itInput->first;
@@ -172,7 +173,7 @@ class AnalyticsView : public pangolin::View
         pangolin::OpenGlMatrix m_Ortho;
 
         // mutex for blocking drawing while updating data
-        boost::mutex m_Mutex;
+        std::mutex m_Mutex;
 };
 
 #endif	/* ANALYTICSVIEW_H */

@@ -3,12 +3,10 @@
 #define _DENSE_FRONT_END_H_
 
 #include <Eigen/Dense>
-#include <boost/thread.hpp>
 
 #include <RPG/Utils/ImageWrapper.h>
 
 #include <DenseMap/DenseMap.h>
-#include <Utils/CamModelPyramid.h>
 
 #include "DenseFrontEndConfig.h"
 #include "GpuHelpers.h"
@@ -124,6 +122,9 @@ private:
             double&                 dError          //< Output: RMSE of estimated transform
         );
 
+    void _PoseRelax();
+
+
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
@@ -143,8 +144,6 @@ private:
 
     Timer*                                                  m_pTimer;
     std::map< std::string, std::pair< double, double > >    m_Analytics;        // statistics for display
-
-    boost::mutex                                            m_Mutex;
 
     // GPU Variables
     Gpu::Pyramid< unsigned char, MAX_PYR_LEVELS, Gpu::TargetDevice, Gpu::Manage >   m_cdGreyPyr;

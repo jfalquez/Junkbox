@@ -34,7 +34,7 @@ DenseFrontEnd::DenseFrontEnd( unsigned int nImageWidth, unsigned int nImageHeigh
     // level 0 is finest (ie. biggest image)
     feConfig.g_vPyrMaxIters.resize( MAX_PYR_LEVELS );
     feConfig.g_vPyrMaxIters.setZero();
-    feConfig.g_vPyrMaxIters << 1, 2, 3, 4, 5;
+    feConfig.g_vPyrMaxIters << 1, 1, 2, 2, 5;
 
     // initialize if full estimate should be performed at a particular level
     // 1: full estimate          0: just rotation
@@ -77,9 +77,9 @@ bool DenseFrontEnd::Init(
     std::cout << mvl::T2Cart(m_pMap->GetDepthCameraPose()).transpose() << std::endl << std::endl;
 
 
-    //
+    ///
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //
+    ///
 
 
     // flag used to generate a new keyframe
@@ -214,13 +214,24 @@ bool DenseFrontEnd::Iterate(
         Eigen::Matrix4d Tpc_r;
         int nRelocFrameId = _Relocalize( vImages[0].Image, Tpc_r, dRelocError );
         if( nRelocFrameId != -1 && dRelocError < dTrackingError ) {
-            PrintMessage( 0, "Relocalizer successful! Matching Frame: %d (RMSE: %f)\n", nRelocFrameId, dRelocError );
+            PrintMessage( 1, "Relocalizer successful! Matching Frame: %d (RMSE: %f)\n", nRelocFrameId, dRelocError );
+            dTrackingError = dRelocError;
             Tpc = Tpc_r;
+            m_Tpc = Tpc;
         } else {
-            PrintMessage( 0, "critical: Relocalizer failed!\n" );
+            PrintMessage( 1, "critical: Relocalizer failed!\n" );
             m_eTrackingState = eTrackingFail;
+//            Toc("Relocalizer");
+            // "drop" frame
+            Tpc.setIdentity();
+            m_Tpc.setIdentity();
+            m_Analytics["Lost-o-Meter"] = std::pair<double, double>( 1.0, 0 );
+            goto HERE;
+//            return true;
         }
     }
+    m_Analytics["Lost-o-Meter"] = std::pair<double, double>( 0, 0 );
+    HERE:
     Toc("Relocalizer");
 
     // TODO get this from the camera directly.. the property map should have it
@@ -230,7 +241,7 @@ bool DenseFrontEnd::Iterate(
     const unsigned int nNumPts = cv::countNonZero( vImages[1].Image );
     double dObsThreshold = feConfig.g_fKeyframePtsThreshold * nNumPts;
     m_Analytics["Num Obs"] = std::pair<double, double>( nNumObservations, dObsThreshold );
-    if( nNumObservations < dObsThreshold ) {
+    if( nNumObservations < dObsThreshold && dTrackingError > 5.0 ) {
 
         Tic("GenKeyframe");
 
@@ -290,7 +301,7 @@ bool DenseFrontEnd::Iterate(
     m_pMap->UpdateInternalPath();
 
     // check for loop closure
-    /*
+    /* */
     Tic("LoopClosure");
     double          dLoopClosureError;
     Eigen::Matrix4d LoopClosureT;
@@ -355,7 +366,7 @@ double DenseFrontEnd::_EstimateRelativePose(
     m_cdGreyPyr[0].MemcpyFromHost( lGreyImg.data, m_nImageWidth );
     m_cdKeyGreyPyr[0].MemcpyFromHost( pKeyframe->GetGreyImagePtr() );
 
-    for( int ii = 0; ii < ui_nBlur; ii++ ) {
+    for( int ii = 0; ii < ui_nBlur; ++ii ) {
         Gpu::Blur( m_cdGreyPyr[0], m_cdTemp.uImg1 );
         Gpu::Blur( m_cdKeyGreyPyr[0], m_cdTemp.uImg2 );
     }
@@ -438,7 +449,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
                 // check degenerate system
                 if( lu_JTJ.rank() < 6 ) {
-                    PrintMessage( feConfig.g_nDebugESM, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
+                    PrintMessage( feConfig.g_nDebugGN, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
                     continue;
                 }
 
@@ -451,7 +462,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
                 // check degenerate system
                 if( lu_JTJ.rank() < 3 ) {
-                    PrintMessage( feConfig.g_nDebugESM, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
+                    PrintMessage( feConfig.g_nDebugGN, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
                     continue;
                 }
 
@@ -478,7 +489,7 @@ double DenseFrontEnd::_EstimateRelativePose(
 
             // if error decreases too slowly, break out of this level
             if( ( fabs( dNewError - dLastError ) < ui_fBreakErrorThreshold ) && ui_bBreakEarly ) {
-                PrintMessage( feConfig.g_nDebugESM, "notice: Breaking early @ L%d : I%d ...\n", PyrLvl+1, ii+1 );
+                PrintMessage( feConfig.g_nDebugGN, "notice: Breaking early @ L%d : I%d ...\n", PyrLvl+1, ii+1 );
                 break;
             }
 

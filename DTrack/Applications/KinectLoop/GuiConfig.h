@@ -12,7 +12,7 @@ public:
         g_nNumGridLines( CVarUtils::CreateCVar<>( "ui.NumGridLines", 10u, "Number of grid divisions." ) ),
 
         // GLPATH OPTIONS
-        g_nNumPosesToShow( CVarUtils::CreateCVar<>( "ui.NumPosesToShow", 20u, "Number of poses to display on GUI. Setting to 0 displays all poses." ) ),
+        g_nNumPosesToShow( CVarUtils::CreateCVar<>( "ui.NumPosesToShow", 1u, "Number of poses to display on GUI. Setting to 0 displays all poses." ) ),
 
         // GLMAP OPTIONS
         g_nNumVBOsToShow( CVarUtils::CreateCVar<>( "ui.NumVBOsToShow", 0u, "Number of VBOs to render on GUI. Setting to 0 displays all VBOs." ) ),

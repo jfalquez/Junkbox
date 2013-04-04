@@ -1,3 +1,6 @@
+#include <thread>
+//#include <functional>
+
 #include "DTrackApp.h"
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -8,8 +11,8 @@ void DTrackThread( Gui& gui, int argc, char** argv)
         if( !app.InitReset( argc, argv ) ) {
             gui.SetState( QUIT );   // this will notify the GUI to die
         } else {
-//            gui.SetState( PAUSED );
-            gui.SetState( PLAYING );
+            gui.SetState( PAUSED );
+//            gui.SetState( PLAYING );
         }
 
         while( gui.State != QUIT ) {
@@ -51,7 +54,7 @@ int main( int argc, char** argv )
     /// two threads
     /* */
     // start tracker thread
-    boost::thread TT( DTrackThread, boost::ref(gui), argc, argv);
+    std::thread TT( DTrackThread, std::ref(gui), argc, argv);
 
     // start gui thread
     gui.Run();

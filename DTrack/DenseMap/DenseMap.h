@@ -2,15 +2,18 @@
 #define _DENSE_MAP_H_
 
 #include <map>
-#include <boost/shared_ptr.hpp>
+#include <memory>
+
+#include <sophus/sophus.hpp>
 
 #include <Utils/CamModelPyramid.h>
+
 
 #include "ReferenceFrame.h"
 #include "TransformEdge.h"
 
-typedef boost::shared_ptr< ReferenceFrame >  FramePtr;
-typedef boost::shared_ptr< TransformEdge >   EdgePtr;
+typedef std::shared_ptr< ReferenceFrame >  FramePtr;
+typedef std::shared_ptr< TransformEdge >   EdgePtr;
 
 class DenseMap
 {
@@ -132,7 +135,7 @@ public:
     unsigned int GetNumFrames() { return m_vFrames.size(); }
 
 
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     unsigned int GetNumEdges() { return m_vEdges.size(); }
 
 

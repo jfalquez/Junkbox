@@ -4,6 +4,7 @@
 #include <RPG/Utils/InitCam.h>
 #include <Mvlpp/Mvl.h>
 #include <DenseFrontEnd/DenseFrontEnd.h>
+#include <DenseBackEnd/DenseBackEnd.h>
 
 #include "Gui.h"
 
@@ -15,6 +16,7 @@ class DTrackApp
         DTrackApp()
         {
             m_pFrontEnd = NULL;
+            m_pBackEnd = NULL;
             m_pMap = NULL;
             m_pTimer = NULL;
         }
@@ -53,7 +55,7 @@ class DTrackApp
             m_bAuxCam = false;
             if( sDDev.empty() == false ) {
                 m_bAuxCam = true;
-                std::cout << "External camera provided." << std::endl;
+                std::cout << "Second camera detected ..." << std::endl;
 
                 bool            bGetDepth   = !clArgs.search( "-no-depth" );
                 bool            bGetRGB     = !clArgs.search( "-no-rgb" );
@@ -109,6 +111,14 @@ class DTrackApp
                 exit(1);
             }
 
+            if( m_pBackEnd ) {
+                delete m_pBackEnd;
+            }
+            m_pBackEnd = new DenseBackEnd;
+            if( m_pBackEnd->Init( m_pMap ) == false ) {
+                std::cerr << "error: A problem was encountered initializing the back end." << std::endl;
+            }
+
             if( m_pFrontEnd ) {
                 delete m_pFrontEnd;
             }
@@ -119,23 +129,32 @@ class DTrackApp
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         void StepOnce( Gui& rGui )
         {
-            if( m_Cam.Capture( m_vImages ) ) {
+            m_pFrontEnd->Tic();
+
+            m_pFrontEnd->Tic("Capture");
+            bool bCapRet = m_Cam.Capture( m_vImages );
+            m_pFrontEnd->Toc("Capture");
+
+            if( bCapRet ) {
 
                 if( m_bAuxCam ) {
+                    m_pFrontEnd->Tic("CaptureAux");
                     CamImages   vImages;      // camera images
-                    m_CamAux.Capture( vImages );
+                    if( m_CamAux.Capture( vImages ) == false ) {
+                        std::cerr << "error: A problem occurred while capturing from second camera." << std::endl;
+                    }
                     m_vImages.resize( 2 );
                     m_vImages[1] = vImages[0];
+                    m_pFrontEnd->Toc("CaptureAux");
                 }
 
-                m_pFrontEnd->Tic();
 
                 // unpack images to what the front end expects
                 m_pFrontEnd->Tic("Unpack");
                 _UnpackImages( m_vImages );
                 m_pFrontEnd->Toc("Unpack");
 
-                if( m_pFrontEnd->Iterate( m_vImages ) == false) {
+                if( m_pFrontEnd->Iterate( m_vImages ) == false ) {
                     std::cerr << "critical: something went wrong during the last iteration." << std::endl;
                     rGui.SetState( PAUSED );
                 }
@@ -146,12 +165,19 @@ class DTrackApp
                 rGui.UpdateAnalytics( m_Analytics );
                 rGui.UpdateTimer( m_pTimer->GetWindowSize(), m_pTimer->GetNames(3), m_pTimer->GetTimes(3) );
 
-                // pause if certain conditions are met
-                if( m_pFrontEnd->TrackingState() == eTrackingFail || m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
-//                    rGui.SetState( PAUSED );
+                // pause if loop closure and call pose graph relaxation
+                if( m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
+//                    m_pBackEnd->PoseGraphRelaxation();
+                    rGui.SetState( PAUSED );
+                }
+
+                // pause if we are lost
+                if( m_pFrontEnd->TrackingState() == eTrackingFail ) {
+                    rGui.SetState( PAUSED );
                 }
             } else {
                 // no more images, pause
+                m_pFrontEnd->Toc();
                 rGui.SetState( PAUSED );
             }
         }
@@ -216,11 +242,12 @@ class DTrackApp
         bool                            m_bAuxCam;      // if external (auxilary) camera is being used
         bool                            m_bRectify;     // rectify image
         bool                            m_bConvertGrey; // convert to greyscale
-        bool                            m_bResize;     // reduce greyscale
+        bool                            m_bResize;      // reduce greyscale
         bool                            m_bConvertToM;  // convert to meters ... usually used for kinect
         CameraDevice                    m_CamAux;       // camera handler
 
         DenseFrontEnd*                  m_pFrontEnd;
+        DenseBackEnd*                   m_pBackEnd;
         DenseMap*                       m_pMap;
 
         Timer*                                                  m_pTimer;

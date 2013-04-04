@@ -6,20 +6,21 @@
 TransformEdge::TransformEdge(
         const unsigned int      nStartId,   //< Input: Frame ID of edge start
         const unsigned int      nEndId,     //< Input: Frame ID of edge end
-        Eigen::Matrix4d         Tab         //< Input: Optional transform
+        Eigen::Matrix4d         Tse         //< Input: Optional transform
     )
 {
     m_nStartId  = nStartId;
     m_nEndId    = nEndId;
-    m_dTab      = Tab;
+    m_dTse      = Tse;
+    m_dTse_orig = Tse;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void TransformEdge::SetTransform(
-        const Eigen::Matrix4d&      Tab      //< Input:
+        const Eigen::Matrix4d&      Tse      //< Input:
     )
 {
-    m_dTab = Tab;
+    m_dTse = Tse;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -30,11 +31,11 @@ bool TransformEdge::SetTransform(
     )
 {
     if( nStartId == m_nStartId && nEndId == m_nEndId ){
-        m_dTab = Tab;
+        m_dTse = Tab;
         return true;
     }
     if( nEndId == m_nStartId && nStartId == m_nEndId ){
-        m_dTab = mvl::TInv(Tab);
+        m_dTse = mvl::TInv(Tab);
         return true;
     }
     return false;
@@ -48,11 +49,11 @@ bool TransformEdge::GetTransform(
     )
 {
     if( nStartId == m_nStartId && nEndId == m_nEndId ){
-        Tab = m_dTab;
+        Tab = m_dTse;
         return true;
     }
     if( nEndId == m_nStartId && nStartId == m_nEndId ){
-        Tab = mvl::TInv(m_dTab);
+        Tab = mvl::TInv(m_dTse);
         return true;
     }
     return false;

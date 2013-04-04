@@ -20,13 +20,14 @@ ADD_EXECUTABLE( KinectLoop ${HDRS} ${SRCS} )
 TARGET_LINK_LIBRARIES( KinectLoop
                         DenseMap
                         DenseFrontEnd
+                        DenseBackEnd
                         ${RPG_LIBRARIES}
                         ${Pangolin_LIBRARIES}
                         ${SceneGraph_LIBRARIES}
                         ${CVARS_LIBRARIES}
                         ${Kangaroo_LIBRARIES}
                         ${Sophus_LIBRARIES}
-#                        ${CeresSolver_LIBRARIES}
+                        ${CeresSolver_LIBRARIES}
 #                        ${SENSORFUSION_LIBRARIES}
                      )
 

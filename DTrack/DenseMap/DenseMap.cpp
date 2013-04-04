@@ -326,15 +326,15 @@ bool DenseMap::CopyMapChanges(
     m_vFrames.resize( rRHS.m_vFrames.size() );
 
     for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-5, 0 ); ii-- ) {
-        m_vEdges[ii] = boost::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
+        m_vEdges[ii] = std::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
         //m_vEdges[ii] = rRHS.m_vEdges[ii]; // will do a deep copy
     }
 
     for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-5, 0 ); ii-- ) {
-        m_vFrames[ii] = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
+        m_vFrames[ii] = std::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
     }
 
-    m_pCurKeyframe = boost::shared_ptr<ReferenceFrame>( new ReferenceFrame( *(rRHS.m_pCurKeyframe) ) );
+    m_pCurKeyframe = std::shared_ptr<ReferenceFrame>( new ReferenceFrame( *(rRHS.m_pCurKeyframe) ) );
 
     // copy internal path and orientation
     m_dPathOrientation = rRHS.m_dPathOrientation;
@@ -387,10 +387,11 @@ void DenseMap::FindClosestKeyframes(
     )
 {
 
+    Eigen::Matrix4d dInvPose = mvl::TInv( dPose );
     for( int ii = 0; ii < m_vPath.size(); ++ii ) {
         if( IsKeyframe(ii) ) {
-            Eigen::Matrix4d TdeltaPose = dPose - m_vPath[ii];
-            Eigen::Vector6d deltaPose = mvl::T2Cart( TdeltaPose );
+            Eigen::Matrix4d PoseError = dInvPose * m_vPath[ii];
+            Eigen::Vector6d deltaPose = mvl::T2Cart( PoseError );
             float fNorm = deltaPose.norm();
             if( fNorm < fMaxNorm ) {
                 vKeyframes.push_back( std::pair<unsigned int, float>( ii, fNorm ) );
@@ -586,7 +587,7 @@ void DenseMap::UpdateInternalPath()
 {
     m_vPath.clear();
     GenerateAbsolutePoses( m_vPath );
-    _DynamicGroundPlaneEstimation();
+//    _DynamicGroundPlaneEstimation();
     _UpdateModifiedTime();
 }
 
