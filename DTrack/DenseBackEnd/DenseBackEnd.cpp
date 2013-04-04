@@ -77,7 +77,7 @@ void DenseBackEnd::_PoseRelax()
         const unsigned int nStartId = pEdge->GetStartId();
         const unsigned int nEndId = pEdge->GetEndId();
         Eigen::Matrix4d Tse;
-        pEdge->GetTransform(nStartId, nEndId, Tse );
+        pEdge->GetOriginalTransform( nStartId, nEndId, Tse );
         RelEdgeCostFunc* pCostFunc = new RelEdgeCostFunc( Sophus::SE3d( Tse ) );
         Problem.AddResidualBlock( pCostFunc, NULL, vAbsPoses[nStartId].data(), vAbsPoses[nEndId].data() );
     }
@@ -87,7 +87,16 @@ void DenseBackEnd::_PoseRelax()
     ceres::Solve( SolverOptions, &Problem, &SolverSummary );
     std::cout << SolverSummary.FullReport() << std::endl;
 
-    // copy vAbsPoses as RELATIVE transforms back to the reference frame's RelaxedTse
+    // copy vAbsPoses as relative transforms back to the map
+    for( int ii = 0; ii < m_pMap->GetNumEdges(); ++ii ) {
+        EdgePtr pEdge = m_pMap->GetEdgePtr( ii );
+        const unsigned int nStartId = pEdge->GetStartId();
+        const unsigned int nEndId = pEdge->GetEndId();
+        Sophus::SE3d Tse = vAbsPoses[nStartId].inverse() * vAbsPoses[nEndId];
+        pEdge->SetTransform( Tse.matrix() );
+    }
+
+    m_pMap->UpdateInternalPath();
 }
 
 

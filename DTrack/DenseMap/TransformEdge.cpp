@@ -60,6 +60,24 @@ bool TransformEdge::GetTransform(
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+bool TransformEdge::GetOriginalTransform(
+        unsigned int            nStartId,   //< Input:
+        unsigned int            nEndId,     //< Input:
+        Eigen::Matrix4d&        Tab         //< Output:
+    )
+{
+    if( nStartId == m_nStartId && nEndId == m_nEndId ){
+        Tab = m_dTse_orig;
+        return true;
+    }
+    if( nEndId == m_nStartId && nStartId == m_nEndId ){
+        Tab = mvl::TInv(m_dTse_orig);
+        return true;
+    }
+    return false;
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 unsigned int TransformEdge::GetEndId()
 {
     return m_nEndId;

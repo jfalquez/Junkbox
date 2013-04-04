@@ -167,9 +167,11 @@ class DTrackApp
 
                 // pause if loop closure and call pose graph relaxation
                 if( m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
-//                    m_pBackEnd->PoseGraphRelaxation();
                     rGui.SetState( PAUSED );
-                }
+                    std::cout << "Relaxing.... ";
+                    m_pBackEnd->_PoseRelax();
+                    std::cout << "DONE!!!" << std::endl;
+                 }
 
                 // pause if we are lost
                 if( m_pFrontEnd->TrackingState() == eTrackingFail ) {

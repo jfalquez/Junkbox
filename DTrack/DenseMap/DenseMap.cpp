@@ -587,7 +587,7 @@ void DenseMap::UpdateInternalPath()
 {
     m_vPath.clear();
     GenerateAbsolutePoses( m_vPath );
-//    _DynamicGroundPlaneEstimation();
+    _DynamicGroundPlaneEstimation();
     _UpdateModifiedTime();
 }
 
