@@ -27,8 +27,8 @@ DenseFrontEnd::DenseFrontEnd( unsigned int nImageWidth, unsigned int nImageHeigh
     m_nImageHeight  = nImageHeight;
 
     // calculate thumb image dimensions
-    m_nThumbHeight = m_nImageHeight >> MAX_PYR_LEVELS-1;
-    m_nThumbWidth = m_nImageWidth >> MAX_PYR_LEVELS-1;
+    m_nThumbHeight = m_nImageHeight >> (MAX_PYR_LEVELS-1);
+    m_nThumbWidth = m_nImageWidth >> (MAX_PYR_LEVELS-1);
 
     // initialize max number of iterations to perform at each pyramid level
     // level 0 is finest (ie. biggest image)
@@ -174,7 +174,10 @@ bool DenseFrontEnd::Iterate(
         }
     }
 
-    unsigned int nKeyframeId = m_pMap->GetCurrentKeyframe()->GetId();
+    // keyframe pointer
+    FramePtr pKeyframe = m_pMap->GetCurrentKeyframe();
+
+    unsigned int nKeyframeId = pKeyframe->GetId();
     std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
     Eigen::Matrix4d Twk = vPath[nKeyframeId];
 
@@ -184,7 +187,7 @@ bool DenseFrontEnd::Iterate(
 
     Tic("PoseEstimate");
     unsigned int nNumObservations;
-    double dTrackingError = _EstimateRelativePose( vImages[0].Image, m_pMap->GetCurrentKeyframe(), Tkc, nNumObservations );
+    double dTrackingError = _EstimateRelativePose( vImages[0].Image, pKeyframe, Tkc, nNumObservations );
     m_Analytics["RMSE"] = std::pair<double, double>( dTrackingError, 0 );
 
     // we would also like to get Tpc: transform from previous frame to current frame
@@ -225,12 +228,12 @@ bool DenseFrontEnd::Iterate(
             // "drop" frame
             Tpc.setIdentity();
             m_Tpc.setIdentity();
-            m_Analytics["Lost-o-Meter"] = std::pair<double, double>( 1.0, 0 );
+//            m_Analytics["Lost-o-Meter"] = std::pair<double, double>( 1.0, 0 );
             goto HERE;
 //            return true;
         }
     }
-    m_Analytics["Lost-o-Meter"] = std::pair<double, double>( 0, 0 );
+//    m_Analytics["Lost-o-Meter"] = std::pair<double, double>( 0, 0 );
     HERE:
     Toc("Relocalizer");
 
@@ -265,7 +268,8 @@ bool DenseFrontEnd::Iterate(
         }
 
         // link previous frame with new frame (relative pose)
-        m_pMap->LinkFrames( m_pPrevFrame, m_pCurFrame, Tpc );
+//        m_pMap->LinkFrames( m_pPrevFrame, m_pCurFrame, Tpc );
+        m_pMap->LinkFrames( pKeyframe, m_pCurFrame, Tkc );
 
         // set new keyframe as current keyframe
         m_pMap->SetKeyframe( m_pCurFrame );
@@ -292,7 +296,8 @@ bool DenseFrontEnd::Iterate(
         }
 
         // link previous frame with new frame (relative pose)
-        m_pMap->LinkFrames( m_pPrevFrame, m_pCurFrame, Tpc );
+//        m_pMap->LinkFrames( m_pPrevFrame, m_pCurFrame, Tpc );
+        m_pMap->LinkFrames( pKeyframe, m_pCurFrame, Tkc );
 
         m_Analytics["Keyframes"] = std::pair<double, double>( 0, 0 );
     }
@@ -308,7 +313,7 @@ bool DenseFrontEnd::Iterate(
     int nLoopClosureFrameId = _LoopClosure( m_pCurFrame, LoopClosureT, dLoopClosureError );
     m_Analytics["LC RMSE"] = std::pair<double, double>( dLoopClosureError, feConfig.g_dLoopClosureThreshold );
     if( nLoopClosureFrameId != -1 && dLoopClosureError < feConfig.g_dLoopClosureThreshold ) {
-        PrintMessage( 1, "Loop Closure Detected!!! Matching Frame: %d (RMSE: %f)\n", nLoopClosureFrameId, dLoopClosureError );
+        PrintMessage( 0, "Loop Closure Detected!!! Current Frame: %d (%d) -- Matching Frame: %d (%d) (RMSE: %f)\n", m_pCurFrame->GetId(), m_pCurFrame->IsKeyframe(), nLoopClosureFrameId, m_pMap->GetFramePtr(nLoopClosureFrameId)->IsKeyframe(), dLoopClosureError );
         m_eTrackingState = eTrackingLoopClosure;
 
         // link frames
@@ -317,6 +322,7 @@ bool DenseFrontEnd::Iterate(
 
         // update internal path based on the loop closure
         m_pMap->UpdateInternalPath();
+        m_pMap->Print();
     }
     Toc("LoopClosure");
     /* */
@@ -366,7 +372,7 @@ double DenseFrontEnd::_EstimateRelativePose(
     m_cdGreyPyr[0].MemcpyFromHost( lGreyImg.data, m_nImageWidth );
     m_cdKeyGreyPyr[0].MemcpyFromHost( pKeyframe->GetGreyImagePtr() );
 
-    for( int ii = 0; ii < ui_nBlur; ++ii ) {
+    for( unsigned int ii = 0; ii < ui_nBlur; ++ii ) {
         Gpu::Blur( m_cdGreyPyr[0], m_cdTemp.uImg1 );
         Gpu::Blur( m_cdKeyGreyPyr[0], m_cdTemp.uImg2 );
     }
@@ -474,14 +480,6 @@ double DenseFrontEnd::_EstimateRelativePose(
                 X.tail(3) = rX;
             }
 
-            /*
-            // if we have too few observations, discard estimate
-            if( (float)LSS.obs < ui_fMinPts * (float)( PyrLvlWidth * PyrLvlHeight ) ) {
-                std::cerr << "warning(@L" << PyrLvl+1 << "I" << ii+1 << ") LS trashed. " << "Too few pixels!" << std::endl;
-                continue;
-            }
-            /* */
-
             // everything seems fine... apply update
             Tkc = (Tkc.inverse() * Sophus::SE3::exp(X).matrix()).inverse();
 
@@ -531,7 +529,7 @@ int DenseFrontEnd::_Relocalize(
     float       fBestScore = FLT_MAX;
     FramePtr    pBestMatch;
 
-    for( int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
+    for( unsigned int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
 
         const unsigned int nId = std::get<0>( vNearKeyframes[ii] );
 
@@ -590,7 +588,7 @@ int DenseFrontEnd::_LoopClosure(
     float       fBestScore = FLT_MAX;
     FramePtr    pBestMatch;
 
-    for( int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
+    for( unsigned int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
 
         const unsigned int nId = std::get<0>( vNearKeyframes[ii] );
 

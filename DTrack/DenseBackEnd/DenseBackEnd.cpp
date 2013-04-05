@@ -1,9 +1,6 @@
 #include <ceres/ceres.h>
 
-#include <sophus/sophus.hpp>
-
 #include "DenseBackEnd.h"
-
 #include "AutoDiffArrayCostFunction.h"
 #include "EigenCeresJetNumTraits.h"
 #include "LocalParamSe3.h"
@@ -51,7 +48,9 @@ public:
         const Sophus::SE3Group<T> Tse = Tws.inverse() * Twe;
         Sophus::SE3Group<T> Terror = m_RelTes.cast<T>() * Tse;
         r = Terror.log();
-    }
+
+        return true;
+   }
 
 private:
     Sophus::SE3d        m_RelTes;
@@ -66,13 +65,13 @@ void DenseBackEnd::_PoseRelax()
 
     LocalParamSe3* pLocalParam = new LocalParamSe3;
     ceres::Problem Problem;
-    for( int ii = 0; ii < vPath.size(); ++ii ) {
+    for( unsigned int ii = 0; ii < vPath.size(); ++ii ) {
         vAbsPoses.push_back( Sophus::SE3d( vPath[ii] ) );
         Problem.AddParameterBlock( vAbsPoses.back().data(), 7, pLocalParam );
     }
 
     // add all edges
-    for( int ii = 0; ii < m_pMap->GetNumEdges(); ++ii ) {
+    for( unsigned int ii = 0; ii < m_pMap->GetNumEdges(); ++ii ) {
         EdgePtr pEdge = m_pMap->GetEdgePtr( ii );
         const unsigned int nStartId = pEdge->GetStartId();
         const unsigned int nEndId = pEdge->GetEndId();
@@ -85,10 +84,10 @@ void DenseBackEnd::_PoseRelax()
     ceres::Solver::Options SolverOptions;
     ceres::Solver::Summary SolverSummary;
     ceres::Solve( SolverOptions, &Problem, &SolverSummary );
-    std::cout << SolverSummary.FullReport() << std::endl;
+    std::cout << SolverSummary.BriefReport() << std::endl;
 
     // copy vAbsPoses as relative transforms back to the map
-    for( int ii = 0; ii < m_pMap->GetNumEdges(); ++ii ) {
+    for( unsigned int ii = 0; ii < m_pMap->GetNumEdges(); ++ii ) {
         EdgePtr pEdge = m_pMap->GetEdgePtr( ii );
         const unsigned int nStartId = pEdge->GetStartId();
         const unsigned int nEndId = pEdge->GetEndId();

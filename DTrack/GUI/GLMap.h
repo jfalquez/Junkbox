@@ -49,7 +49,7 @@ public:
             }
 
             // allocate and populate VBO and CBO
-            for( int ii = m_pVBO.size(); ii < m_pMap->GetNumFrames(); ++ii ) {
+            for( unsigned int ii = m_pVBO.size(); ii < m_pMap->GetNumFrames(); ++ii ) {
                 pFrame = m_pMap->GetFramePtr( ii );
 
                 // check if this frame is keyframe
@@ -106,10 +106,10 @@ public:
                     glPopMatrix();
                 }
             }
+            glPopAttrib();
             glPopMatrix();
         }
 
-        glPopAttrib();
     }
 
     void ToggleShow()

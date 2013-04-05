@@ -2,7 +2,6 @@ CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
 
 PROJECT( DTrack )
 
-
 LIST( APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/CMakeModules/" )
 
 
@@ -34,14 +33,14 @@ LINK_DIRECTORIES( ${CeresSolver_LIBRARY_DIRS} )
 
 # Overide with cmake -DCMAKE_BUILD_TYPE=Debug {dir}
 IF( NOT CMAKE_BUILD_TYPE )
-   MESSAGE("Build type not set (defaults to release)")
-   MESSAGE("-DCMAKE_BUILD_TYPE=Debug for debug")
-   SET( CMAKE_BUILD_TYPE Release )
+    MESSAGE("Build type not set (defaults to release)")
+    MESSAGE("-DCMAKE_BUILD_TYPE=Debug for debug")
+    SET( CMAKE_BUILD_TYPE Release )
 ENDIF()
 
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
- SET(CMAKE_CXX_FLAGS "-std=c++11 -g")
+    SET( CMAKE_CXX_FLAGS "-std=c++11 -Wall -Wextra -Wno-unknown-pragmas" )
 ENDIF()
 
 

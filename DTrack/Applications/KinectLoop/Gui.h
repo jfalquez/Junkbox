@@ -217,9 +217,11 @@ void Gui::InitReset()
     m_bMapDirty         = false;
     m_Mutex.unlock();
 
-    // init-reset objects
+    // set properties
     m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
     m_glGrid.SetLineSpacing( 10.0 );
+
+    // init-reset objects
     m_glMap.InitReset( m_pRenderMap );
     m_glPath.InitReset( m_pRenderMap );
 

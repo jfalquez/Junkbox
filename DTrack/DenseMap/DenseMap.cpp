@@ -9,7 +9,7 @@
 DenseMap::DenseMap()
 {
     m_dLastModifiedTime = 0;
-    m_bFitPlane = true;
+    m_bFitPlane         = true;
     m_dPathOrientation.setIdentity();
 }
 
@@ -304,7 +304,7 @@ bool DenseMap::CopyMapChanges(
     )
 {
     if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
-        return false; // nothing to do, map is up-to date
+//        return false; // nothing to do, map is up-to date
     }
 
     if( m_CModPyrGrey.IsInit() == false ) {
@@ -339,10 +339,9 @@ bool DenseMap::CopyMapChanges(
     // copy internal path and orientation
     m_dPathOrientation = rRHS.m_dPathOrientation;
     m_vPath.clear();
-    for( int ii = 0; ii < rRHS.m_vPath.size(); ++ii ) {
+    for( unsigned int ii = 0; ii < rRHS.m_vPath.size(); ++ii ) {
         m_vPath[ii] = rRHS.m_vPath[ii];
     }
-
 
     // TODO add a mutex around this whole call, and use it also in _UpdateModifiedTime()
     // this way modifications of the map during copy are still preserved by the ModifiedTime discrepancy??
@@ -376,6 +375,7 @@ bool DenseMap::SetKeyframe(
     }
 
     m_pCurKeyframe = pKeyframe;
+    return true;
 }
 
 
@@ -388,7 +388,7 @@ void DenseMap::FindClosestKeyframes(
 {
 
     Eigen::Matrix4d dInvPose = mvl::TInv( dPose );
-    for( int ii = 0; ii < m_vPath.size(); ++ii ) {
+    for( unsigned int ii = 0; ii < m_vPath.size(); ++ii ) {
         if( IsKeyframe(ii) ) {
             Eigen::Matrix4d PoseError = dInvPose * m_vPath[ii];
             Eigen::Vector6d deltaPose = mvl::T2Cart( PoseError );
@@ -407,18 +407,31 @@ void DenseMap::FindClosestKeyframes(
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::Print()
 {
-    printf("*******************************************\n");
-    printf("EDGES\n");
-    printf("*******************************************\n");
-    for( unsigned int ii=0; ii < m_vEdges.size(); ii++ ) {
-        printf("Id: %d  start_frame: %d  end_frame: %d \n", ii, m_vEdges[ii]->GetStartId(), m_vEdges[ii]->GetEndId());
-    }
+    printf("**************************************************************************************************\n");
+    printf("\tPRINT MAP\n");
+    printf("**************************************************************************************************\n");
+    for( unsigned int ii = 0; ii < m_vFrames.size(); ++ii ) {
+        FramePtr pFrame = m_vFrames[ii];
+        assert( ii = pFrame->GetId() );
+        Eigen::Vector6d E = mvl::T2Cart( m_vPath[ii] );
+        printf( "Frame ID: %05d \t Keyframe: %d \t Current Global Pose: [ %.2f, %.2f, %.2f, %.2f, %.2f, %.2f ]\n", ii, pFrame->IsKeyframe(),
+               E(0), E(1), E(2), E(3), E(4), E(5) );
 
-    printf("*******************************************\n");
-    printf("FRAMES\n");
-    printf("*******************************************\n");
-    for( unsigned int ii=0; ii < m_vFrames.size(); ii++ ) {
+        std::vector<unsigned int>& vNeighbors = pFrame->GetNeighbors();
+        for( unsigned int& ii : vNeighbors ) {
+            EdgePtr pEdge = GetEdgePtr( ii );
+            const unsigned int nStartId = pEdge->GetStartId();
+            const unsigned int nEndId = pEdge->GetEndId();
+            Eigen::Matrix4d Tse;
+            pEdge->GetOriginalTransform( nStartId, nEndId, Tse );
+            E = mvl::T2Cart( Tse );
+            printf( "---  Start: %05d \t End: %05d \t Relative Transform: [ %.2f, %.2f, %.2f, %.2f, %.2f, %.2f ]\n", nStartId, nEndId,
+                E(0), E(1), E(2), E(3), E(4), E(5) );
+        }
+        printf("-----------------------------------------------------------------------------------------------\n");
     }
+    printf( "Total Frames: %5d \t\t Total Edges: %5d\n\n", GetNumFrames(), GetNumEdges() );
+    fflush(stdout);
 }
 
 
@@ -480,7 +493,7 @@ void DenseMap::GenerateRelativePoses(
 
             FramePtr pNeighborNode = GetFramePtr(nNeighborNodeId);
 
-            if( pCurNode->GetDepth() < nDepth &&
+            if( (int)pCurNode->GetDepth() < nDepth &&
                     pNeighborNode != NULL   &&
                     pNeighborNode->IsWhite() ) {
 
@@ -641,7 +654,7 @@ void DenseMap::_DynamicGroundPlaneEstimation() {
     Eigen::Matrix4d dOrigin = mvl::TInv( m_vPath[0] );
 
     std::vector< Eigen::Vector3d > vPoints;
-    for( int ii = 0; ii < m_vPath.size(); ++ii ) {
+    for( unsigned int ii = 0; ii < m_vPath.size(); ++ii ) {
         Eigen::Matrix4d Pose4 = dOrigin * m_vPath[ii];
         Eigen::Vector3d Pose3 = Pose4.block<3,1>(0,3);
         vPoints.push_back( Pose3 );

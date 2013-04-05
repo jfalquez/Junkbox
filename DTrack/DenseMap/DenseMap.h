@@ -4,7 +4,9 @@
 #include <map>
 #include <memory>
 
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
 #include <sophus/sophus.hpp>
+#pragma GCC diagnostic pop
 
 #include <Utils/CamModelPyramid.h>
 

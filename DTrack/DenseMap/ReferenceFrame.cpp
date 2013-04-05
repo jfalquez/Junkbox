@@ -5,9 +5,9 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ReferenceFrame::ReferenceFrame()
                : m_nParentEdgeId(NO_PARENT),
-                 m_bKeyframe(false),
                  m_nColor(0),
-                 m_nDepth(0)
+                 m_nDepth(0),
+                 m_bKeyframe(false)
 {
 }
 

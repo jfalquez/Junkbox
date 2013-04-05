@@ -46,7 +46,7 @@ class CameraModelPyramid : public mvl::CameraModel
             return m_Kinv[i];
         }
 
-        inline void PopulatePyramid(int max_levels = 10)
+        inline void PopulatePyramid(unsigned int max_levels = 10)
         {
             m_K.clear();
             m_Kinv.clear();

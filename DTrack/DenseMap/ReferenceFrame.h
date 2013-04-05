@@ -186,7 +186,7 @@ private:
     unsigned int                            m_nDepth;
 
     /// KEYFRAME VARIABLES
-    bool                                    m_bKeyframe;          // true if frame is a keyframe
+    bool                                    m_bKeyframe;            // true if frame is a keyframe
     double                                  m_dSensorTime;          // time measurements were made
     cv::Mat                                 m_GreyImage;
     cv::Mat                                 m_GreyThumb;

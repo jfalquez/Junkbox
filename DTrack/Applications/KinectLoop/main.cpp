@@ -1,5 +1,4 @@
 #include <thread>
-//#include <functional>
 
 #include "DTrackApp.h"
 
