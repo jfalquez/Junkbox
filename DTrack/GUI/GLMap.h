@@ -155,7 +155,7 @@ private:
                 pVBO[nVboIdx+3] = 1;
             }
         }
-        /* */
+        */
 
         for( int ii = 0; ii < nHeight; ++ii ) {
             float lastDepth = -1;

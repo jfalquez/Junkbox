@@ -118,12 +118,12 @@ bool DenseFrontEnd::Init(
         GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
         GenerateDepthThumbnail( m_cdTemp, vImages[1].Image, DepthThumb );
 
-        m_pCurFrame = m_pMap->NewKeyframe( dSensorTime, vImages[0].Image, vImages[1].Image, GreyThumb, DepthThumb );
+        FramePtr pFrame = m_pMap->NewKeyframe( dSensorTime, vImages[0].Image, vImages[1].Image, GreyThumb, DepthThumb );
 
-        if( m_pCurFrame == NULL ) {
+        if( pFrame == NULL ) {
             return false;
         }
-        m_pMap->SetKeyframe( m_pCurFrame );
+        m_pMap->SetKeyframe( pFrame );
     }
 
     // reset Tpc
@@ -143,189 +143,233 @@ bool DenseFrontEnd::Iterate(
     // update error level in case user changed it
     mvl::PrintHandlerSetErrorLevel( feConfig.g_nErrorLevel );
 
-    /*
-     *      The map's global poses are updated at the end of every iteration with respect to the last frame.
-     *      So in essence, the previous frame is the new origin in global coordinates: Twp = I4
-     */
-    Eigen::Matrix4d Twc; Twc.setIdentity();
-    Eigen::Matrix4d Twp; Twp.setIdentity();
+    // The map's global poses are updated at the end of every iteration with respect to the last frame.
+    // So in essence, the previous frame is the new origin in global coordinates: Twp = I4
+    Eigen::Matrix4d Tw_c; Tw_c.setIdentity();
+    Eigen::Matrix4d Tw_p; Tw_p.setIdentity();
 
+
+    ///---------- MOTION MODELS
     // given a motion model or IMU, get estimated pose
     if( feConfig.g_bConstantVelocityMotionModel == true ) {
-        Twc = m_Tpc;
+        Tw_c = m_Tpc;
     }
 
-    // based on this pose, load closest keyframe (euclidean distance including rotation of sorts)
-    std::vector< std::pair< unsigned int, float > > vNearKeyframes;
 
-    if( feConfig.g_bAlwaysUseLastKeyframe == false ) {
-        m_pMap->FindClosestKeyframes( Twc, feConfig.g_fCloseKeyframeNorm, vNearKeyframes );
-    }
+    ///---------- CREATE NEW FRAME WITH INPUT IMAGES
+    // allocate thumb image
+    cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
 
-    // TODO: if this returns empty, run fast relocalizer (ie. all thumbnails).. if fast reloc fails, then break the map
-    // and run a slower relocalizer in the background
-
-    // set keyframe for localization
-    if( vNearKeyframes.empty() == false ) {
-        // if not empty, use closest keyframe
-        // TODO: refine closest keyframes with thumbnail matching to really narrow it down??
-        if( m_pMap->SetKeyframe( std::get<0>(vNearKeyframes[0]) ) == false ) {
-            PrintMessage( 1, "warning: there was an error setting closest keyframe.\n" );
-        }
-    }
-
-    // keyframe pointer
-    FramePtr pKeyframe = m_pMap->GetCurrentKeyframe();
-
-    unsigned int nKeyframeId = pKeyframe->GetId();
-    std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
-    Eigen::Matrix4d Twk = vPath[nKeyframeId];
-
-    // Tkc is what the estimator will gives us back
-    // we can seed this via: Tkc = Tkw * Twc = TInv( Twk ) * Twc
-    Eigen::Matrix4d Tkc = mvl::TInv( Twk ) * Twc;
-
-    Tic("PoseEstimate");
-    unsigned int nNumObservations;
-    double dTrackingError = _EstimateRelativePose( vImages[0].Image, pKeyframe, Tkc, nNumObservations );
-    m_Analytics["RMSE"] = std::pair<double, double>( dTrackingError, 0 );
-
-    // we would also like to get Tpc: transform from previous frame to current frame
-    // we obtain this via: Tpc = Tpk * Tkc
-    // given: Tpk = Tpw * Twk = TInv( Twp ) * Twk
-    Eigen::Matrix4d Tpc = mvl::TInv( Twp ) * Twk * Tkc;
-    m_Tpc = Tpc;
-    {
-        Eigen::Vector6d E = mvl::T2Cart(Tpc);
-        PrintMessage( 1, "--- Estimate: [ %f, %f, %f, %f, %f, %f ]\n", E(0), E(1), E(2), E(3), E(4), E(5) );
-    }
-    Toc("PoseEstimate");
-
-
-    Tic("Relocalizer");
-    if( dTrackingError < 5 ) {
-        m_eTrackingState = eTrackingGood;
-    } else if( dTrackingError < 20 ) {
-        m_eTrackingState = eTrackingPoor;
-    } else if( dTrackingError < 35 ) {
-        PrintMessage( 1, "warning: tracking is bad. (RMSE: %f)\n", dTrackingError );
-        m_eTrackingState = eTrackingBad;
-    } else {
-        PrintMessage( 1, "warning: tracking is failing (RMSE: %f)!! Calling relocalizer... \n", dTrackingError );
-        // TODO if here, run some sort of relocalizer?
-        double          dRelocError;
-        Eigen::Matrix4d Tpc_r;
-        int nRelocFrameId = _Relocalize( vImages[0].Image, Tpc_r, dRelocError );
-        if( nRelocFrameId != -1 && dRelocError < dTrackingError ) {
-            PrintMessage( 1, "Relocalizer successful! Matching Frame: %d (RMSE: %f)\n", nRelocFrameId, dRelocError );
-            dTrackingError = dRelocError;
-            Tpc = Tpc_r;
-            m_Tpc = Tpc;
-        } else {
-            PrintMessage( 1, "critical: Relocalizer failed!\n" );
-            m_eTrackingState = eTrackingFail;
-//            Toc("Relocalizer");
-            // "drop" frame
-            Tpc.setIdentity();
-            m_Tpc.setIdentity();
-//            m_Analytics["Lost-o-Meter"] = std::pair<double, double>( 1.0, 0 );
-            goto HERE;
-//            return true;
-        }
-    }
-//    m_Analytics["Lost-o-Meter"] = std::pair<double, double>( 0, 0 );
-    HERE:
-    Toc("Relocalizer");
+    // generate thumbnail
+    GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
 
     // TODO get this from the camera directly.. the property map should have it
     double dSensorTime = mvl::Tic();
 
-    // drop new keyframe if number of observations is too low
-    const unsigned int nNumPts = cv::countNonZero( vImages[1].Image );
-    double dObsThreshold = feConfig.g_fKeyframePtsThreshold * nNumPts;
-    m_Analytics["Num Obs"] = std::pair<double, double>( nNumObservations, dObsThreshold );
-    if( nNumObservations < dObsThreshold && dTrackingError > 5.0 ) {
+    // create frame
+    FramePtr pFrame = m_pMap->NewFrame( dSensorTime, vImages[0].Image, GreyThumb );
+    if( pFrame == NULL ) {
+        std::cerr << "error: generating new frame." << std::endl;
+        return false;
+    }
+    const unsigned int nFrameId = pFrame->GetId();
+
+
+    ///---------- LOCALIZE AGAINST LAST KEYFRAME
+
+    // get path of global poses
+    std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
+
+    FramePtr pLastKeyframe = m_pMap->GetCurrentKeyframe();
+    const unsigned int nLastKeyframeId = pLastKeyframe->GetId();
+    Eigen::Matrix4d Tw_lk = vPath[nLastKeyframeId];
+
+    // Tkc is what the estimator will gives us back
+    // we can seed this via: Tkc = Tkw * Twc = TInv( Twk ) * Twc
+    Eigen::Matrix4d Tlk_c = mvl::TInv( Tw_lk ) * Tw_c;
+
+    unsigned int nNumObsLastKeyframe;
+    double dErrorLastKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pLastKeyframe, Tlk_c, nNumObsLastKeyframe );
+    m_Analytics["RMSE Last"] = std::pair<double, double>( dErrorLastKeyframe, 0 );
+    {
+        Eigen::Vector6d E = mvl::T2Cart(Tlk_c);
+        PrintMessage( 1, "--- Estimate (L) (%f): [ %f, %f, %f, %f, %f, %f ]\n", dErrorLastKeyframe, E(0), E(1), E(2), E(3), E(4), E(5) );
+    }
+
+
+    ///---------- FIND CLOSEST KEYFRAMES
+    // based on current pose, load closest keyframe (euclidean distance including rotation of sorts)
+    std::vector< std::pair< unsigned int, float > > vNearKeyframes;
+    m_pMap->FindClosestKeyframes( Tw_c, feConfig.g_fCloseKeyframeNorm, vNearKeyframes );
+
+
+    ///---------- FIND BEST KEYFRAME
+    FramePtr pClosestKeyframe = NULL;
+    if( vNearKeyframes.empty() == false ) {
+
+        // TODO add grey-depth contribution ratio for matching?
+        float       fBestScore = FLT_MAX;
+
+        for( unsigned int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
+
+            const unsigned int nId = std::get<0>( vNearKeyframes[ii] );
+
+            // get frame pointer
+            FramePtr pCandidateFrame = m_pMap->GetFramePtr( nId );
+
+            // do not compare with non-keyframes
+            if( pCandidateFrame->IsKeyframe() == false ) {
+                continue;
+            }
+
+            float fScore = ScoreImages<unsigned char>( pFrame->GetGreyThumbRef(), pCandidateFrame->GetGreyThumbRef() );
+
+            if( fScore < fBestScore ) {
+                fBestScore = fScore;
+                pClosestKeyframe = pCandidateFrame;
+            }
+        }
+
+        double dSADThreshold = feConfig.g_nLoopClosureSAD * (m_nThumbHeight * m_nThumbWidth);
+
+        m_Analytics["LC SAD"] = std::pair<double, double>( fBestScore, dSADThreshold );
+
+        // if match is found, find pose estimate
+        if( fBestScore > dSADThreshold ) {
+            pClosestKeyframe = NULL;
+        }
+    }
+
+
+    ///---------- LOCALIZE AGAINST CLOSEST KEYFRAME
+    unsigned int nClosestKeyframeId;
+    unsigned int nNumObsClosestKeyframe;
+    double dErrorClosestKeyframe = DBL_MAX;
+    Eigen::Matrix4d Tck_c;
+    if( pClosestKeyframe == NULL || pLastKeyframe == pClosestKeyframe ) {
+        m_Analytics["RMSE Closest"] = std::pair<double, double>( 0, 0 );
+    } else {
+        nClosestKeyframeId = pClosestKeyframe->GetId();
+        Tck_c.setIdentity();    // the drift would kill this if we try to seed like for LastKeyframe
+        Eigen::Vector6d E2 = mvl::T2Cart(Tck_c);
+        PrintMessage( 1, "--- Seed: [ %f, %f, %f, %f, %f, %f ]\n", E2(0), E2(1), E2(2), E2(3), E2(4), E2(5) );
+        dErrorClosestKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pClosestKeyframe, Tck_c, nNumObsClosestKeyframe );
+        m_Analytics["RMSE Closest"] = std::pair<double, double>( dErrorClosestKeyframe, 0 );
+        {
+            Eigen::Vector6d E = mvl::T2Cart(Tck_c);
+            PrintMessage( 1, "--- Estimate (C) (%f): [ %f, %f, %f, %f, %f, %f ]\n", dErrorClosestKeyframe, E(0), E(1), E(2), E(3), E(4), E(5) );
+        }
+
+        ///---------- CHECK FOR LOOP CLOSURE
+        if( abs(nFrameId - nClosestKeyframeId) > feConfig.g_nLoopClosureMargin ) {
+            // frame is "distant" enough that we might consider it a valid loop closure
+            if( dErrorLastKeyframe < feConfig.g_dLoopClosureThreshold && dErrorClosestKeyframe < feConfig.g_dLoopClosureThreshold ) {
+                PrintMessage( 1, "Loop Closure Detected!!! Current Frame: %d -- Matching Frame: %d (RMSE: %f)\n", nFrameId, nClosestKeyframeId, dErrorClosestKeyframe );
+                m_eTrackingState = eTrackingLoopClosure;
+
+                // link frames
+                m_pMap->LinkFrames( pLastKeyframe, pFrame, Tlk_c );
+                m_pMap->LinkFrames( pClosestKeyframe, pFrame, Tck_c );
+
+                // reset m_Tpc in order to discard accumulated drift (for constant velocity model)
+                m_Tpc.setIdentity();
+
+                // update internal path
+                m_pMap->UpdateInternalPath();
+
+                return true;
+            }
+        }
+    }
+
+
+    ///---------- NORMAL TRACKING
+    // choose between best pose estimates
+    FramePtr pKeyframe;
+    unsigned int nNumObservations;
+    double dTrackingError;
+    Eigen::Matrix4d Tk_c;
+    Eigen::Matrix4d Tw_k;
+    if( dErrorLastKeyframe < dErrorClosestKeyframe || feConfig.g_bAlwaysUseLastKeyframe ) {
+        // choose estimate based on last keyframe
+        pKeyframe = pLastKeyframe;
+        dTrackingError = dErrorLastKeyframe;
+        nNumObservations = nNumObsLastKeyframe;
+        Tk_c = Tlk_c;
+        Tw_k = Tw_lk;
+    } else {
+        // choose estimate based on closest keyframe
+        pKeyframe = pClosestKeyframe;
+        dTrackingError = dErrorClosestKeyframe;
+        nNumObservations = nNumObsClosestKeyframe;
+        Tk_c.setIdentity();
+        Tw_k.setIdentity();
+    }
+
+    if( dTrackingError < 8.0 ) {
+        m_eTrackingState = eTrackingGood;
+    } else if( dTrackingError < 20.0 ) {
+        m_eTrackingState = eTrackingPoor;
+    } else if( dTrackingError < 35.0 ) {
+        PrintMessage( 0, "warning: tracking is bad. (RMSE: %f)\n", dTrackingError );
+        m_eTrackingState = eTrackingBad;
+    } else {
+        PrintMessage( 0, "warning: tracking is failing (RMSE: %f)!! Calling relocalizer... \n", dTrackingError );
+
+        ///---------- TRY GLOBAL RELOCALIZER
+        // TODO?? Expand search??
+
+
+        ///---------- WHEN ALL FAILS
+        PrintMessage( 1, "critical: Relocalizer failed!\n" );
+        m_eTrackingState = eTrackingFail;
+        // discard estimate
+        Tk_c.setIdentity();
+    }
+
+
+    ///---------- SAVE ESTIMATE
+    m_pMap->LinkFrames( pKeyframe, pFrame, Tk_c );
+
+
+    ///---------- UPDATE KEYFRAME
+    m_pMap->SetKeyframe( pKeyframe );
+
+
+    ///---------- KEYFRAME GENERATION
+    const unsigned int nNumDepthPts = cv::countNonZero( vImages[1].Image );
+    double dObsPts = (double)nNumObservations / (double)nNumDepthPts;
+
+    // convert frame to keyframe if number of observations is too low
+    m_Analytics["Num Obs"] = std::pair<double, double>( dObsPts, feConfig.g_fKeyframePtsThreshold );
+    if( dObsPts < feConfig.g_fKeyframePtsThreshold ) {
 
         Tic("GenKeyframe");
 
         // allocate thumb images
-        cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
         cv::Mat DepthThumb( m_nThumbHeight, m_nThumbWidth, CV_32FC1 );
 
         // generate thumbnails
-        GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
         GenerateDepthThumbnail( m_cdTemp, vImages[1].Image, DepthThumb );
 
-        // update frame pointers
-        m_pPrevFrame = m_pCurFrame;
+        pFrame->SetKeyframeFlag();
+        pFrame->SetDepthImage( vImages[1].Image );
+        pFrame->SetDepthThumb( DepthThumb );
 
-        m_pCurFrame = m_pMap->NewKeyframe( dSensorTime, vImages[0].Image, vImages[1].Image, GreyThumb, DepthThumb );
-
-        if( m_pCurFrame == NULL ) {
-            std::cerr << "error: generating new keyframe." << std::endl;
-            Toc("GenKeyframe");
-            return false;
-        }
-
-        // link previous frame with new frame (relative pose)
-//        m_pMap->LinkFrames( m_pPrevFrame, m_pCurFrame, Tpc );
-        m_pMap->LinkFrames( pKeyframe, m_pCurFrame, Tkc );
-
-        // set new keyframe as current keyframe
-        m_pMap->SetKeyframe( m_pCurFrame );
-
-        m_Analytics["Keyframes"] = std::pair<double, double>( 1.0, 0 );
+        m_pMap->SetKeyframe( pFrame );
 
         Toc("GenKeyframe");
-    } else {        // otherwise drop a regular frame
-
-        // allocate thumb image
-        cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
-
-        // generate thumbnail
-        GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
-
-        // update frame pointers
-        m_pPrevFrame = m_pCurFrame;
-
-        m_pCurFrame = m_pMap->NewFrame( dSensorTime, vImages[0].Image, GreyThumb );
-
-        if( m_pCurFrame == NULL ) {
-            std::cerr << "error: generating new frame." << std::endl;
-            return false;
-        }
-
-        // link previous frame with new frame (relative pose)
-//        m_pMap->LinkFrames( m_pPrevFrame, m_pCurFrame, Tpc );
-        m_pMap->LinkFrames( pKeyframe, m_pCurFrame, Tkc );
-
-        m_Analytics["Keyframes"] = std::pair<double, double>( 0, 0 );
     }
 
-    // update internal path based on this new frame added
+
+    // we would also like to get Tpc: transform from previous frame to current frame
+    // we obtain this via: Tpc = Tpk * Tkc
+    // given: Tpk = Tpw * Twk = TInv( Twp ) * Twk
+    m_Tpc = mvl::TInv( Tw_p ) * Tw_k * Tk_c;
+
+
+    // update internal path
     m_pMap->UpdateInternalPath();
-
-    // check for loop closure
-    /* */
-    Tic("LoopClosure");
-    double          dLoopClosureError;
-    Eigen::Matrix4d LoopClosureT;
-    int nLoopClosureFrameId = _LoopClosure( m_pCurFrame, LoopClosureT, dLoopClosureError );
-    m_Analytics["LC RMSE"] = std::pair<double, double>( dLoopClosureError, feConfig.g_dLoopClosureThreshold );
-    if( nLoopClosureFrameId != -1 && dLoopClosureError < feConfig.g_dLoopClosureThreshold ) {
-        PrintMessage( 0, "Loop Closure Detected!!! Current Frame: %d (%d) -- Matching Frame: %d (%d) (RMSE: %f)\n", m_pCurFrame->GetId(), m_pCurFrame->IsKeyframe(), nLoopClosureFrameId, m_pMap->GetFramePtr(nLoopClosureFrameId)->IsKeyframe(), dLoopClosureError );
-        m_eTrackingState = eTrackingLoopClosure;
-
-        // link frames
-        m_pMap->LinkFrames( m_pMap->GetFramePtr(nLoopClosureFrameId), m_pCurFrame, LoopClosureT );
-//        m_pMap->LinkFrames( m_pCurFrame, m_pMap->GetFramePtr(nLoopClosureFrameId),  LoopClosureT.inverse() );
-
-        // update internal path based on the loop closure
-        m_pMap->UpdateInternalPath();
-        m_pMap->Print();
-    }
-    Toc("LoopClosure");
-    /* */
 
     return true;
 }
@@ -583,7 +627,7 @@ int DenseFrontEnd::_LoopClosure(
         return -1;
     }
 
-    // TODO add grey-depth contribution ratio for matching
+    // TODO add grey-depth contribution ratio for matching?
 
     float       fBestScore = FLT_MAX;
     FramePtr    pBestMatch;

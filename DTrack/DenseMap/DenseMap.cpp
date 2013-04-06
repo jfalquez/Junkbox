@@ -407,15 +407,15 @@ void DenseMap::FindClosestKeyframes(
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::Print()
 {
-    printf("**************************************************************************************************\n");
+    printf("***************************************************************************************************************************\n");
     printf("\tPRINT MAP\n");
-    printf("**************************************************************************************************\n");
+    printf("***************************************************************************************************************************\n");
     for( unsigned int ii = 0; ii < m_vFrames.size(); ++ii ) {
         FramePtr pFrame = m_vFrames[ii];
         assert( ii = pFrame->GetId() );
         Eigen::Vector6d E = mvl::T2Cart( m_vPath[ii] );
-        printf( "Frame ID: %05d \t Keyframe: %d \t Current Global Pose: [ %.2f, %.2f, %.2f, %.2f, %.2f, %.2f ]\n", ii, pFrame->IsKeyframe(),
-               E(0), E(1), E(2), E(3), E(4), E(5) );
+        printf( "Frame ID: %05d \t Keyframe: %d \t Current Global Pose: [ %+.2f, %+.2f, %+.2f, %+.2f, %+.2f, %+.2f ]\n", ii,
+                pFrame->IsKeyframe(), E(0), E(1), E(2), E(3), E(4), E(5) );
 
         std::vector<unsigned int>& vNeighbors = pFrame->GetNeighbors();
         for( unsigned int& ii : vNeighbors ) {
@@ -425,10 +425,10 @@ void DenseMap::Print()
             Eigen::Matrix4d Tse;
             pEdge->GetOriginalTransform( nStartId, nEndId, Tse );
             E = mvl::T2Cart( Tse );
-            printf( "---  Start: %05d \t End: %05d \t Relative Transform: [ %.2f, %.2f, %.2f, %.2f, %.2f, %.2f ]\n", nStartId, nEndId,
-                E(0), E(1), E(2), E(3), E(4), E(5) );
+            printf( "---  Start: %05d \t End: %05d \t Relative Transform: [ %+.2f, %+.2f, %+.2f, %+.2f, %+.2f, %+.2f ]\n", nStartId, nEndId,
+                    E(0), E(1), E(2), E(3), E(4), E(5) );
         }
-        printf("-----------------------------------------------------------------------------------------------\n");
+        printf("-----------------------------------------------------------------------------------------------------------------\n");
     }
     printf( "Total Frames: %5d \t\t Total Edges: %5d\n\n", GetNumFrames(), GetNumEdges() );
     fflush(stdout);

@@ -91,16 +91,6 @@ public:
                     glCallList( m_nDrawListId );
                     glPopMatrix();
                 }
-                /*
-                for( auto it = vPoses.begin(); it != vPoses.end(); ++it ) {
-                    Eigen::Matrix4d&    Pose = it->second;
-
-                    glPushMatrix();
-                    glMultMatrixd( MAT4_COL_MAJOR_DATA( dOrigin * Pose ) );
-                    glCallList( m_nDrawListId );
-                    glPopMatrix();
-                }
-                */
             }
 
             if( m_bDrawLines ) {
@@ -119,60 +109,6 @@ public:
             }
             glPopMatrix();
         }
-        /* */
-
-
-        /*
-        std::vector< Eigen::Matrix4d >& vPath = m_pMap->GetPathRef();
-
-        if( m_bDrawAxis ) {
-            int start = 0;
-            if( m_nPoseDisplay != 0 ) {
-                if( vPath.size() > m_nPoseDisplay ) {
-                    start = vPath.size() - m_nPoseDisplay;
-                }
-            }
-            glPushMatrix();
-            for( int ii = 0; ii < (int)vPath.size(); ii++ ) {
-                glMultMatrixd( MAT4_COL_MAJOR_DATA( vPath[ii] ) );
-                if( ii >= start ) {
-                    glCallList( m_nDrawListId );
-                }
-            }
-            glPopMatrix();
-        }
-
-        if( m_bDrawPoints ) {
-            glPointSize( m_fPointSize );
-            glEnable( GL_POINT_SMOOTH );
-            glEnable( GL_BLEND );
-            glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
-            glColor4f( m_fPointColor(0), m_fPointColor(1), m_fPointColor(2), m_fPointColor(3) );
-            Eigen::Matrix4d T;
-            T.setIdentity();
-            glBegin( GL_POINTS );
-            for( int ii = 0; ii < (int)vPath.size(); ii++ ) {
-                T = T * vPath[ii];
-                glVertex3f( T(0,3), T(1,3), T(2,3) );
-            }
-            glEnd();
-        }
-
-        if( m_bDrawLines ) {
-            glEnable( GL_LINE_SMOOTH );
-            glLineWidth( 1 );
-            glColor4f( m_fLineColor(0), m_fLineColor(1), m_fLineColor(2), m_fLineColor(3) );
-
-            Eigen::Matrix4d T;
-            T.setIdentity();
-            glBegin( GL_LINE_STRIP );
-            for( int ii = 0; ii < (int)vPath.size(); ii++ ) {
-                T = T * vPath[ii];
-                glVertex3f( T(0,3), T(1,3), T(2,3) );
-            }
-            glEnd();
-        }
-        /* */
 
         glPopMatrix();
         glPopAttrib();

@@ -50,8 +50,6 @@ int main( int argc, char** argv )
     Gui gui("DTrack", 1280, 800);
     gui.Init();
 
-    /// two threads
-    /* */
     // start tracker thread
     std::thread TT( DTrackThread, std::ref(gui), argc, argv);
 
@@ -60,44 +58,6 @@ int main( int argc, char** argv )
 
     // wait for thread to join
     TT.join();
-    /* */
-
-    /// single thread
-    /*
-    DTrackApp app;
-    if( !app.InitReset( argc, argv ) ) {
-        std::cerr << "error: a problem occured while initializing app." << std::endl;
-    }
-
-    app.UpdateGui( gui );
-
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    pangolin::FinishGlutFrame();
-
-    while( !pangolin::ShouldQuit() ) {
-
-        std::cout << ".";
-        sleep(1);
-
-        app.StepOnce( gui );
-
-        app.UpdateGui( gui );
-
-        if( gui.m_bMapDirty ) {
-            // the map has changed update it before rendering again
-            gui.m_pRenderMap->CopyMapChanges( *(gui.m_pChangesBufferMap) );
-            gui.m_bMapDirty = false;
-        }
-
-        app.UpdateGui( gui );
-
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        pangolin::FinishGlutFrame();
-
-        usleep(1000000 / 120);
-    }
-    /* */
-
 
     return 0;
 }

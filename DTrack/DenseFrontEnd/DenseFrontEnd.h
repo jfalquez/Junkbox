@@ -30,6 +30,8 @@ typedef std::vector< rpg::ImageWrapper >               CamImages;
  *
  */
 
+// TODO: this is retarded since we are not using them as flags.. no need to have them powers of 2.
+// Eventually implement flags so that, say, tracking is good AND loop closure is flagged.
 enum eTrackingState
 {
     eTrackingGood           = 1,
@@ -129,9 +131,6 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
     eTrackingState                                          m_eTrackingState;
-
-    FramePtr                                                m_pCurFrame;
-    FramePtr                                                m_pPrevFrame;
 
     Eigen::Matrix4d                                         m_Tpc;              // estimate from previous to current frame
 
