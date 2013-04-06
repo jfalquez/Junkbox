@@ -4,7 +4,11 @@
 #include <CVars/CVarVectorIO.h>
 
 #include <Eigen/Core>
+
+#pragma GCC diagnostic ignored "-Wignored-qualifiers"
 #include <sophus/se3.hpp>
+#pragma GCC diagnostic pop
+
 
 ////////////////////////////////////////////////////////////////////////////
 // Overloading Eigen for CVars

@@ -26,10 +26,12 @@ public:
         m_fPointColor(2) = 0.0;
         m_fPointColor(3) = 1.0;
         m_fPointSize = 5.0;
+        m_fSphereRadius = 3.0;
         m_nPoseDisplay = 0;
         m_bDrawAxis = true;
         m_bDrawLines = true;
         m_bDrawPoints = true;
+        m_bDrawSphere = true;
     }
 
     ~GLPath()
@@ -61,10 +63,6 @@ public:
 
         glLineWidth(1);
 
-        // draw at base pose
-        glPushMatrix();
-        glCallList( m_nDrawListId );
-
 
         std::map<unsigned int, Eigen::Matrix4d>& vPoses = m_pMap->GetInternalPath();
 
@@ -84,7 +82,7 @@ public:
                         start = vPoses.size() - m_nPoseDisplay;
                     }
                 }
-                for( int ii = start; ii < (int)vPoses.size(); ++ii ) {
+                for( unsigned int ii = start; ii < vPoses.size(); ++ii ) {
                     Eigen::Matrix4d&    Pose = vPoses[ii];
                     glPushMatrix();
                     glMultMatrixd( MAT4_COL_MAJOR_DATA( dOrigin * Pose ) );
@@ -92,6 +90,7 @@ public:
                     glPopMatrix();
                 }
             }
+
 
             if( m_bDrawLines ) {
                 glPushMatrix();
@@ -107,10 +106,22 @@ public:
                 glEnd();
                 glPopMatrix();
             }
+
+
+            if( m_bDrawSphere ) {
+                unsigned int nLast = vPoses.size()-1;
+                Eigen::Matrix4d&    Pose = vPoses[nLast];
+                glColor4f( 0.9, 0.9, 1.0, 0.20 );
+                glPushMatrix();
+                glMultMatrixd( MAT4_COL_MAJOR_DATA( dOrigin * Pose ) );
+                glutSolidSphere( m_fSphereRadius, 30, 30 );
+                glPopMatrix();
+            }
+
             glPopMatrix();
+
         }
 
-        glPopMatrix();
         glPopAttrib();
     }
 
@@ -145,6 +156,11 @@ public:
         m_fPointSize = Size;
     }
 
+    void SetSphereRadius( float Size )
+    {
+        m_fSphereRadius = Size;
+    }
+
     void DrawLines( bool Val )
     {
         m_bDrawLines = Val;
@@ -153,6 +169,11 @@ public:
     void DrawPoints( bool Val )
     {
         m_bDrawPoints = Val;
+    }
+
+    void DrawSphere( bool Val )
+    {
+        m_bDrawSphere = Val;
     }
 
     void DrawAxis( bool Val )
@@ -218,8 +239,10 @@ private:
     bool                            m_bDrawLines;
     bool                            m_bDrawAxis;
     bool                            m_bDrawPoints;
+    bool                            m_bDrawSphere;
     GLuint                          m_nDrawListId;
     float                           m_fPointSize;
+    float                           m_fSphereRadius;
     unsigned int                    m_nPoseDisplay;
     bool                            m_bInitGLComplete;
     Eigen::Vector4f                 m_fLineColor;

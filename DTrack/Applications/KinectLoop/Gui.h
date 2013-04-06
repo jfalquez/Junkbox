@@ -20,6 +20,7 @@
 
 
 GuiConfig           guiConfig;
+extern              DenseFrontEndConfig feConfig;
 
 enum GuiState { PLAYING, STEPPING, PAUSED, RESETTING, RESET_COMPLETE, GETSTATE, QUIT };
 
@@ -247,6 +248,7 @@ void Gui::Run()
          // update gui variables
          m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
          m_glPath.SetPoseDisplay( guiConfig.g_nNumPosesToShow );
+         m_glPath.SetSphereRadius( feConfig.g_fCloseKeyframeNorm );
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 

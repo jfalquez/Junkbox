@@ -176,7 +176,7 @@ bool DenseFrontEnd::Iterate(
 
 
     ///---------- LOCALIZE AGAINST LAST KEYFRAME
-
+    Tic("Localize Last");
     // get path of global poses
     std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
 
@@ -195,9 +195,11 @@ bool DenseFrontEnd::Iterate(
         Eigen::Vector6d E = mvl::T2Cart(Tlk_c);
         PrintMessage( 1, "--- Estimate (L) (%f): [ %f, %f, %f, %f, %f, %f ]\n", dErrorLastKeyframe, E(0), E(1), E(2), E(3), E(4), E(5) );
     }
+    Toc("Localize Last");
 
 
     ///---------- FIND CLOSEST KEYFRAMES
+    Tic("Find Close KF");
     // based on current pose, load closest keyframe (euclidean distance including rotation of sorts)
     std::vector< std::pair< unsigned int, float > > vNearKeyframes;
     m_pMap->FindClosestKeyframes( Tw_c, feConfig.g_fCloseKeyframeNorm, vNearKeyframes );
@@ -239,9 +241,11 @@ bool DenseFrontEnd::Iterate(
             pClosestKeyframe = NULL;
         }
     }
+    Toc("Find Close KF");
 
 
     ///---------- LOCALIZE AGAINST CLOSEST KEYFRAME
+    Tic("Localize Close");
     unsigned int nClosestKeyframeId;
     unsigned int nNumObsClosestKeyframe;
     double dErrorClosestKeyframe = DBL_MAX;
@@ -261,6 +265,7 @@ bool DenseFrontEnd::Iterate(
         }
 
         ///---------- CHECK FOR LOOP CLOSURE
+        Tic("Loop Closure");
         if( abs(nFrameId - nClosestKeyframeId) > feConfig.g_nLoopClosureMargin ) {
             // frame is "distant" enough that we might consider it a valid loop closure
             if( dErrorLastKeyframe < feConfig.g_dLoopClosureThreshold && dErrorClosestKeyframe < feConfig.g_dLoopClosureThreshold ) {
@@ -277,10 +282,14 @@ bool DenseFrontEnd::Iterate(
                 // update internal path
                 m_pMap->UpdateInternalPath();
 
+                Toc("Loop Closure");
+                Toc("Localize Close");
                 return true;
             }
         }
+        Toc("Loop Closure");
     }
+    Toc("Localize Close");
 
 
     ///---------- NORMAL TRACKING
@@ -344,8 +353,6 @@ bool DenseFrontEnd::Iterate(
     m_Analytics["Num Obs"] = std::pair<double, double>( dObsPts, feConfig.g_fKeyframePtsThreshold );
     if( dObsPts < feConfig.g_fKeyframePtsThreshold ) {
 
-        Tic("GenKeyframe");
-
         // allocate thumb images
         cv::Mat DepthThumb( m_nThumbHeight, m_nThumbWidth, CV_32FC1 );
 
@@ -358,7 +365,6 @@ bool DenseFrontEnd::Iterate(
 
         m_pMap->SetKeyframe( pFrame );
 
-        Toc("GenKeyframe");
     }
 
 
@@ -546,131 +552,4 @@ double DenseFrontEnd::_EstimateRelativePose(
     Tkc = Tvr.inverse() * Tkc * Tvr;
 
     return dLastError;
-}
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int DenseFrontEnd::_Relocalize(
-        const cv::Mat&          Image,          //< Input: Image from which we want to relocalize
-        Eigen::Matrix4d&        T,              //< Output: Transform between input frame and closest matching frame
-        double&                 dError          //< Output: RMSE of estimated transform
-    )
-{
-    // find closest frames around our current position
-    std::vector< std::pair< unsigned int, float > > vNearKeyframes;
-    m_pMap->FindClosestKeyframes( Eigen::Matrix4d::Identity(), feConfig.g_fLoopClosureRadius, vNearKeyframes );
-    if( vNearKeyframes.empty() ) {
-        return -1;
-    }
-
-    // allocate thumb images
-    cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
-
-    // generate thumbnails
-    GenerateGreyThumbnail( m_cdTemp, Image, GreyThumb );
-
-
-    float       fBestScore = FLT_MAX;
-    FramePtr    pBestMatch;
-
-    for( unsigned int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
-
-        const unsigned int nId = std::get<0>( vNearKeyframes[ii] );
-
-        // get frame pointer
-        FramePtr pMatchFrame = m_pMap->GetFramePtr( nId );
-
-        // do not compare with non-keyframes
-        if( pMatchFrame->IsKeyframe() == false ) {
-            continue;
-        }
-
-        float fScore = ScoreImages<unsigned char>( GreyThumb, pMatchFrame->GetGreyThumbRef() );
-
-        if( fScore < fBestScore ) {
-            fBestScore = fScore;
-            pBestMatch = pMatchFrame;
-        }
-    }
-
-    double dSADThreshold = feConfig.g_nLoopClosureSAD * (m_nThumbHeight * m_nThumbWidth);
-
-    // if no match is found, return -1
-    if( fBestScore >  dSADThreshold ) {
-        return -1;
-    }
-
-    // calculate transform between best match and input frame
-    unsigned int nNumObservations;
-    dError = _EstimateRelativePose( Image, pBestMatch, T, nNumObservations );
-
-    return pBestMatch->GetId();
-}
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int DenseFrontEnd::_LoopClosure(
-        FramePtr                pFrame,         //< Input: Frame we are attempting to find a loop closure
-        Eigen::Matrix4d&        T,              //< Output: Transform between input frame and closest matching frame
-        double&                 dError          //< Output: RMSE of estimated transform
-    )
-{
-    const unsigned int nFrameId = pFrame->GetId();
-
-    std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
-    Eigen::Matrix4d Pose = vPath[nFrameId];
-
-    // find closest frames around our current position
-    std::vector< std::pair< unsigned int, float > > vNearKeyframes;
-    m_pMap->FindClosestKeyframes( Pose, feConfig.g_fLoopClosureRadius, vNearKeyframes );
-    if( vNearKeyframes.empty() ) {
-        return -1;
-    }
-
-    // TODO add grey-depth contribution ratio for matching?
-
-    float       fBestScore = FLT_MAX;
-    FramePtr    pBestMatch;
-
-    for( unsigned int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
-
-        const unsigned int nId = std::get<0>( vNearKeyframes[ii] );
-
-        // do not try to compare with frames too close too us
-        if( abs(nId - nFrameId) <= feConfig.g_nLoopClosureMargin ) {
-            continue;
-        }
-
-        // get frame pointer
-        FramePtr pMatchFrame = m_pMap->GetFramePtr( nId );
-
-        // do not compare with non-keyframes
-        if( pMatchFrame->IsKeyframe() == false ) {
-            continue;
-        }
-
-        float fScore = ScoreImages<unsigned char>( pFrame->GetGreyThumbRef(), pMatchFrame->GetGreyThumbRef() );
-
-        if( fScore < fBestScore ) {
-            fBestScore = fScore;
-            pBestMatch = pMatchFrame;
-        }
-    }
-
-    double dSADThreshold = feConfig.g_nLoopClosureSAD * (m_nThumbHeight * m_nThumbWidth);
-
-    m_Analytics["LC SAD"] = std::pair<double, double>( fBestScore, dSADThreshold );
-
-    // if no match is found, return -1
-    if( fBestScore >  dSADThreshold ) {
-        return -1;
-    }
-
-    PrintMessage( 1, "Loop Closure candidate found! (SAD: %f)\n", fBestScore );
-
-    // calculate transform between best match and input frame
-    unsigned int nNumObservations;
-    dError = _EstimateRelativePose( pFrame->GetGreyImageRef(), pBestMatch, T, nNumObservations );
-
-    return pBestMatch->GetId();
 }

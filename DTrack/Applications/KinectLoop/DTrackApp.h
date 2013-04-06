@@ -31,7 +31,7 @@ class DTrackApp
             GetPot clArgs( argc, argv );
 
             //----- init camera 1 with default initializer
-            m_Cam.SetProperty("BufferSize", 20);
+//            m_Cam.SetProperty("BufferSize", 20);
 
             // initialize camera
             if( !rpg::InitCam( m_Cam, clArgs ) ) {
