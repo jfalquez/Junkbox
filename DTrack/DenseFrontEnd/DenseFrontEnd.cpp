@@ -127,7 +127,7 @@ bool DenseFrontEnd::Init(
     }
 
     // reset Tpc
-    m_Tpc.setIdentity();
+    m_T_p_c.setIdentity();
 
     // keep internal map's path up to date
     m_pMap->UpdateInternalPath();
@@ -145,14 +145,14 @@ bool DenseFrontEnd::Iterate(
 
     // The map's global poses are updated at the end of every iteration with respect to the last frame.
     // So in essence, the previous frame is the new origin in global coordinates: Twp = I4
-    Eigen::Matrix4d Tw_c; Tw_c.setIdentity();
-    Eigen::Matrix4d Tw_p; Tw_p.setIdentity();
+    Eigen::Matrix4d T_w_c; T_w_c.setIdentity();
+    Eigen::Matrix4d T_w_p; T_w_p.setIdentity();
 
 
     ///---------- MOTION MODELS
     // given a motion model or IMU, get estimated pose
     if( feConfig.g_bConstantVelocityMotionModel == true ) {
-        Tw_c = m_Tpc;
+        T_w_c = m_T_p_c;
     }
 
 
@@ -182,17 +182,17 @@ bool DenseFrontEnd::Iterate(
 
     FramePtr pLastKeyframe = m_pMap->GetCurrentKeyframe();
     const unsigned int nLastKeyframeId = pLastKeyframe->GetId();
-    Eigen::Matrix4d Tw_lk = vPath[nLastKeyframeId];
+    Eigen::Matrix4d T_w_lk = vPath[nLastKeyframeId];
 
     // Tkc is what the estimator will gives us back
     // we can seed this via: Tkc = Tkw * Twc = TInv( Twk ) * Twc
-    Eigen::Matrix4d Tlk_c = mvl::TInv( Tw_lk ) * Tw_c;
+    Eigen::Matrix4d T_lk_c = mvl::TInv( T_w_lk ) * T_w_c;
 
     unsigned int nNumObsLastKeyframe;
-    double dErrorLastKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pLastKeyframe, Tlk_c, nNumObsLastKeyframe );
+    double dErrorLastKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pLastKeyframe, T_lk_c, nNumObsLastKeyframe );
     m_Analytics["RMSE Last"] = std::pair<double, double>( dErrorLastKeyframe, 0 );
     {
-        Eigen::Vector6d E = mvl::T2Cart(Tlk_c);
+        Eigen::Vector6d E = mvl::T2Cart(T_lk_c);
         PrintMessage( 1, "--- Estimate (L) (%f): [ %f, %f, %f, %f, %f, %f ]\n", dErrorLastKeyframe, E(0), E(1), E(2), E(3), E(4), E(5) );
     }
     Toc("Localize Last");
@@ -202,7 +202,7 @@ bool DenseFrontEnd::Iterate(
     Tic("Find Close KF");
     // based on current pose, load closest keyframe (euclidean distance including rotation of sorts)
     std::vector< std::pair< unsigned int, float > > vNearKeyframes;
-    m_pMap->FindClosestKeyframes( Tw_c, feConfig.g_fCloseKeyframeNorm, vNearKeyframes );
+    m_pMap->FindClosestKeyframes( T_w_c, feConfig.g_fCloseKeyframeNorm, vNearKeyframes );
 
 
     ///---------- FIND BEST KEYFRAME
@@ -249,18 +249,18 @@ bool DenseFrontEnd::Iterate(
     unsigned int nClosestKeyframeId;
     unsigned int nNumObsClosestKeyframe;
     double dErrorClosestKeyframe = DBL_MAX;
-    Eigen::Matrix4d Tck_c;
+    Eigen::Matrix4d T_ck_c;
     if( pClosestKeyframe == NULL || pLastKeyframe == pClosestKeyframe ) {
         m_Analytics["RMSE Closest"] = std::pair<double, double>( 0, 0 );
     } else {
         nClosestKeyframeId = pClosestKeyframe->GetId();
-        Tck_c.setIdentity();    // the drift would kill this if we try to seed like for LastKeyframe
-        Eigen::Vector6d E2 = mvl::T2Cart(Tck_c);
+        T_ck_c.setIdentity();    // the drift would kill this if we try to seed like for LastKeyframe
+        Eigen::Vector6d E2 = mvl::T2Cart(T_ck_c);
         PrintMessage( 1, "--- Seed: [ %f, %f, %f, %f, %f, %f ]\n", E2(0), E2(1), E2(2), E2(3), E2(4), E2(5) );
-        dErrorClosestKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pClosestKeyframe, Tck_c, nNumObsClosestKeyframe );
+        dErrorClosestKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pClosestKeyframe, T_ck_c, nNumObsClosestKeyframe );
         m_Analytics["RMSE Closest"] = std::pair<double, double>( dErrorClosestKeyframe, 0 );
         {
-            Eigen::Vector6d E = mvl::T2Cart(Tck_c);
+            Eigen::Vector6d E = mvl::T2Cart(T_ck_c);
             PrintMessage( 1, "--- Estimate (C) (%f): [ %f, %f, %f, %f, %f, %f ]\n", dErrorClosestKeyframe, E(0), E(1), E(2), E(3), E(4), E(5) );
         }
 
@@ -273,11 +273,11 @@ bool DenseFrontEnd::Iterate(
                 m_eTrackingState = eTrackingLoopClosure;
 
                 // link frames
-                m_pMap->LinkFrames( pLastKeyframe, pFrame, Tlk_c );
-                m_pMap->LinkFrames( pClosestKeyframe, pFrame, Tck_c );
+                m_pMap->LinkFrames( pLastKeyframe, pFrame, T_lk_c );
+                m_pMap->LinkFrames( pClosestKeyframe, pFrame, T_ck_c );
 
                 // reset m_Tpc in order to discard accumulated drift (for constant velocity model)
-                m_Tpc.setIdentity();
+                m_T_p_c.setIdentity();
 
                 // update internal path
                 m_pMap->UpdateInternalPath();
@@ -297,22 +297,22 @@ bool DenseFrontEnd::Iterate(
     FramePtr pKeyframe;
     unsigned int nNumObservations;
     double dTrackingError;
-    Eigen::Matrix4d Tk_c;
-    Eigen::Matrix4d Tw_k;
+    Eigen::Matrix4d T_k_c;
+    Eigen::Matrix4d T_w_k;
     if( dErrorLastKeyframe < dErrorClosestKeyframe || feConfig.g_bAlwaysUseLastKeyframe ) {
         // choose estimate based on last keyframe
         pKeyframe = pLastKeyframe;
         dTrackingError = dErrorLastKeyframe;
         nNumObservations = nNumObsLastKeyframe;
-        Tk_c = Tlk_c;
-        Tw_k = Tw_lk;
+        T_k_c = T_lk_c;
+        T_w_k = T_w_lk;
     } else {
         // choose estimate based on closest keyframe
         pKeyframe = pClosestKeyframe;
         dTrackingError = dErrorClosestKeyframe;
         nNumObservations = nNumObsClosestKeyframe;
-        Tk_c.setIdentity();
-        Tw_k.setIdentity();
+        T_k_c.setIdentity();
+        T_w_k.setIdentity();
     }
 
     if( dTrackingError < 8.0 ) {
@@ -333,12 +333,12 @@ bool DenseFrontEnd::Iterate(
         PrintMessage( 1, "critical: Relocalizer failed!\n" );
         m_eTrackingState = eTrackingFail;
         // discard estimate
-        Tk_c.setIdentity();
+        T_k_c.setIdentity();
     }
 
 
     ///---------- SAVE ESTIMATE
-    m_pMap->LinkFrames( pKeyframe, pFrame, Tk_c );
+    m_pMap->LinkFrames( pKeyframe, pFrame, T_k_c );
 
 
     ///---------- UPDATE KEYFRAME
@@ -371,7 +371,7 @@ bool DenseFrontEnd::Iterate(
     // we would also like to get Tpc: transform from previous frame to current frame
     // we obtain this via: Tpc = Tpk * Tkc
     // given: Tpk = Tpw * Twk = TInv( Twp ) * Twk
-    m_Tpc = mvl::TInv( Tw_p ) * Tw_k * Tk_c;
+    m_T_p_c = mvl::TInv( T_w_p ) * T_w_k * T_k_c;
 
 
     // update internal path
@@ -417,7 +417,6 @@ double DenseFrontEnd::_EstimateRelativePose(
     BrightnessCorrectionImagePair( lGreyImg.data, pKeyframe->GetGreyImagePtr(), m_nImageHeight*m_nImageWidth );
 
 
-    Tic("Upload");
     //--- upload GREYSCALE data to GPU as a pyramid
     m_cdGreyPyr[0].MemcpyFromHost( lGreyImg.data, m_nImageWidth );
     m_cdKeyGreyPyr[0].MemcpyFromHost( pKeyframe->GetGreyImagePtr() );
@@ -437,7 +436,6 @@ double DenseFrontEnd::_EstimateRelativePose(
 
     // downsample depth maps
     Gpu::BoxReduce<float, MAX_PYR_LEVELS, float>( m_cdKeyDepthPyr );
-    Toc("Upload");
 
     //--- localize
     // IMPORTANT!!!!!!!
@@ -456,7 +454,6 @@ double DenseFrontEnd::_EstimateRelativePose(
 
     double          dLastError;
 
-    Tic("Localize");
     for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
         dLastError = DBL_MAX;
         for(int ii = 0; ii < feConfig.g_vPyrMaxIters[PyrLvl]; ii++ ) {
@@ -546,7 +543,6 @@ double DenseFrontEnd::_EstimateRelativePose(
             nNumObs = LSS.obs;
         }
     }
-    Toc("Localize");
 
     // convert estimate to ROBOTICS frame
     Tkc = Tvr.inverse() * Tkc * Tvr;

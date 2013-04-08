@@ -167,8 +167,8 @@ class DTrackApp
 
                 // pause if loop closure and call pose graph relaxation
                 if( m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
-                    rGui.SetState( PAUSED );
-                    m_pBackEnd->_PoseRelax();
+//                    rGui.SetState( PAUSED );
+                    m_pBackEnd->DoPoseGraphRelaxation();
                  }
 
                 // pause if we are lost

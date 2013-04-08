@@ -1,6 +1,10 @@
-
 #ifndef _DENSE_BACK_END_H_
 #define _DENSE_BACK_END_H_
+
+#include <mutex>
+#include <thread>
+#include <condition_variable>
+#include <atomic>
 
 #include <DenseMap/DenseMap.h>
 
@@ -24,6 +28,12 @@ public:
         );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    void DoPoseGraphRelaxation();
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    static void _PoseGraphThread( DenseBackEnd* pBE );
+
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     void _PoseRelax();
 
 
@@ -33,8 +43,14 @@ private:
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 private:
-    DenseMap*                                               m_pMap;             // map use for estimating poses
+    DenseMap*                                               m_pMap;                 // map use for estimating poses
 
+    std::atomic<bool>                                       m_bRun;
+    std::mutex                                              m_Mutex;
+
+    std::thread*                                            m_pPGThread;
+    std::atomic<bool>                                       m_bDoPGRelaxation;
+    std::condition_variable                                 m_PGCond;
 
 };
 

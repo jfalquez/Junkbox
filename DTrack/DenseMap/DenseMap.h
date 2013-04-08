@@ -2,6 +2,7 @@
 #define _DENSE_MAP_H_
 
 #include <map>
+#include <mutex>
 #include <memory>
 
 #pragma GCC diagnostic ignored "-Wignored-qualifiers"
@@ -240,6 +241,12 @@ public:
     void Print();
 
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// mutex
+    void Lock() { m_Mutex.lock(); }
+    void Unlock() { m_Mutex.unlock(); }
+
+
 private:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -283,6 +290,7 @@ private:
     std::vector< FramePtr >                     m_vFrames;              // list of map's reference frames
     std::vector< EdgePtr >                      m_vEdges;               // list of map's edges
 
+    std::mutex                                  m_Mutex;
 };
 
 #endif

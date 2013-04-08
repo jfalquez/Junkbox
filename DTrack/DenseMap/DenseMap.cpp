@@ -51,8 +51,10 @@ FramePtr DenseMap::NewFrame(
     pFrame->SetTime( dTime );
     pFrame->SetGreyImage( GreyImage );
     pFrame->SetGreyThumb( GreyThumb );
-    m_vFrames.push_back( pFrame );
+    Lock();
     _UpdateModifiedTime();
+    m_vFrames.push_back( pFrame );
+    Unlock();
     return pFrame;
 }
 
@@ -74,8 +76,10 @@ FramePtr DenseMap::NewKeyframe(
     pFrame->SetDepthImage( DepthImage );
     pFrame->SetGreyThumb( GreyThumb );
     pFrame->SetDepthThumb( DepthThumb );
-    m_vFrames.push_back( pFrame );
+    Lock();
     _UpdateModifiedTime();
+    m_vFrames.push_back( pFrame );
+    Unlock();
     return pFrame;
 }
 
@@ -128,8 +132,10 @@ void DenseMap::LinkFrames(
     pA->AddNeighbor( nEdgeId );
     pB->AddNeighbor( nEdgeId );
     pB->SetParentEdgeId( nEdgeId );
+    Lock();
     _UpdateModifiedTime();
     m_vEdges.push_back( pEdge );
+    Unlock();
 }
 
 
@@ -598,10 +604,12 @@ void DenseMap::GenerateAbsolutePoses(
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::UpdateInternalPath()
 {
+    Lock();
     m_vPath.clear();
     GenerateAbsolutePoses( m_vPath );
     _DynamicGroundPlaneEstimation();
     _UpdateModifiedTime();
+    Unlock();
 }
 
 

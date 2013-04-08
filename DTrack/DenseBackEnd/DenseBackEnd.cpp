@@ -18,6 +18,11 @@ DenseBackEnd::DenseBackEnd()
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 DenseBackEnd::~DenseBackEnd()
 {
+    // set flag to kill all threads
+    m_bRun = false;
+
+    // wait for threads to die
+    m_pPGThread->join();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -28,7 +33,39 @@ bool DenseBackEnd::Init(
     // assign map
     m_pMap = pMap;
 
+    // reset flag
+    m_bRun = true;
+
+    // start pose graph relaxation thread
+    m_bDoPGRelaxation = false;
+    m_pPGThread = new std::thread( _PoseGraphThread, this );
+
     return true;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseBackEnd::DoPoseGraphRelaxation()
+{
+    m_bDoPGRelaxation = true;
+    m_PGCond.notify_one();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseBackEnd::_PoseGraphThread(
+        DenseBackEnd*       pBE
+    )
+{
+    while( pBE->m_bRun ) {
+
+        std::unique_lock< std::mutex > lock(pBE->m_Mutex);
+        while( pBE->m_bDoPGRelaxation == false ) {
+            pBE->m_PGCond.wait(lock);
+        }
+        pBE->_PoseRelax();
+        sleep(2);
+    }
 }
 
 
@@ -59,6 +96,9 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseBackEnd::_PoseRelax()
 {
+    //----- START DANGER ZONE
+    m_pMap->Lock();
+    m_bDoPGRelaxation = false;
     std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
     std::vector< Sophus::SE3d  > vAbsPoses;
     vAbsPoses.reserve( vPath.size() );
@@ -69,9 +109,12 @@ void DenseBackEnd::_PoseRelax()
         vAbsPoses.push_back( Sophus::SE3d( vPath[ii] ) );
         Problem.AddParameterBlock( vAbsPoses.back().data(), 7, pLocalParam );
     }
+    const unsigned int nNumEdges = m_pMap->GetNumEdges();
+    m_pMap->Unlock();
+    //----- END DANGER ZONE
 
     // add all edges
-    for( unsigned int ii = 0; ii < m_pMap->GetNumEdges(); ++ii ) {
+    for( unsigned int ii = 0; ii < nNumEdges; ++ii ) {
         EdgePtr pEdge = m_pMap->GetEdgePtr( ii );
         const unsigned int nStartId = pEdge->GetStartId();
         const unsigned int nEndId = pEdge->GetEndId();
@@ -87,7 +130,7 @@ void DenseBackEnd::_PoseRelax()
     std::cout << SolverSummary.BriefReport() << std::endl;
 
     // copy vAbsPoses as relative transforms back to the map
-    for( unsigned int ii = 0; ii < m_pMap->GetNumEdges(); ++ii ) {
+    for( unsigned int ii = 0; ii < nNumEdges; ++ii ) {
         EdgePtr pEdge = m_pMap->GetEdgePtr( ii );
         const unsigned int nStartId = pEdge->GetStartId();
         const unsigned int nEndId = pEdge->GetEndId();
