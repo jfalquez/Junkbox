@@ -280,17 +280,17 @@ void Gui::UpdateImages(
         m_nImageHeight = LiveGrey.rows;
     }
 
-    m_LiveGrey.SetImage( LiveGrey.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE );
+    m_LiveGrey.SetImage( LiveGrey.data, m_nImageWidth, m_nImageHeight, GL_RGB8, GL_LUMINANCE );
 
     FramePtr pKeyframe = m_pRenderMap->GetCurrentKeyframe();
     if( pKeyframe ) {
         cv::Mat KeyGrey, KeyDepth;
         pKeyframe->CopyGreyImageTo( KeyGrey );
         pKeyframe->CopyDepthImageTo( KeyDepth );
-        m_KeyGrey.SetImage( KeyGrey.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_BYTE );
+        m_KeyGrey.SetImage( KeyGrey.data, m_nImageWidth, m_nImageHeight, GL_RGB8, GL_LUMINANCE, GL_UNSIGNED_BYTE );
         // TODO currently a rough normalization.. make it nicer
         KeyDepth = KeyDepth / 20.0;
-        m_KeyDepth.SetImage( KeyDepth.data, m_nImageWidth, m_nImageHeight, GL_INTENSITY, GL_LUMINANCE, GL_FLOAT );
+        m_KeyDepth.SetImage( KeyDepth.data, m_nImageWidth, m_nImageHeight, GL_RGB8, GL_LUMINANCE, GL_FLOAT );
     }
 }
 

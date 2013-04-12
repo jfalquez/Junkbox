@@ -2,7 +2,6 @@ CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
 
 PROJECT( KinectLoop )
 
-
 LIST( APPEND HDRS
         DTrackApp.h
         Gui.h
@@ -28,6 +27,7 @@ TARGET_LINK_LIBRARIES( KinectLoop
                         ${Kangaroo_LIBRARIES}
                         ${Sophus_LIBRARIES}
                         ${CeresSolver_LIBRARIES}
+                        ${CHOLMOD_LIBRARIES}
 #                        ${SENSORFUSION_LIBRARIES}
                      )
 

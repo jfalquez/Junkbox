@@ -474,7 +474,7 @@ double DenseFrontEnd::_EstimateRelativePose(
                                                                                     m_cdKeyDepthPyr[PyrLvl],
                                                                                     Kg, Kd, Tgd, Tck, KgTck,
                                                                                     m_cdWorkspace, m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight),
-                                                                                    fNormC, ui_bDiscardMaxMin, 0.3, 30.0 );
+                                                                                    fNormC, ui_bDiscardMaxMin, 0.3, 60.0 );
 
 // Show DEBUG image from minimization
 #if 0
