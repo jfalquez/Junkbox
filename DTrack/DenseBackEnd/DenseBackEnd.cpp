@@ -96,7 +96,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseBackEnd::_PoseRelax()
 {
-    //----- START DANGER ZONE
+    //----- START CONTENTION ZONE
     m_pMap->Lock();
     m_bDoPGRelaxation = false;
     std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
@@ -111,7 +111,7 @@ void DenseBackEnd::_PoseRelax()
     }
     const unsigned int nNumEdges = m_pMap->GetNumEdges();
     m_pMap->Unlock();
-    //----- END DANGER ZONE
+    //----- END CONTENTION ZONE
 
     // add all edges
     for( unsigned int ii = 0; ii < nNumEdges; ++ii ) {

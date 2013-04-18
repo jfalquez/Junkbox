@@ -30,9 +30,6 @@ class DTrackApp
             // parse command line arguments
             GetPot clArgs( argc, argv );
 
-            //----- init camera 1 with default initializer
-//            m_Cam.SetProperty("BufferSize", 20);
-
             // initialize camera
             if( !rpg::InitCam( m_Cam, clArgs ) ) {
                 exit(1);
@@ -57,6 +54,7 @@ class DTrackApp
                 m_bAuxCam = true;
                 std::cout << "Second camera detected ..." << std::endl;
 
+                /// for Kinect
                 bool            bGetDepth   = !clArgs.search( "-no-depth" );
                 bool            bGetRGB     = !clArgs.search( "-no-rgb" );
                 bool            bGetIr      = clArgs.search( "-with-ir" );
@@ -71,6 +69,13 @@ class DTrackApp
                 m_CamAux.SetProperty( "FPS", nFPS );
                 m_CamAux.SetProperty( "Resolution", sResolution );
 
+
+                /// for FileReader
+                m_CamAux.SetProperty("DataSourceDir", "/Users/jmf/Code/Kangaroo/Build/applications" );
+                m_CamAux.SetProperty("Channel-0",     "SDepth.*" );
+                m_CamAux.SetProperty("CamModel-L",    "hlcmod.xml" );
+                m_CamAux.SetProperty("NumChannels",   1 );
+
                 m_CamAux.InitDriver( sDDev );
 
                 CamImages   vImages;      // camera images
@@ -78,7 +83,6 @@ class DTrackApp
                 m_vImages.resize( 2 );
                 m_vImages[1] = vImages[0];
             }
-
 
             // prepare images as expected by the FrontEnd
             _UnpackImages( m_vImages );
@@ -123,6 +127,14 @@ class DTrackApp
                 delete m_pFrontEnd;
             }
             m_pFrontEnd = new DenseFrontEnd( m_vImages[0].width(), m_vImages[0].height() );
+
+            //----- load CVars.. has to be done after FrontEnd is created
+            std::string sCVars = clArgs.follow( "cvars.xml", "-cvars" );
+            std::string sCVarsFile = sSrcDir + "/" + sCVars;
+            if( CVarUtils::Load( sCVarsFile ) ) {
+                std::cout << "Loading CVars file from: " << sCVarsFile << std::endl;
+            }
+
             return m_pFrontEnd->Init( m_vImages, m_pMap, m_pTimer );
         }
 
@@ -168,6 +180,7 @@ class DTrackApp
                 // pause if loop closure and call pose graph relaxation
                 if( m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
 //                    rGui.SetState( PAUSED );
+//                    m_pBackEnd->_PoseRelax();
                     m_pBackEnd->DoPoseGraphRelaxation();
                  }
 
@@ -228,6 +241,8 @@ class DTrackApp
                 vImages[1].Image = Tmp;
             }
 
+//            vImages[1].Image = vImages[1].Image / 4;
+//            vImages[1].Image = vImages[1].Image * (359.428/718.8560);
         }
 
 
