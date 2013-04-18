@@ -1,3 +1,7 @@
+#include <queue>
+
+#include <opencv.hpp>
+
 #include <RPG/Utils/InitCam.h>
 #include <RPG/Utils/TicToc.h>
 #include <RPG/Devices/Camera/CameraDevice.h>
@@ -47,6 +51,58 @@ inline unsigned char DecodeByte( unsigned char* ptr )
 
     return byteData;
 
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void GetImageSL(
+        unsigned char*  Ptr,
+        cv::Mat&        Image       //< Output
+    )
+{
+    const unsigned int nImgWidth = Image.cols;
+    const unsigned int nImgHeight = Image.rows;
+
+    memcpy( Image.data, Ptr, nImgWidth*nImgHeight*3 );
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void GetImage(
+        unsigned char*  Ptr,
+        cv::Mat&        Image       //< Output
+        )
+{
+    const unsigned int nImgWidth = Image.cols;
+    const unsigned int nImgHeight = Image.rows;
+
+    unsigned char* imgPtr = Image.data;
+    unsigned char* buffPtr = Ptr;
+
+    for( int ii = 0; ii < nImgHeight; ii++ ) {
+        memcpy( imgPtr, buffPtr, nImgWidth * 3 );
+        buffPtr += 1920 * 3;
+        imgPtr += nImgWidth * 3;
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// SAD score image1 with image2 -- images are assumed to be same type & dimensions
+/// returns: SAD score
+template < typename T >
+inline float ScoreImages(
+        const cv::Mat&              Image1,
+        const cv::Mat&              Image2
+        )
+{
+    float fScore = 0;
+    for( int ii = 0; ii < Image1.rows; ii++ ) {
+        for( int jj = 0; jj < Image1.cols; jj++ ) {
+            fScore += fabs(Image1.at<T>(ii, jj) - Image2.at<T>(ii, jj));
+        }
+    }
+    return fScore;
 }
 
 
@@ -104,7 +160,9 @@ int main( int argc, char** argv )
     unsigned int nFrames = 0;
 
     // set up images
-    cv::Mat ImgRGB( 240, 320, CV_8UC3 );
+    cv::Mat ImgRGB( 384, 512, CV_8UC3 );
+    cv::Mat NewImgRGB( 384, 512, CV_8UC3 );
+//    cv::Mat ImgRGB( 240, 320, CV_8UC3 );
     cv::Mat ImgDepth( 240, 320, CV_16UC1 );
 
     // data points
@@ -113,16 +171,52 @@ int main( int argc, char** argv )
     unsigned int DepthImageLo = 80;
     unsigned int DepthImageHi = 200;
 
+    unsigned int nImgID = 0;
+
     // Default hooks for exiting (Esc) and fullscreen (tab).
     while( !pangolin::ShouldQuit() ) {
 
         // capture an images if not logging
         Cam.Capture( vImages );
 
-        unsigned char* ptrID = vImages[0].Image.data + ( ImageID * 1280 * 3 );
-        unsigned char* ptrRGB = vImages[0].Image.data + ( RGBImage * 1280 * 3);
-        unsigned char* ptrDepthHi = vImages[0].Image.data + ( DepthImageHi * 1280 * 3);
-        unsigned char* ptrDepthLo = vImages[0].Image.data + ( DepthImageLo * 1280 * 3);
+        unsigned char* ptrID = vImages[0].Image.data + ( ImageID * 1920 * 3 );
+        unsigned char* ptrRGB = vImages[0].Image.data + ( RGBImage * 1920 * 3 );
+        unsigned char* ptrDepthHi = vImages[0].Image.data + ( DepthImageHi * 1280 * 3 );
+        unsigned char* ptrDepthLo = vImages[0].Image.data + ( DepthImageLo * 1280 * 3 );
+
+
+        std::priority_queue<unsigned char> pq;
+        unsigned char* ptr = ptrID;
+        for(int ii = 0; ii < 8; ii++ ) {
+            unsigned char byte = (*(ptr) + *(ptr+1) + *(ptr+2) ) / 3;
+            pq.push( byte );
+//            printf("---- %d ----", byte );
+            ptr = ptr + 3;
+        }
+
+        pq.pop();
+        pq.pop();
+        pq.pop();
+        unsigned char data = pq.top();
+
+        GetImage( ptrRGB, NewImgRGB );
+
+        float fSAD = ScoreImages<unsigned char>( NewImgRGB, ImgRGB ) / (512 * 384);
+        std::cout << "SAD Score: " << fSAD;
+        if( fSAD > 10.0 ) {
+            NewImgRGB.copyTo( ImgRGB );
+            std::cout << "---- Swap!";
+
+            char            Index[10];
+            sprintf( Index, "%05d", nImgID );
+            nImgID++;
+            std::string DepthPrefix = "Cap-";
+            std::string DepthFile;
+            DepthFile = DepthPrefix + Index + ".pgm";
+            std::cout << "Capture File: " << DepthFile << std::endl;
+            cv::imwrite( DepthFile, NewImgRGB );
+        }
+        std::cout << std::endl;
 
         // get RGB image
 //        memcpy( ImgRGB.data, ptrRGB, 320*240*3 );
@@ -161,7 +255,9 @@ int main( int argc, char** argv )
 
 
         // show left image
-//        glLeftImg.SetImage( ImgRGB.data, nImgWidth, nImgHeight, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE );
+//        glLeftImg.SetImage( vImages[0].Image.data, 1920, 1080, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE );
+        glLeftImg.SetImage( ImgRGB.data, ImgRGB.cols, ImgRGB.rows, GL_RGB8, GL_RGB, GL_UNSIGNED_BYTE );
+//        glLeftImg.SetImage( ImgGREY.data, ImgGREY.cols, ImgGREY.rows, GL_RGB8, GL_LUMINANCE, GL_UNSIGNED_BYTE );
 
         // show right image
 //        glRightImg.SetImage( ImgDepth.data, nImgWidth, nImgHeight, GL_INTENSITY, GL_LUMINANCE, GL_UNSIGNED_SHORT );
@@ -173,7 +269,8 @@ int main( int argc, char** argv )
         double dTimeLapse = Toc( dTic );
 //        if( dTimeLapse > 1.0 )
         {
-            printf( "ID: %4d \t Framerate: %.2f\n", DecodeByte( ptrID ), nFrames/dTimeLapse );
+//            printf( "ID: %4d \t Framerate: %.2f\r", data, nFrames/dTimeLapse );
+//            printf( "ID: %4d \t Framerate: %.2f\n", DecodeByte( ptrID ), nFrames/dTimeLapse );
             fflush(stdout);
             nFrames  = 0;
             dTic = Tic();
