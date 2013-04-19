@@ -34,13 +34,13 @@ DenseFrontEnd::DenseFrontEnd( unsigned int nImageWidth, unsigned int nImageHeigh
     // level 0 is finest (ie. biggest image)
     feConfig.g_vPyrMaxIters.resize( MAX_PYR_LEVELS );
     feConfig.g_vPyrMaxIters.setZero();
-    feConfig.g_vPyrMaxIters << 1, 1, 2, 2, 5;
+    feConfig.g_vPyrMaxIters << 1, 1, 2, 2, 5, 5;
 
     // initialize if full estimate should be performed at a particular level
     // 1: full estimate          0: just rotation
     feConfig.g_vPyrFullMask.resize( MAX_PYR_LEVELS );
     feConfig.g_vPyrFullMask.setZero();
-    feConfig.g_vPyrFullMask << 1, 1, 1, 1, 0;
+    feConfig.g_vPyrFullMask << 1, 1, 1, 1, 0, 0;
 
     m_pMap   = NULL; // passed in by the user
     m_pTimer = NULL; // passed in by the user
@@ -252,6 +252,7 @@ bool DenseFrontEnd::Iterate(
     Eigen::Matrix4d T_ck_c;
     if( pClosestKeyframe == NULL || pLastKeyframe == pClosestKeyframe ) {
         m_Analytics["RMSE Closest"] = std::pair<double, double>( 0, 0 );
+        m_Analytics["Loop Closure"] = std::pair<double, double>( 0, 0 );
     } else {
         nClosestKeyframeId = pClosestKeyframe->GetId();
         T_ck_c.setIdentity();    // the drift would kill this if we try to seed like for LastKeyframe
@@ -265,7 +266,6 @@ bool DenseFrontEnd::Iterate(
         }
 
         ///---------- CHECK FOR LOOP CLOSURE
-        Tic("Loop Closure");
         if( abs(nFrameId - nClosestKeyframeId) > feConfig.g_nLoopClosureMargin ) {
             // frame is "distant" enough that we might consider it a valid loop closure
             if( dErrorLastKeyframe < feConfig.g_dLoopClosureThreshold && dErrorClosestKeyframe < feConfig.g_dLoopClosureThreshold ) {
@@ -282,12 +282,11 @@ bool DenseFrontEnd::Iterate(
                 // update internal path
                 m_pMap->UpdateInternalPath();
 
-                Toc("Loop Closure");
+                m_Analytics["Loop Closure"] = std::pair<double, double>( 1.0, 0 );
                 Toc("Localize Close");
                 return true;
             }
         }
-        Toc("Loop Closure");
     }
     Toc("Localize Close");
 
@@ -333,7 +332,7 @@ bool DenseFrontEnd::Iterate(
         PrintMessage( 1, "critical: Relocalizer failed!\n" );
         m_eTrackingState = eTrackingFail;
         // discard estimate
-        T_k_c.setIdentity();
+//        T_k_c.setIdentity();
     }
 
 
@@ -375,7 +374,9 @@ bool DenseFrontEnd::Iterate(
 
 
     // update internal path
+    Tic("Update Path");
     m_pMap->UpdateInternalPath();
+    Toc("Update Path");
 
     return true;
 }
@@ -474,7 +475,7 @@ double DenseFrontEnd::_EstimateRelativePose(
                                                                                     m_cdKeyDepthPyr[PyrLvl],
                                                                                     Kg, Kd, Tgd, Tck, KgTck,
                                                                                     m_cdWorkspace, m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight),
-                                                                                    fNormC, ui_bDiscardMaxMin, 0.3, 60.0 );
+                                                                                    fNormC, ui_bDiscardMaxMin, 0.1, 60.0 );
 
 // Show DEBUG image from minimization
 #if 0

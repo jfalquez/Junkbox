@@ -180,7 +180,6 @@ class DTrackApp
                 // pause if loop closure and call pose graph relaxation
                 if( m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
 //                    rGui.SetState( PAUSED );
-//                    m_pBackEnd->_PoseRelax();
                     m_pBackEnd->DoPoseGraphRelaxation();
                  }
 
@@ -239,6 +238,21 @@ class DTrackApp
                 vImages[1].Image.convertTo( Tmp, CV_32FC1 );
                 Tmp = Tmp / 1000;
                 vImages[1].Image = Tmp;
+            }
+
+            const unsigned int nLeftMargin = 40;
+            for( unsigned int ii = 0; ii < vImages[1].Image.rows; ii++ ) {
+                for( unsigned int jj = 0; jj < nLeftMargin; jj++ ) {
+                    vImages[1].Image.at<float>(ii,jj) = 0.0f;
+                }
+            }
+
+            const unsigned int nBottomMargin = 90;
+            const unsigned int nMiddleMargin = 150;
+            for( unsigned int ii = vImages[1].Image.rows-nBottomMargin; ii < vImages[1].Image.rows; ii++ ) {
+                for( unsigned int jj = (vImages[1].Image.cols/2)-nMiddleMargin; jj < (vImages[1].Image.cols/2)+nMiddleMargin; jj++ ) {
+                    vImages[1].Image.at<float>(ii,jj) = 0.0f;
+                }
             }
 
 //            vImages[1].Image = vImages[1].Image / 4;

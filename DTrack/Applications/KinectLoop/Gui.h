@@ -176,7 +176,7 @@ void Gui::Init()
     m_gl3dGraph.AddChild( &m_glMap );
     m_gl3dGraph.AddChild( &m_glPath );
 
-    m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000) );
+    m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 3000) );
     m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-20, 0, -30, 0, 0, 0, pangolin::AxisNegZ) );
 
     m_View3d.SetBounds( 0.25, 1.0, pangolin::Attach::Pix(280), 1.0, 640.0f/480.0f );
@@ -220,7 +220,7 @@ void Gui::InitReset()
 
     // set properties
     m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
-    m_glGrid.SetLineSpacing( 2.0 );
+    m_glGrid.SetLineSpacing( 3.0 );
 
     // init-reset objects
     m_glMap.InitReset( m_pRenderMap );
