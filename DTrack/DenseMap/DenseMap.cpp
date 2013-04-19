@@ -411,7 +411,7 @@ void DenseMap::FindClosestKeyframes(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseMap::Print()
+void DenseMap::PrintMap()
 {
     printf("***************************************************************************************************************************\n");
     printf("\tPRINT MAP\n");
@@ -440,85 +440,6 @@ void DenseMap::Print()
     fflush(stdout);
 }
 
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseMap::GenerateRelativePoses(
-        std::map<unsigned int, Eigen::Matrix4d>&    vPoses,     //< Output: Poses id and relative poses from input root
-        int                                         nRootId,    //< Input: Frame that will be the origin [default: last frame]
-        int                                         nDepth      //< Input: Grapth depth search from root [default: max depth]
-    )
-{
-    assert( nRootId >= -1 && nRootId < m_vFrames.size() );
-
-    // clear output vector
-    vPoses.clear();
-
-    // check if we have frames
-    if( m_vFrames.empty() ) {
-        return;
-    }
-
-    // return all poses
-    if( nDepth == -1 ) {
-        nDepth = m_vFrames.size();
-    }
-
-    // get pointer to root frame
-    FramePtr pRoot = nRootId == -1? m_vFrames.back() : m_vFrames[nRootId];
-
-    // now search for close nodes
-    std::queue<FramePtr> q;
-    std::queue<Eigen::Matrix4d> t;
-    pRoot->SetDepth(0);
-    q.push(pRoot);
-    t.push(Eigen::Matrix4d::Identity());
-
-    // reset colors
-    _ResetNodes();
-
-    FramePtr pCurNode;
-    Eigen::Matrix4d curT;
-    Eigen::Matrix4d T;
-
-    while( !q.empty() ) {
-
-        pCurNode = q.front();
-        curT     = t.front();
-        q.pop();
-        t.pop();
-        pCurNode->SetGrey();
-
-        // Explore neighbours
-        for( unsigned int ii = 0; ii < pCurNode->GetNumNeighbors(); ++ii ) {
-            unsigned int nNeighborEdgeId = pCurNode->GetNeighborEdgeId(ii);
-            EdgePtr pNeighborEdge   = GetEdgePtr(nNeighborEdgeId);
-
-            unsigned int nNeighborNodeId;
-            nNeighborNodeId = ( pNeighborEdge->GetStartId() == pCurNode->GetId() ) ?
-                pNeighborEdge->GetEndId() : pNeighborEdge->GetStartId();
-
-            FramePtr pNeighborNode = GetFramePtr(nNeighborNodeId);
-
-            if( (int)pCurNode->GetDepth() < nDepth &&
-                    pNeighborNode != NULL   &&
-                    pNeighborNode->IsWhite() ) {
-
-                // add node to the queue
-                pNeighborNode->SetDepth( pCurNode->GetDepth()+1 );
-                pNeighborNode->SetGrey();
-                q.push( pNeighborNode );
-
-                // store transformation (transformation from root)
-                pNeighborEdge->GetTransform( pCurNode->GetId(), nNeighborNodeId, T );
-                t.push( T );
-            }
-        }
-
-        // We are done with this node, add it to the map
-        pCurNode->SetBlack();
-        vPoses[pCurNode->GetId()] = curT;
-    }
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::GenerateAbsolutePoses(
@@ -603,6 +524,39 @@ void DenseMap::GenerateAbsolutePoses(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::UpdateInternalPath()
+{
+    Lock();
+    FramePtr pLastFrameInMap = m_vFrames.back();
+    unsigned int nLastFrameInMap = pLastFrameInMap->GetId();
+    unsigned int nLastFrameInPath = m_vPath.rbegin()->first;
+
+    std::map< unsigned int, Eigen::Matrix4d >   vNearPath;
+    GenerateAbsolutePoses( vNearPath, -1, 3 );
+    auto it = vNearPath.find( nLastFrameInPath );
+    if( it == vNearPath.end() ) {
+        m_vPath.clear();
+        GenerateAbsolutePoses( m_vPath );
+        _DynamicGroundPlaneEstimation();
+        _UpdateModifiedTime();
+        Unlock();
+        return;
+    }
+    const Eigen::Matrix4d Twl = it->second;
+    // since the parent of this new current frame was the previous "world origin"
+    // we simply add the new frame as origin, and multiply the Twc-1 to bring the path
+    // to the current's frame reference frame
+    for( unsigned int ii = 0; ii < m_vPath.size(); ++ii ) {
+        m_vPath[ii] = Twl * m_vPath[ii];
+    }
+    m_vPath[nLastFrameInMap] = Eigen::Matrix4d::Identity();
+//    _DynamicGroundPlaneEstimation();
+    _UpdateModifiedTime();
+    Unlock();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::UpdateInternalPathFull()
 {
     Lock();
     m_vPath.clear();

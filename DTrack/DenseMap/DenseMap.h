@@ -170,15 +170,6 @@ public:
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    /// traverse the graph via BFS up to input depth and store relative poses relative to input root
-    void GenerateRelativePoses(
-            std::map<unsigned int, Eigen::Matrix4d>&    vPoses,         //< Output: Poses id and relative poses from input root
-            int                                         nRootId = -1,   //< Input: Frame that will be the origin [default: last frame]
-            int                                         nDepth = -1     //< Input: Grapth depth search from root [default: max depth]
-        );
-
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// traverse the graph via BFS up to input depth and store absolute poses relative to input root
     void GenerateAbsolutePoses(
             std::map<unsigned int, Eigen::Matrix4d>&    vPoses,         //< Output: Poses id and absolute poses from input root
@@ -190,6 +181,7 @@ public:
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// updates internal path with absolute poses relative to last frame -- also does plane fit
     void UpdateInternalPath();
+    void UpdateInternalPathFull();
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -238,7 +230,7 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// print map
-    void Print();
+    void PrintMap();
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

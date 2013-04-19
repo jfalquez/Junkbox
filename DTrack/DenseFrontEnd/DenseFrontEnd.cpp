@@ -130,7 +130,7 @@ bool DenseFrontEnd::Init(
     m_T_p_c.setIdentity();
 
     // keep internal map's path up to date
-    m_pMap->UpdateInternalPath();
+    m_pMap->UpdateInternalPathFull();
 
     return true;
 }
@@ -280,7 +280,7 @@ bool DenseFrontEnd::Iterate(
                 m_T_p_c.setIdentity();
 
                 // update internal path
-                m_pMap->UpdateInternalPath();
+                m_pMap->UpdateInternalPathFull();
 
                 m_Analytics["Loop Closure"] = std::pair<double, double>( 1.0, 0 );
                 Toc("Localize Close");
@@ -475,7 +475,7 @@ double DenseFrontEnd::_EstimateRelativePose(
                                                                                     m_cdKeyDepthPyr[PyrLvl],
                                                                                     Kg, Kd, Tgd, Tck, KgTck,
                                                                                     m_cdWorkspace, m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight),
-                                                                                    fNormC, ui_bDiscardMaxMin, 0.1, 60.0 );
+                                                                                    fNormC, ui_bDiscardMaxMin, 0.1, 140.0 );
 
 // Show DEBUG image from minimization
 #if 0

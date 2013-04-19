@@ -111,7 +111,7 @@ private:
 private:
     eTrackingState                                          m_eTrackingState;
 
-    Eigen::Matrix4d                                         m_T_p_c;              // estimate from previous to current frame
+    Eigen::Matrix4d                                         m_T_p_c;            // estimate from previous to current frame
 
     DenseMap*                                               m_pMap;             // map use for estimating poses
 

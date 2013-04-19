@@ -8,6 +8,9 @@ class GuiConfig
 public:
     GuiConfig() :
 
+        // IMAGE OPTIONS
+        g_fMaxDepth( CVarUtils::CreateCVar<>( "ui.MaxDepth", 30.0f, "Maximum depth used to normalize." ) ),
+
         // GLGRID OPTIONS
         g_nNumGridLines( CVarUtils::CreateCVar<>( "ui.NumGridLines", 10u, "Number of grid divisions." ) ),
 
@@ -21,6 +24,7 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    float&                  g_fMaxDepth;
     unsigned int&           g_nNumGridLines;
     unsigned int&           g_nNumPosesToShow;
     unsigned int&           g_nNumVBOsToShow;

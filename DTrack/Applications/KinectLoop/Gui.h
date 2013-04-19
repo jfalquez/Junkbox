@@ -289,7 +289,7 @@ void Gui::UpdateImages(
         pKeyframe->CopyDepthImageTo( KeyDepth );
         m_KeyGrey.SetImage( KeyGrey.data, m_nImageWidth, m_nImageHeight, GL_RGB8, GL_LUMINANCE, GL_UNSIGNED_BYTE );
         // TODO currently a rough normalization.. make it nicer
-        KeyDepth = KeyDepth / 20.0;
+        KeyDepth = KeyDepth / guiConfig.g_fMaxDepth;
         m_KeyDepth.SetImage( KeyDepth.data, m_nImageWidth, m_nImageHeight, GL_RGB8, GL_LUMINANCE, GL_FLOAT );
     }
 }
@@ -329,6 +329,11 @@ void Gui::_RegisterKeyboardCallbacks()
     // reset app
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'r',
                                         std::bind( &Gui::_CTRL_R, this) );
+
+    // print map
+    pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'p',
+                                        [this](){ m_pRenderMap->PrintMap(); }
+                                        );
 
     // toggle showing side panel
     pangolin::RegisterKeyPressCallback('~', [this](){ static bool showpanel = false; showpanel = !showpanel;
