@@ -1,6 +1,7 @@
 #include <queue>
 
 #include <Mvlpp/Mvl.h>
+#include <RPG/Utils/ImageWrapper.h>
 
 #include "DenseMap.h"
 
@@ -104,29 +105,28 @@ bool DenseMap::FindEdgeId(
             return true;
         }
     }
-    printf("ERROR: edge not found!\n" );
     return false;
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseMap::LinkFrames(
+bool DenseMap::LinkFrames(
         FramePtr                    pA,         //< Input:
         FramePtr                    pB,         //< Input:
         const Eigen::Matrix4d&      Tab         //< Input:
     )
 {
-
     assert( pA->GetId() < m_vFrames.size() );
     assert( pB->GetId() < m_vFrames.size() );
     assert( pA->GetId() == m_vFrames[pA->GetId()]->GetId() );
     assert( pB->GetId() == m_vFrames[pB->GetId()]->GetId() );
 
+    if( EdgeExists( pA->GetId(), pB->GetId() ) ) {
+        std::cerr << "warning: trying to add an edge that already exists!" << std::endl;
+        return false;
+    }
+
     EdgePtr pEdge( new TransformEdge( pA->GetId(), pB->GetId(), Tab ) );
-    // make sure we're not duplicating an existing edge
-    //        if( HasEdge( nGetStartId, nEndId ) ){
-    //            printf("ERROR: edge <nGetStartId,nEndId> or <nEndId,nGetStartId> already exists\n");
-    //        }
     unsigned int nEdgeId = m_vEdges.size();
 
     pA->AddNeighbor( nEdgeId );
@@ -136,6 +136,8 @@ void DenseMap::LinkFrames(
     _UpdateModifiedTime();
     m_vEdges.push_back( pEdge );
     Unlock();
+
+    return true;
 }
 
 
@@ -331,12 +333,12 @@ bool DenseMap::CopyMapChanges(
     m_vEdges.resize( rRHS.m_vEdges.size() );
     m_vFrames.resize( rRHS.m_vFrames.size() );
 
-    for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-5, 0 ); ii-- ) {
+    for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-500, 0 ); ii-- ) {
         m_vEdges[ii] = std::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
         //m_vEdges[ii] = rRHS.m_vEdges[ii]; // will do a deep copy
     }
 
-    for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-5, 0 ); ii-- ) {
+    for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-500, 0 ); ii-- ) {
         m_vFrames[ii] = std::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
     }
 
@@ -418,7 +420,7 @@ void DenseMap::PrintMap()
     printf("***************************************************************************************************************************\n");
     for( unsigned int ii = 0; ii < m_vFrames.size(); ++ii ) {
         FramePtr pFrame = m_vFrames[ii];
-        assert( ii = pFrame->GetId() );
+        assert( ii == pFrame->GetId() );
         Eigen::Vector6d E = mvl::T2Cart( m_vPath[ii] );
         printf( "Frame ID: %05d \t Keyframe: %d \t Current Global Pose: [ %+.2f, %+.2f, %+.2f, %+.2f, %+.2f, %+.2f ]\n", ii,
                 pFrame->IsKeyframe(), E(0), E(1), E(2), E(3), E(4), E(5) );
@@ -438,6 +440,175 @@ void DenseMap::PrintMap()
     }
     printf( "Total Frames: %5d \t\t Total Edges: %5d\n\n", GetNumFrames(), GetNumEdges() );
     fflush(stdout);
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::ExportMap()
+{
+    printf("-----------------------------------------------------------------------------------------------------------------\n");
+    printf("Exporting map...\n");
+    fflush(stdout);
+
+    const std::string sFilename = "Map.xml";
+    cv::FileStorage fs( sFilename, cv::FileStorage::WRITE );
+
+    fs << "Frames" << "[";
+    for( unsigned int ii = 0; ii < m_vFrames.size(); ++ii ) {
+        FramePtr pFrame = m_vFrames[ii];
+        assert( ii == pFrame->GetId() );
+
+        // save images
+        /*
+        char            Index[10];
+        sprintf( Index, "%08d", ii );
+
+        std::string FileName;
+        std::string GreyPrefix = "Export/Grey";
+        cv::Mat GreyImage = pFrame->GetGreyImageRef();
+        FileName = GreyPrefix + "-I-" + Index + ".pgm";
+        cv::imwrite( FileName, GreyImage );
+        cv::Mat GreyThumb = pFrame->GetGreyThumbRef();
+        FileName = GreyPrefix + "-T-" + Index + ".pgm";
+        cv::imwrite( FileName, GreyThumb );
+        if( pFrame->IsKeyframe() ) {
+            std::string DepthPrefix = "Export/Depth";
+            rpg::ImageWrapper DepthImage;
+            FileName = DepthPrefix + "-I-" + Index + ".pdm";
+            DepthImage.Image = pFrame->GetDepthImageRef();
+            DepthImage.write( FileName, false );
+            rpg::ImageWrapper DepthThumb;
+            FileName = DepthPrefix + "-T-" + Index + ".pdm";
+            DepthThumb.Image = pFrame->GetDepthThumbRef();
+            DepthThumb.write( FileName, false );
+        }
+        */
+
+        // save info
+        fs << "{:";
+        fs << "FrameId" << (int)ii;
+        fs << "ParentId" << (int)pFrame->GetParentEdgeId();
+        fs << "Time" << (double)pFrame->GetTime();
+        fs << "Keyframe" << pFrame->IsKeyframe();
+        cv::Mat& GreyImage = pFrame->GetGreyImageRef();
+        fs << "GreyImage" << GreyImage;
+        cv::Mat& GreyThumb = pFrame->GetGreyThumbRef();
+        fs << "GreyThumb" << GreyThumb;
+        if( pFrame->IsKeyframe() ) {
+            cv::Mat& DepthImage = pFrame->GetDepthImageRef();
+            fs << "DepthImage" << DepthImage;
+            cv::Mat& DepthThumb = pFrame->GetDepthThumbRef();
+            fs << "DepthThumb" << DepthThumb;
+        }
+        fs << "}";
+    }
+    fs << "]";
+
+
+    fs << "Edges" << "[";
+    for( unsigned int ii = 0; ii < m_vEdges.size(); ++ii ) {
+        EdgePtr pEdge = m_vEdges[ ii ];
+        const unsigned int nStartId = pEdge->GetStartId();
+        const unsigned int nEndId = pEdge->GetEndId();
+        // TODO export also original transform
+        Eigen::Matrix4d Tse;
+        pEdge->GetTransform( nStartId, nEndId, Tse );
+        Eigen::Vector6d E = mvl::T2Cart( Tse );
+        fs << "{:";
+        fs << "StartId" << (int)nStartId;
+        fs << "EndId" << (int)nEndId;
+        fs << "Tse" << "[:" << E(0) << E(1) << E(2) << E(3) << E(4) << E(5);
+        fs << "]";
+        fs << "}";
+    }
+    fs << "]";
+
+
+    fs.release();
+    printf( "Total Frames: %5d \t\t Total Edges: %5d\n", GetNumFrames(), GetNumEdges() );
+    printf("... Done!!\n");
+    printf("-----------------------------------------------------------------------------------------------------------------\n");
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::ImportMap()
+{
+    printf("-----------------------------------------------------------------------------------------------------------------\n");
+    printf("Importing map...\n");
+    fflush(stdout);
+
+    const std::string sFilename = "Map.xml";
+    cv::FileStorage fs( sFilename, cv::FileStorage::READ );
+
+    cv::FileNode nodeFrames = fs["Frames"];
+    if( nodeFrames.type() != cv::FileNode::SEQ ) {
+        std::cerr << "Error reading the map. Aborting!" << std::endl;
+        return;
+    }
+
+    cv::FileNodeIterator itFrame = nodeFrames.begin(), itFrame_end = nodeFrames.end();
+    for( ; itFrame != itFrame_end; ++itFrame ) {
+        int nFrameId;
+        (*itFrame)["FrameId"] >> nFrameId;
+        int nParentId;
+        (*itFrame)["ParentId"] >> nParentId;
+        double dTime;
+        (*itFrame)["Time"] >> dTime;
+        bool bIsKeyframe;
+        (*itFrame)["Keyframe"] >> bIsKeyframe;
+        cv::Mat GreyImage, GreyThumb;
+        (*itFrame)["GreyImage"] >> GreyImage;
+        (*itFrame)["GreyThumb"] >> GreyThumb;
+        if( bIsKeyframe ) {
+            cv::Mat DepthImage, DepthThumb;
+            (*itFrame)["DepthImage"] >> DepthImage;
+            (*itFrame)["DepthThumb"] >> DepthThumb;
+            FramePtr pFrame = NewKeyframe( dTime, GreyImage, DepthImage, GreyThumb, DepthThumb );
+            if( nFrameId != (int)pFrame->GetId() ) {
+                std::cerr << "error: FrameId does not match ID of import file!" << std::endl;
+                return;
+            }
+        } else {
+            FramePtr pFrame = NewFrame( dTime, GreyImage, GreyThumb );
+            if( nFrameId != (int)pFrame->GetId() ) {
+                std::cerr << "error: FrameId does not match ID of import file!" << std::endl;
+                return;
+            }
+        }
+    }
+
+    cv::FileNode nodeEdges = fs["Edges"];
+    if( nodeEdges.type() != cv::FileNode::SEQ ) {
+        std::cerr << "Error reading the map. Aborting!" << std::endl;
+        return;
+    }
+
+    cv::FileNodeIterator itEdge = nodeEdges.begin(), itEdge_end = nodeEdges.end();
+    for( ; itEdge != itEdge_end; ++itEdge ) {
+        int nStartId;
+        (*itEdge)["StartId"] >> nStartId;
+        int nEndId;
+        (*itEdge)["EndId"] >> nEndId;
+        Eigen::Vector6d Tse;
+        cv::FileNode nodePose = (*itEdge)["Tse"];
+        cv::FileNodeIterator itPose = nodePose.begin(), itPose_end = nodePose.end();
+        unsigned int idx = 0;
+        for( ; itPose != itPose_end; ++itPose ) {
+            (*itPose) >> Tse(idx);
+            idx++;
+        }
+        FramePtr pA = GetFramePtr( nStartId );
+        FramePtr pB = GetFramePtr( nEndId );
+        LinkFrames( pA, pB, mvl::Cart2T(Tse) );
+    }
+
+    fs.release();
+    SetKeyframe(0);
+
+    printf( "Total Frames: %5d \t\t Total Edges: %5d\n", GetNumFrames(), GetNumEdges() );
+    printf("... Done!!\n");
+    printf("-----------------------------------------------------------------------------------------------------------------\n");
 }
 
 
@@ -533,22 +704,18 @@ void DenseMap::UpdateInternalPath()
     std::map< unsigned int, Eigen::Matrix4d >   vNearPath;
     GenerateAbsolutePoses( vNearPath, -1, 3 );
     auto it = vNearPath.find( nLastFrameInPath );
-    if( it == vNearPath.end() ) {
-        m_vPath.clear();
+    if( it != vNearPath.end() ) {
+        const Eigen::Matrix4d Twl = it->second;
+        // since the parent of this new current frame was the previous "world origin"
+        // we simply add the new frame as origin, and multiply the Twc-1 to bring the path
+        // to the current's frame reference frame
+        for( unsigned int ii = 0; ii < m_vPath.size(); ++ii ) {
+            m_vPath[ii] = Twl * m_vPath[ii];
+        }
+        m_vPath[nLastFrameInMap] = Eigen::Matrix4d::Identity();
+    } else {
         GenerateAbsolutePoses( m_vPath );
-        _DynamicGroundPlaneEstimation();
-        _UpdateModifiedTime();
-        Unlock();
-        return;
     }
-    const Eigen::Matrix4d Twl = it->second;
-    // since the parent of this new current frame was the previous "world origin"
-    // we simply add the new frame as origin, and multiply the Twc-1 to bring the path
-    // to the current's frame reference frame
-    for( unsigned int ii = 0; ii < m_vPath.size(); ++ii ) {
-        m_vPath[ii] = Twl * m_vPath[ii];
-    }
-    m_vPath[nLastFrameInMap] = Eigen::Matrix4d::Identity();
 //    _DynamicGroundPlaneEstimation();
     _UpdateModifiedTime();
     Unlock();
@@ -559,7 +726,6 @@ void DenseMap::UpdateInternalPath()
 void DenseMap::UpdateInternalPathFull()
 {
     Lock();
-    m_vPath.clear();
     GenerateAbsolutePoses( m_vPath );
     _DynamicGroundPlaneEstimation();
     _UpdateModifiedTime();

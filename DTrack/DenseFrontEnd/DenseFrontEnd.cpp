@@ -103,6 +103,41 @@ bool DenseFrontEnd::Init(
         // if NOT ACCEPT, then drop new keyframe
         // bDropNewFrame = true; <---- this is already to true so do nothing
 
+
+        ///---------- CREATE NEW FRAME WITH INPUT IMAGES
+        // allocate thumb image
+        cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
+
+        // generate thumbnail
+        GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
+
+        // TODO get this from the camera directly.. the property map should have it
+        double dSensorTime = mvl::Tic();
+
+        // create frame
+        FramePtr pFrame = m_pMap->NewFrame( dSensorTime, vImages[0].Image, GreyThumb );
+        if( pFrame == NULL ) {
+            std::cerr << "error: generating new frame." << std::endl;
+            return false;
+        }
+
+
+        ///---------- LOCALIZE AGAINST LAST KEYFRAME
+        FramePtr pLastKeyframe = m_pMap->GetCurrentKeyframe();
+
+        // Tkc is what the estimator will gives us back
+        // we can seed this via: Tkc = Tkw * Twc = TInv( Twk ) * Twc
+        Eigen::Matrix4d T_lk_c;
+        T_lk_c.setIdentity();
+
+        unsigned int nNumObsLastKeyframe;
+        double dErrorLastKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pLastKeyframe, T_lk_c, nNumObsLastKeyframe );
+        {
+            Eigen::Vector6d E = mvl::T2Cart(T_lk_c);
+            PrintMessage( 0, "--- Estimate (L) (%f): [ %f, %f, %f, %f, %f, %f ]\n", dErrorLastKeyframe, E(0), E(1), E(2), E(3), E(4), E(5) );
+        }
+        m_pMap->UpdateInternalPathFull();
+        return true;
     }
 
     if( bNewKeyframe ) {

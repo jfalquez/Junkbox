@@ -97,7 +97,7 @@ class DTrackApp
             }
             m_pMap = new DenseMap;
             // load map from files IF user provided it!
-//            m_pMap->ImportMap();
+            m_pMap->ImportMap();
 
 
             // get camera configuration
@@ -246,8 +246,8 @@ class DTrackApp
                 vImages[1].Image = Tmp;
             }
 
-//            const unsigned int nLeftMargin = 30;
-            const unsigned int nLeftMargin = 40;
+            const unsigned int nLeftMargin = 30;
+//            const unsigned int nLeftMargin = 40;
             for( int ii = 0; ii < vImages[1].Image.rows; ii++ ) {
                 for( unsigned int jj = 0; jj < nLeftMargin; jj++ ) {
                     vImages[1].Image.at<float>(ii,jj) = 0.0f;
@@ -255,11 +255,11 @@ class DTrackApp
             }
 
             /// None
-//            const unsigned int nBottomMargin = 0;
-//            const unsigned int nMiddleMargin = 0;
+            const unsigned int nBottomMargin = 0;
+            const unsigned int nMiddleMargin = 0;
             /// Tompkins
-            const unsigned int nBottomMargin = 90;
-            const unsigned int nMiddleMargin = 150;
+//            const unsigned int nBottomMargin = 90;
+//            const unsigned int nMiddleMargin = 150;
             /// Toyota
 //            const unsigned int nBottomMargin = 90;
 //            const unsigned int nMiddleMargin = 180;
