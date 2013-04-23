@@ -312,7 +312,7 @@ bool DenseMap::CopyMapChanges(
     )
 {
     if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
-//        return false; // nothing to do, map is up-to date
+        return false; // nothing to do, map is up-to date
     }
 
     if( m_CModPyrGrey.IsInit() == false ) {
@@ -326,19 +326,24 @@ bool DenseMap::CopyMapChanges(
     // make sure we're dealing with the same map?
 //        assert( m_nMapId == rRHS.m_nMapId );
 
-    // find data we need to update.  All we need to do here is search in the SLAM graph until
-    // we stop finding nodes (Landmarks or Frames) that have been modified since m_dLastModifiedTime
-//        _DFSCopy( )
-    // HACK TODO FIXME  -- just to get going, copy the last 100 frames as a quick hack
-    m_vEdges.resize( rRHS.m_vEdges.size() );
-    m_vFrames.resize( rRHS.m_vFrames.size() );
 
-    for( int ii = rRHS.m_vEdges.size()-1; ii >= std::max( (int)rRHS.m_vEdges.size()-500, 0 ); ii-- ) {
+    // lock mutex
+    Lock();
+    rRHS.Lock();
+
+    // since these are pointers, we don't need to update the data itself within
+    const unsigned int nNumEdges = m_vEdges.size();
+    const unsigned int nNumEdgesRHS = rRHS.m_vEdges.size();
+    m_vEdges.resize( nNumEdgesRHS );
+    const unsigned int nNumFrames = m_vFrames.size();
+    const unsigned int nNumFramesRHS = rRHS.m_vFrames.size();
+    m_vFrames.resize( nNumFramesRHS );
+
+    for( unsigned int ii = nNumEdges; ii < nNumEdgesRHS; ii++ ) {
         m_vEdges[ii] = std::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
-        //m_vEdges[ii] = rRHS.m_vEdges[ii]; // will do a deep copy
     }
 
-    for( int ii = rRHS.m_vFrames.size()-1; ii >= std::max( (int)rRHS.m_vFrames.size()-500, 0 ); ii-- ) {
+    for( unsigned int ii = nNumFrames; ii < nNumFramesRHS; ii++ ) {
         m_vFrames[ii] = std::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
     }
 
@@ -351,9 +356,11 @@ bool DenseMap::CopyMapChanges(
         m_vPath[ii] = rRHS.m_vPath[ii];
     }
 
-    // TODO add a mutex around this whole call, and use it also in _UpdateModifiedTime()
-    // this way modifications of the map during copy are still preserved by the ModifiedTime discrepancy??
     m_dLastModifiedTime = rRHS.m_dLastModifiedTime;
+
+    // unlock mutex
+    rRHS.Unlock();
+    Unlock();
 
     return true;
 }
@@ -450,7 +457,7 @@ void DenseMap::ExportMap()
     printf("Exporting map...\n");
     fflush(stdout);
 
-    const std::string sFilename = "Map.xml";
+    const std::string sFilename = "Map/Map.xml";
     cv::FileStorage fs( sFilename, cv::FileStorage::WRITE );
 
     fs << "Frames" << "[";
@@ -459,47 +466,45 @@ void DenseMap::ExportMap()
         assert( ii == pFrame->GetId() );
 
         // save images
-        /*
         char            Index[10];
         sprintf( Index, "%08d", ii );
 
         std::string FileName;
-        std::string GreyPrefix = "Export/Grey";
-        cv::Mat GreyImage = pFrame->GetGreyImageRef();
-        FileName = GreyPrefix + "-I-" + Index + ".pgm";
-        cv::imwrite( FileName, GreyImage );
-        cv::Mat GreyThumb = pFrame->GetGreyThumbRef();
-        FileName = GreyPrefix + "-T-" + Index + ".pgm";
-        cv::imwrite( FileName, GreyThumb );
-        if( pFrame->IsKeyframe() ) {
-            std::string DepthPrefix = "Export/Depth";
-            rpg::ImageWrapper DepthImage;
-            FileName = DepthPrefix + "-I-" + Index + ".pdm";
-            DepthImage.Image = pFrame->GetDepthImageRef();
-            DepthImage.write( FileName, false );
-            rpg::ImageWrapper DepthThumb;
-            FileName = DepthPrefix + "-T-" + Index + ".pdm";
-            DepthThumb.Image = pFrame->GetDepthThumbRef();
-            DepthThumb.write( FileName, false );
-        }
-        */
 
-        // save info
         fs << "{:";
         fs << "FrameId" << (int)ii;
         fs << "ParentId" << (int)pFrame->GetParentEdgeId();
         fs << "Time" << (double)pFrame->GetTime();
         fs << "Keyframe" << pFrame->IsKeyframe();
+
+        std::string GreyPrefix = "Map/Grey";
+
         cv::Mat& GreyImage = pFrame->GetGreyImageRef();
-        fs << "GreyImage" << GreyImage;
+        FileName = GreyPrefix + "-I-" + Index + ".pgm";
+        cv::imwrite( FileName, GreyImage );
+        fs << "GreyImage" << FileName;
+
         cv::Mat& GreyThumb = pFrame->GetGreyThumbRef();
-        fs << "GreyThumb" << GreyThumb;
+        FileName = GreyPrefix + "-T-" + Index + ".pgm";
+        cv::imwrite( FileName, GreyThumb );
+        fs << "GreyThumb" << FileName;
+
         if( pFrame->IsKeyframe() ) {
-            cv::Mat& DepthImage = pFrame->GetDepthImageRef();
-            fs << "DepthImage" << DepthImage;
-            cv::Mat& DepthThumb = pFrame->GetDepthThumbRef();
-            fs << "DepthThumb" << DepthThumb;
+            std::string DepthPrefix = "Map/Depth";
+
+            rpg::ImageWrapper DepthImage;
+            FileName = DepthPrefix + "-I-" + Index + ".pdm";
+            DepthImage.Image = pFrame->GetDepthImageRef();
+            DepthImage.write( FileName, false );
+            fs << "DepthImage" << FileName;
+
+            rpg::ImageWrapper DepthThumb;
+            FileName = DepthPrefix + "-T-" + Index + ".pdm";
+            DepthThumb.Image = pFrame->GetDepthThumbRef();
+            DepthThumb.write( FileName, false );
+            fs << "DepthThumb" << FileName;
         }
+
         fs << "}";
     }
     fs << "]";
@@ -528,23 +533,25 @@ void DenseMap::ExportMap()
     printf( "Total Frames: %5d \t\t Total Edges: %5d\n", GetNumFrames(), GetNumEdges() );
     printf("... Done!!\n");
     printf("-----------------------------------------------------------------------------------------------------------------\n");
+    fflush(stdout);
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseMap::ImportMap()
+bool DenseMap::ImportMap(
+        const std::string&      sMap
+    )
 {
     printf("-----------------------------------------------------------------------------------------------------------------\n");
     printf("Importing map...\n");
     fflush(stdout);
 
-    const std::string sFilename = "Map.xml";
-    cv::FileStorage fs( sFilename, cv::FileStorage::READ );
+    cv::FileStorage fs( sMap, cv::FileStorage::READ );
 
     cv::FileNode nodeFrames = fs["Frames"];
     if( nodeFrames.type() != cv::FileNode::SEQ ) {
-        std::cerr << "Error reading the map. Aborting!" << std::endl;
-        return;
+        std::cerr << "error: Frames sequence not found in map." << std::endl;
+        return false;
     }
 
     cv::FileNodeIterator itFrame = nodeFrames.begin(), itFrame_end = nodeFrames.end();
@@ -558,30 +565,36 @@ void DenseMap::ImportMap()
         bool bIsKeyframe;
         (*itFrame)["Keyframe"] >> bIsKeyframe;
         cv::Mat GreyImage, GreyThumb;
-        (*itFrame)["GreyImage"] >> GreyImage;
-        (*itFrame)["GreyThumb"] >> GreyThumb;
+        std::string GreyImageFile, GreyThumbFile;
+        (*itFrame)["GreyImage"] >> GreyImageFile;
+        GreyImage = cv::imread( GreyImageFile );
+        (*itFrame)["GreyThumb"] >> GreyThumbFile;
+        GreyThumb = cv::imread( GreyThumbFile );
         if( bIsKeyframe ) {
-            cv::Mat DepthImage, DepthThumb;
-            (*itFrame)["DepthImage"] >> DepthImage;
-            (*itFrame)["DepthThumb"] >> DepthThumb;
-            FramePtr pFrame = NewKeyframe( dTime, GreyImage, DepthImage, GreyThumb, DepthThumb );
+            rpg::ImageWrapper DepthImage, DepthThumb;
+            std::string DepthImageFile, DepthThumbFile;
+            (*itFrame)["DepthImage"] >> DepthImageFile;
+            DepthImage.read( DepthImageFile, false );
+            (*itFrame)["DepthThumb"] >> DepthThumbFile;
+            DepthThumb.read( DepthThumbFile, false );
+            FramePtr pFrame = NewKeyframe( dTime, GreyImage, DepthImage.Image, GreyThumb, DepthThumb.Image );
             if( nFrameId != (int)pFrame->GetId() ) {
                 std::cerr << "error: FrameId does not match ID of import file!" << std::endl;
-                return;
+                return false;
             }
         } else {
             FramePtr pFrame = NewFrame( dTime, GreyImage, GreyThumb );
             if( nFrameId != (int)pFrame->GetId() ) {
                 std::cerr << "error: FrameId does not match ID of import file!" << std::endl;
-                return;
+                return false;
             }
         }
     }
 
     cv::FileNode nodeEdges = fs["Edges"];
     if( nodeEdges.type() != cv::FileNode::SEQ ) {
-        std::cerr << "Error reading the map. Aborting!" << std::endl;
-        return;
+        std::cerr << "error: Edges sequence not found in map." << std::endl;
+        return false;
     }
 
     cv::FileNodeIterator itEdge = nodeEdges.begin(), itEdge_end = nodeEdges.end();
@@ -604,11 +617,16 @@ void DenseMap::ImportMap()
     }
 
     fs.release();
+
+    // init some things in new map
     SetKeyframe(0);
+    _UpdateModifiedTime();
 
     printf( "Total Frames: %5d \t\t Total Edges: %5d\n", GetNumFrames(), GetNumEdges() );
     printf("... Done!!\n");
     printf("-----------------------------------------------------------------------------------------------------------------\n");
+    fflush(stdout);
+    return true;
 }
 
 
@@ -619,7 +637,7 @@ void DenseMap::GenerateAbsolutePoses(
         int                                         nDepth      //< Input: Grapth depth search from root [default: max depth]
     )
 {
-    assert( nRootId >= -1 && nRootId < m_vFrames.size() );
+    assert( nRootId >= -1 && nRootId < (int)m_vFrames.size() );
 
     // clear output vector
     vPoses.clear();

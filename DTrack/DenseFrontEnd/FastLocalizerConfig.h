@@ -1,14 +1,14 @@
-#ifndef _DENSE_FRONT_END_CONFIG_H_
-#define _DENSE_FRONT_END_CONFIG_H_
+#ifndef _FAST_LOCALIZER_CONFIG_H_
+#define _FAST_LOCALIZER_CONFIG_H_
 
 #include <CVars/CVar.h>
 #include <Utils/CVarHelpers.h>
 
 
-class DenseFrontEndConfig
+class FastLocalizerConfig
 {
 public:
-    DenseFrontEndConfig() :
+    FastLocalizerConfig() :
 
         // MOTION MODEL OPTIONS
         g_bConstantVelocityMotionModel( CVarUtils::CreateCVar<>( "FrontEnd.UseConstantVelocityMotionModel", false, "Use constant velocity motion model." ) ),
@@ -25,7 +25,7 @@ public:
         g_fKeyframePtsThreshold( CVarUtils::CreateCVar<>( "FrontEnd.KeyframePtsThreshold", 0.75f, "Minimum percentage of points before a new keyframe is added to the map." ) ),
 
         // LOOP CLOSURE OPTIONS
-        g_nLoopClosureMargin( CVarUtils::CreateCVar<>( "FrontEnd.LoopClosure.FrameMargin", 50, "Number of frames between current frame which will not be taken in consideration for loop closure." ) ),
+        g_nLoopClosureMargin( CVarUtils::CreateCVar<>( "FrontEnd.LoopClosure.FrameMargin", 50u, "Number of frames between current frame which will not be taken in consideration for loop closure." ) ),
         g_nLoopClosureSAD( CVarUtils::CreateCVar<>( "FrontEnd.LoopClosure.SAD", 5u, "Maximum SAD score for loop closure candidates. This value is multiplied by number of pixels in thumbnail." ) ),
         g_dLoopClosureThreshold( CVarUtils::CreateCVar<>( "FrontEnd.LoopClosure.MaximumRMSE", 8.0, "Maximum RMSE in order to accept a loop closure." ) ),
 
@@ -42,7 +42,7 @@ public:
     Eigen::Matrix<int,1,Eigen::Dynamic>&    g_vPyrFullMask;
     float&                                  g_fCloseKeyframeNorm;
     float&                                  g_fKeyframePtsThreshold;
-    int&                                    g_nLoopClosureMargin;
+    unsigned int&                           g_nLoopClosureMargin;
     unsigned int&                           g_nLoopClosureSAD;
     double&                                 g_dLoopClosureThreshold;
     int&                                    g_nErrorLevel;

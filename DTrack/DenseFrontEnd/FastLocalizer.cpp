@@ -3,7 +3,7 @@
 #include <pangolin/pangolin.h>
 #include <cuda_gl_interop.h>
 
-#include "DenseFrontEnd.h"
+#include "FastLocalizer.h"
 
 #include "ImageHelpers.h"
 
@@ -13,7 +13,7 @@ DenseFrontEndConfig         feConfig;
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-DenseFrontEnd::DenseFrontEnd( unsigned int nImageWidth, unsigned int nImageHeight ) :
+FastLocalizer::FastLocalizer( unsigned int nImageWidth, unsigned int nImageHeight ) :
     m_cdGreyPyr( nImageWidth, nImageHeight ),
     m_cdKeyGreyPyr( nImageWidth, nImageHeight ),
     m_cdKeyDepthPyr( nImageWidth, nImageHeight ),
@@ -50,12 +50,12 @@ DenseFrontEnd::DenseFrontEnd( unsigned int nImageWidth, unsigned int nImageHeigh
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-DenseFrontEnd::~DenseFrontEnd()
+FastLocalizer::~FastLocalizer()
 {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool DenseFrontEnd::Init(
+bool FastLocalizer::Init(
         const CamImages&        vImages,            //< Input: Camera capture
         DenseMap*               pMap,               //< Input: Pointer to the map that should be used
         Timer*                  pTimer              //< Input: Pointer to timer
@@ -81,101 +81,20 @@ bool DenseFrontEnd::Init(
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///
 
+    ///----- run relocalizer
+    /// do thumbnail search on all map and select those with SAD < THRESHOLD
+    /// for each candidate
+    /// run coarse pyramid and discard if error > THRESHOLD
+    /// run next level and discard if error > THRESHOLD
+    /// ...
+    /// in the end, chose one with lowest score
 
-    // flag used to generate a new keyframe
-    bool bNewKeyframe = true;
-
-    // check if MAP is preloaded with frames...
-    if( m_pMap->GetNumFrames() == 0 ) {
-
-    } else {
-
-        //... cool, there is a map. Let's see if we can find a keyframe we can use...
-        // use thumbnails matching system to find closest keyframe
-        // run ESM to get estimate
-        // have some sort of condition that accepts or not the estimate (RMSE?)..
-        // if ACCEPT: fix global pose accordingly
-        // m_dBasePose = m_dGlobalPose = ESTIMATE;
-        // m_pCurFrame == THAT keyframe chosen
-            // IF THRESHOLD FOR NEW KEYFRAME IS *NOT* MET (therefore not needed), reset flag
-                //bDropNewFrame = false;
-
-        // if NOT ACCEPT, then drop new keyframe
-        // bDropNewFrame = true; <---- this is already to true so do nothing
-
-
-        ///---------- CREATE NEW FRAME WITH INPUT IMAGES
-        // allocate thumb image
-        cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
-
-        // generate thumbnail
-        GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
-
-        // TODO get this from the camera directly.. the property map should have it
-        double dSensorTime = mvl::Tic();
-
-        // create frame
-        FramePtr pFrame = m_pMap->NewFrame( dSensorTime, vImages[0].Image, GreyThumb );
-        if( pFrame == NULL ) {
-            std::cerr << "error: generating new frame." << std::endl;
-            return false;
-        }
-
-
-        ///---------- LOCALIZE AGAINST LAST KEYFRAME
-        FramePtr pLastKeyframe = m_pMap->GetCurrentKeyframe();
-
-        // Tkc is what the estimator will gives us back
-        // we can seed this via: Tkc = Tkw * Twc = TInv( Twk ) * Twc
-        Eigen::Matrix4d T_lk_c;
-        T_lk_c.setIdentity();
-
-        unsigned int nNumObsLastKeyframe;
-        double dErrorLastKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pLastKeyframe, T_lk_c, nNumObsLastKeyframe );
-        {
-            Eigen::Vector6d E = mvl::T2Cart(T_lk_c);
-            PrintMessage( 0, "--- Estimate (L) (%f): [ %f, %f, %f, %f, %f, %f ]\n", dErrorLastKeyframe, E(0), E(1), E(2), E(3), E(4), E(5) );
-        }
-
-        ///---------- SAVE ESTIMATE
-        m_pMap->LinkFrames( pLastKeyframe, pFrame, T_lk_c );
-
-        m_pMap->UpdateInternalPathFull();
-        return true;
-    }
-
-    if( bNewKeyframe ) {
-
-        // TODO get this from the camera directly.. the property map should have it
-        double dSensorTime = mvl::Tic();
-
-        // allocate thumb images
-        cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
-        cv::Mat DepthThumb( m_nThumbHeight, m_nThumbWidth, CV_32FC1 );
-
-        // generate thumbnails
-        GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
-        GenerateDepthThumbnail( m_cdTemp, vImages[1].Image, DepthThumb );
-
-        FramePtr pFrame = m_pMap->NewKeyframe( dSensorTime, vImages[0].Image, vImages[1].Image, GreyThumb, DepthThumb );
-
-        if( pFrame == NULL ) {
-            return false;
-        }
-        m_pMap->SetKeyframe( pFrame );
-    }
-
-    // reset Tpc
-    m_T_p_c.setIdentity();
-
-    // keep internal map's path up to date
-    m_pMap->UpdateInternalPathFull();
 
     return true;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-bool DenseFrontEnd::Iterate(
+bool FastLocalizer::Iterate(
         const CamImages&    vImages     //< Input: Camera capture
     )
 {
@@ -202,17 +121,6 @@ bool DenseFrontEnd::Iterate(
     // generate thumbnail
     GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
 
-    // TODO get this from the camera directly.. the property map should have it
-    double dSensorTime = mvl::Tic();
-
-    // create frame
-    FramePtr pFrame = m_pMap->NewFrame( dSensorTime, vImages[0].Image, GreyThumb );
-    if( pFrame == NULL ) {
-        std::cerr << "error: generating new frame." << std::endl;
-        return false;
-    }
-    const unsigned int nFrameId = pFrame->GetId();
-
 
     ///---------- LOCALIZE AGAINST LAST KEYFRAME
     Tic("Localize Last");
@@ -228,7 +136,7 @@ bool DenseFrontEnd::Iterate(
     Eigen::Matrix4d T_lk_c = mvl::TInv( T_w_lk ) * T_w_c;
 
     unsigned int nNumObsLastKeyframe;
-    double dErrorLastKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pLastKeyframe, T_lk_c, nNumObsLastKeyframe );
+    double dErrorLastKeyframe = _EstimateRelativePose( vImages[0].Image, pLastKeyframe, T_lk_c, nNumObsLastKeyframe );
     m_Analytics["RMSE Last"] = std::pair<double, double>( dErrorLastKeyframe, 0 );
     {
         Eigen::Vector6d E = mvl::T2Cart(T_lk_c);
@@ -263,7 +171,7 @@ bool DenseFrontEnd::Iterate(
                 continue;
             }
 
-            float fScore = ScoreImages<unsigned char>( pFrame->GetGreyThumbRef(), pCandidateFrame->GetGreyThumbRef() );
+            float fScore = ScoreImages<unsigned char>( GreyThumb, pCandidateFrame->GetGreyThumbRef() );
 
             if( fScore < fBestScore ) {
                 fBestScore = fScore;
@@ -285,7 +193,6 @@ bool DenseFrontEnd::Iterate(
 
     ///---------- LOCALIZE AGAINST CLOSEST KEYFRAME
     Tic("Localize Close");
-    unsigned int nClosestKeyframeId;
     unsigned int nNumObsClosestKeyframe;
     double dErrorClosestKeyframe = DBL_MAX;
     Eigen::Matrix4d T_ck_c;
@@ -293,38 +200,14 @@ bool DenseFrontEnd::Iterate(
         m_Analytics["RMSE Closest"] = std::pair<double, double>( 0, 0 );
         m_Analytics["Loop Closure"] = std::pair<double, double>( 0, 0 );
     } else {
-        nClosestKeyframeId = pClosestKeyframe->GetId();
         T_ck_c.setIdentity();    // the drift would kill this if we try to seed like for LastKeyframe
         Eigen::Vector6d E2 = mvl::T2Cart(T_ck_c);
         PrintMessage( 1, "--- Seed: [ %f, %f, %f, %f, %f, %f ]\n", E2(0), E2(1), E2(2), E2(3), E2(4), E2(5) );
-        dErrorClosestKeyframe = _EstimateRelativePose( pFrame->GetGreyImageRef(), pClosestKeyframe, T_ck_c, nNumObsClosestKeyframe );
+        dErrorClosestKeyframe = _EstimateRelativePose( vImages[0].Image, pClosestKeyframe, T_ck_c, nNumObsClosestKeyframe );
         m_Analytics["RMSE Closest"] = std::pair<double, double>( dErrorClosestKeyframe, 0 );
         {
             Eigen::Vector6d E = mvl::T2Cart(T_ck_c);
             PrintMessage( 1, "--- Estimate (C) (%f): [ %f, %f, %f, %f, %f, %f ]\n", dErrorClosestKeyframe, E(0), E(1), E(2), E(3), E(4), E(5) );
-        }
-
-        ///---------- CHECK FOR LOOP CLOSURE
-        if( abs(nFrameId - nClosestKeyframeId) > feConfig.g_nLoopClosureMargin ) {
-            // frame is "distant" enough that we might consider it a valid loop closure
-            if( dErrorLastKeyframe < feConfig.g_dLoopClosureThreshold && dErrorClosestKeyframe < feConfig.g_dLoopClosureThreshold ) {
-                PrintMessage( 1, "Loop Closure Detected!!! Current Frame: %d -- Matching Frame: %d (RMSE: %f)\n", nFrameId, nClosestKeyframeId, dErrorClosestKeyframe );
-                m_eTrackingState = eTrackingLoopClosure;
-
-                // link frames
-                m_pMap->LinkFrames( pLastKeyframe, pFrame, T_lk_c );
-                m_pMap->LinkFrames( pClosestKeyframe, pFrame, T_ck_c );
-
-                // reset m_Tpc in order to discard accumulated drift (for constant velocity model)
-                m_T_p_c.setIdentity();
-
-                // update internal path
-                m_pMap->UpdateInternalPathFull();
-
-                m_Analytics["Loop Closure"] = std::pair<double, double>( 1.0, 0 );
-                Toc("Localize Close");
-                return true;
-            }
         }
     }
     Toc("Localize Close");
@@ -375,35 +258,8 @@ bool DenseFrontEnd::Iterate(
     }
 
 
-    ///---------- SAVE ESTIMATE
-    m_pMap->LinkFrames( pKeyframe, pFrame, T_k_c );
-
-
     ///---------- UPDATE KEYFRAME
     m_pMap->SetKeyframe( pKeyframe );
-
-
-    ///---------- KEYFRAME GENERATION
-    const unsigned int nNumDepthPts = cv::countNonZero( vImages[1].Image );
-    double dObsPts = (double)nNumObservations / (double)nNumDepthPts;
-
-    // convert frame to keyframe if number of observations is too low
-    m_Analytics["Num Obs"] = std::pair<double, double>( dObsPts, feConfig.g_fKeyframePtsThreshold );
-    if( dObsPts < feConfig.g_fKeyframePtsThreshold ) {
-
-        // allocate thumb images
-        cv::Mat DepthThumb( m_nThumbHeight, m_nThumbWidth, CV_32FC1 );
-
-        // generate thumbnails
-        GenerateDepthThumbnail( m_cdTemp, vImages[1].Image, DepthThumb );
-
-        pFrame->SetKeyframeFlag();
-        pFrame->SetDepthImage( vImages[1].Image );
-        pFrame->SetDepthThumb( DepthThumb );
-
-        m_pMap->SetKeyframe( pFrame );
-
-    }
 
 
     // we would also like to get Tpc: transform from previous frame to current frame
@@ -411,18 +267,12 @@ bool DenseFrontEnd::Iterate(
     // given: Tpk = Tpw * Twk = TInv( Twp ) * Twk
     m_T_p_c = mvl::TInv( T_w_p ) * T_w_k * T_k_c;
 
-
-    // update internal path
-    Tic("Update Path");
-    m_pMap->UpdateInternalPath();
-    Toc("Update Path");
-
     return true;
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void DenseFrontEnd::GetAnalytics(
+void FastLocalizer::GetAnalytics(
         std::map< std::string, std::pair< double, double > >&    mData
     )
 {
@@ -438,7 +288,7 @@ void DenseFrontEnd::GetAnalytics(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-double DenseFrontEnd::_EstimateRelativePose(
+double FastLocalizer::_EstimateRelativePose(
         const cv::Mat&          GreyImg,        //< Input: Greyscale image
         FramePtr                pKeyframe,      //< Input: Keyframe we are localizing against
         Eigen::Matrix4d&        Tkc,            //< Input/Output: the estimated relative transform (input is used as a hint)

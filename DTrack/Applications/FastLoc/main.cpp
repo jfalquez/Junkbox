@@ -10,7 +10,7 @@ void DTrackThread( Gui& gui, int argc, char** argv)
         if( app.InitReset( argc, argv ) == false ) {
             gui.SetState( QUIT );   // this will notify the GUI to die
         } else {
-            gui.SetState( PAUSED );
+            gui.SetState( PLAYING );
         }
 
         while( gui.State != QUIT ) {
@@ -23,19 +23,10 @@ void DTrackThread( Gui& gui, int argc, char** argv)
                     usleep( 10000 );
                 }
             }
-            if( gui.State == PLAYING ) {
-                app.StepOnce( gui );
-            }
-            if( gui.State == STEPPING ) {
-                app.StepOnce( gui );
-                gui.SetState( PAUSED );
-            }
 
+            app.StepOnce( gui );
             app.UpdateGui( gui );
 
-            if( gui.State == PAUSED ) {
-                usleep(1000000 / 30);
-            }
         }
     } catch( std::exception ) {
         gui.State = QUIT;   // this will notify the GUI to die

@@ -3,7 +3,7 @@
 
 #include <RPG/Utils/InitCam.h>
 #include <Mvlpp/Mvl.h>
-#include <DenseFrontEnd/DenseFrontEnd.h>
+#include <DenseFrontEnd/FastLocalizer.h>
 #include <DenseBackEnd/DenseBackEnd.h>
 
 #include "Gui.h"
@@ -15,8 +15,7 @@ class DTrackApp
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         DTrackApp()
         {
-            m_pFrontEnd = NULL;
-            m_pBackEnd = NULL;
+            m_pLocalizer = NULL;
             m_pMap = NULL;
             m_pTimer = NULL;
         }
@@ -43,46 +42,7 @@ class DTrackApp
             m_bConvertGrey = clArgs.search( "-rgb-to-grey" );
             m_bRectify = clArgs.search( "-rectify" );
             m_bResize = clArgs.search( "-resize" );
-            m_bConvertToM = clArgs.search( "-depth-to-m" );
 
-
-            //----- init camera 2 if necessary
-            std::string sDDev = clArgs.follow( "", "-ddev" );
-
-            m_bAuxCam = false;
-            if( sDDev.empty() == false ) {
-                m_bAuxCam = true;
-                std::cout << "Second camera detected ..." << std::endl;
-
-                /// for Kinect
-                bool            bGetDepth   = !clArgs.search( "-no-depth" );
-                bool            bGetRGB     = !clArgs.search( "-no-rgb" );
-                bool            bGetIr      = clArgs.search( "-with-ir" );
-                bool            bAlignDepth = clArgs.search( "-align-depth" );
-                unsigned int    nFPS        = clArgs.follow( 30, "-fps"  );
-                std::string     sResolution = clArgs.follow( "VGA", "-res"  );
-
-                m_CamAux.SetProperty( "GetRGB", bGetRGB );
-                m_CamAux.SetProperty( "GetDepth", bGetDepth );
-                m_CamAux.SetProperty( "GetIr", bGetIr );
-                m_CamAux.SetProperty( "AlignDepth", bAlignDepth );
-                m_CamAux.SetProperty( "FPS", nFPS );
-                m_CamAux.SetProperty( "Resolution", sResolution );
-
-
-                /// for FileReader
-                m_CamAux.SetProperty("DataSourceDir", "/Users/jmf/Code/Kangaroo/Build/applications" );
-                m_CamAux.SetProperty("Channel-0",     "SDepth.*" );
-                m_CamAux.SetProperty("CamModel-L",    "hlcmod.xml" );
-                m_CamAux.SetProperty("NumChannels",   1 );
-
-                m_CamAux.InitDriver( sDDev );
-
-                CamImages   vImages;      // camera images
-                m_CamAux.Capture( vImages );
-                m_vImages.resize( 2 );
-                m_vImages[1] = vImages[0];
-            }
 
             // prepare images as expected by the FrontEnd
             _UnpackImages( m_vImages );
@@ -96,9 +56,15 @@ class DTrackApp
                 delete m_pMap;
             }
             m_pMap = new DenseMap;
-            // load map from files IF user provided it!
-            m_pMap->ImportMap();
-
+            // load map from files if user provided it!
+            std::string sMap = clArgs.follow( "", "-map" );
+            if( sMap.empty() == false ) {
+                if( m_pMap->ImportMap( sMap ) == true ) {
+                    m_pMap->UpdateInternalPathFull();
+                } else {
+                    std::cerr << "error: Could not load map '" << sMap << "'." << std::endl;
+                }
+            }
 
             // get camera configuration
             std::string sSrcDir = m_Cam.GetProperty( "DataSourceDir", "." );
@@ -116,20 +82,11 @@ class DTrackApp
                 return false;
             }
 
-            if( m_pBackEnd ) {
-                delete m_pBackEnd;
+            if( m_pLocalizer ) {
+                delete m_pLocalizer;
             }
-            m_pBackEnd = new DenseBackEnd;
-            if( m_pBackEnd->Init( m_pMap ) == false ) {
-                std::cerr << "error: A problem was encountered initializing the back end." << std::endl;
-                return false;
-            }
-
-            if( m_pFrontEnd ) {
-                delete m_pFrontEnd;
-            }
-            m_pFrontEnd = new DenseFrontEnd( m_vImages[0].width(), m_vImages[0].height() );
-            if( m_pFrontEnd->Init( m_vImages, m_pMap, m_pTimer ) == false ) {
+            m_pLocalizer = new FastLocalizer( m_vImages[0].width(), m_vImages[0].height() );
+            if( m_pLocalizer->Init( m_vImages, m_pMap, m_pTimer ) == false ) {
                 std::cerr << "error: A problem was encountered initializing the front end." << std::endl;
                 return false;
             }
@@ -147,55 +104,37 @@ class DTrackApp
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         void StepOnce( Gui& rGui )
         {
-            m_pFrontEnd->Tic();
+            m_pLocalizer->Tic();
 
-            m_pFrontEnd->Tic("Capture");
+            m_pLocalizer->Tic("Capture");
             bool bCapRet = m_Cam.Capture( m_vImages );
-            m_pFrontEnd->Toc("Capture");
+            m_pLocalizer->Toc("Capture");
 
             if( bCapRet ) {
 
-                if( m_bAuxCam ) {
-                    m_pFrontEnd->Tic("CaptureAux");
-                    CamImages   vImages;      // camera images
-                    if( m_CamAux.Capture( vImages ) == false ) {
-                        std::cerr << "error: A problem occurred while capturing from second camera." << std::endl;
-                    }
-                    m_vImages.resize( 2 );
-                    m_vImages[1] = vImages[0];
-                    m_pFrontEnd->Toc("CaptureAux");
-                }
-
-
                 // unpack images to what the front end expects
-                m_pFrontEnd->Tic("Unpack");
+                m_pLocalizer->Tic("Unpack");
                 _UnpackImages( m_vImages );
-                m_pFrontEnd->Toc("Unpack");
+                m_pLocalizer->Toc("Unpack");
 
-                if( m_pFrontEnd->Iterate( m_vImages ) == false ) {
+                if( m_pLocalizer->Iterate( m_vImages ) == false ) {
                     std::cerr << "critical: something went wrong during the last iteration." << std::endl;
                     rGui.SetState( PAUSED );
                 }
-                m_pFrontEnd->Toc();
+                m_pLocalizer->Toc();
 
                 // update analytics
-                m_pFrontEnd->GetAnalytics( m_Analytics );
+                m_pLocalizer->GetAnalytics( m_Analytics );
                 rGui.UpdateAnalytics( m_Analytics );
                 rGui.UpdateTimer( m_pTimer->GetWindowSize(), m_pTimer->GetNames(3), m_pTimer->GetTimes(3) );
 
-                // pause if loop closure and call pose graph relaxation
-                if( m_pFrontEnd->TrackingState() == eTrackingLoopClosure ) {
-//                    rGui.SetState( PAUSED );
-                    m_pBackEnd->DoPoseGraphRelaxation();
-                 }
-
                 // pause if we are lost
-                if( m_pFrontEnd->TrackingState() == eTrackingFail ) {
+                if( m_pLocalizer->TrackingState() == eTrackingFail ) {
 //                    rGui.SetState( PAUSED );
                 }
             } else {
                 // no more images, pause
-                m_pFrontEnd->Toc();
+                m_pLocalizer->Toc();
                 rGui.SetState( PAUSED );
             }
         }
@@ -204,7 +143,6 @@ class DTrackApp
         void UpdateGui( Gui& rGui )
         {
             rGui.CopyMapChanges( *m_pMap );
-
             rGui.UpdateImages( m_vImages[0].Image );
         }
 
@@ -238,39 +176,6 @@ class DTrackApp
                 cv::resize( vImages[0].Image, Tmp, cv::Size(0,0), 0.5, 0.5 );
                 vImages[0].Image = Tmp;
             }
-
-            if( m_bConvertToM ) {
-                cv::Mat Tmp;
-                vImages[1].Image.convertTo( Tmp, CV_32FC1 );
-                Tmp = Tmp / 1000;
-                vImages[1].Image = Tmp;
-            }
-
-            const unsigned int nLeftMargin = 30;
-//            const unsigned int nLeftMargin = 40;
-            for( int ii = 0; ii < vImages[1].Image.rows; ii++ ) {
-                for( unsigned int jj = 0; jj < nLeftMargin; jj++ ) {
-                    vImages[1].Image.at<float>(ii,jj) = 0.0f;
-                }
-            }
-
-            /// None
-            const unsigned int nBottomMargin = 0;
-            const unsigned int nMiddleMargin = 0;
-            /// Tompkins
-//            const unsigned int nBottomMargin = 90;
-//            const unsigned int nMiddleMargin = 150;
-            /// Toyota
-//            const unsigned int nBottomMargin = 90;
-//            const unsigned int nMiddleMargin = 180;
-            for( int ii = vImages[1].Image.rows-nBottomMargin; ii < vImages[1].Image.rows; ii++ ) {
-                for( unsigned int jj = (vImages[1].Image.cols/2)-nMiddleMargin; jj < (vImages[1].Image.cols/2)+nMiddleMargin; jj++ ) {
-                    vImages[1].Image.at<float>(ii,jj) = 0.0f;
-                }
-            }
-
-//            vImages[1].Image = vImages[1].Image / 4;
-//            vImages[1].Image = vImages[1].Image * (359.428/718.8560);
         }
 
 
@@ -282,15 +187,11 @@ class DTrackApp
         CamImages                       m_vImages;      // camera images
 
         /// auxilary variables to support multiple cameras, image pre-processing, etc.
-        bool                            m_bAuxCam;      // if external (auxilary) camera is being used
         bool                            m_bRectify;     // rectify image
         bool                            m_bConvertGrey; // convert to greyscale
         bool                            m_bResize;      // reduce greyscale
-        bool                            m_bConvertToM;  // convert to meters ... usually used for kinect
-        CameraDevice                    m_CamAux;       // camera handler
 
-        DenseFrontEnd*                  m_pFrontEnd;
-        DenseBackEnd*                   m_pBackEnd;
+        FastLocalizer*                  m_pLocalizer;
         DenseMap*                       m_pMap;
 
         Timer*                                                  m_pTimer;

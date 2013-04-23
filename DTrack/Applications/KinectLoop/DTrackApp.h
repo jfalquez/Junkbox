@@ -96,9 +96,15 @@ class DTrackApp
                 delete m_pMap;
             }
             m_pMap = new DenseMap;
-            // load map from files IF user provided it!
-//            m_pMap->ImportMap();
-
+            // load map from files if user provided it!
+            std::string sMap = clArgs.follow( "", "-map" );
+            if( sMap.empty() == false ) {
+                if( m_pMap->ImportMap( sMap ) == true ) {
+                    m_pMap->UpdateInternalPathFull();
+                } else {
+                    std::cerr << "error: Could not load map '" << sMap << "'." << std::endl;
+                }
+            }
 
             // get camera configuration
             std::string sSrcDir = m_Cam.GetProperty( "DataSourceDir", "." );
@@ -204,7 +210,6 @@ class DTrackApp
         void UpdateGui( Gui& rGui )
         {
             rGui.CopyMapChanges( *m_pMap );
-
             rGui.UpdateImages( m_vImages[0].Image );
         }
 

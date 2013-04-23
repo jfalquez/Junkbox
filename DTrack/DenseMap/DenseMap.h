@@ -232,7 +232,9 @@ public:
     /// map functions
     void PrintMap();
     void ExportMap();
-    void ImportMap();
+    bool ImportMap(
+            const std::string&      sMap
+        );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// mutex

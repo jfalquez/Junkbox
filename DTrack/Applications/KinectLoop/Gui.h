@@ -332,7 +332,7 @@ void Gui::_RegisterKeyboardCallbacks()
 
     // print map
     pangolin::RegisterKeyPressCallback( 'm',
-                                        [this](){ m_pRenderMap->ImportMap(); }
+                                        [this](){ m_pRenderMap->PrintMap(); }
                                         );
 
     // export map

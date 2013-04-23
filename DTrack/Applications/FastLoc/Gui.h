@@ -9,7 +9,7 @@
 #include <SceneGraph/SceneGraph.h>
 
 #include <DenseMap/DenseMap.h>
-#include <DenseFrontEnd/DenseFrontEnd.h>
+#include <DenseFrontEnd/FastLocalizer.h>
 
 #include <GUI/GLPath.h>
 #include <GUI/GLMap.h>
@@ -87,7 +87,7 @@ public:
 private:
     bool                            m_bMapDirty;
 
-    DenseFrontEnd*                  m_pFrontEnd;
+    FastLocalizer*                  m_pLocalizer;
     DenseMap*                       m_pRenderMap;          // re-allocated on reset. for now.
     DenseMap*                       m_pChangesBufferMap;   // re-allocated on reset. for now.
 
@@ -105,7 +105,7 @@ private:
 
     // objects for 3d view
     SceneGraph::GLGrid              m_glGrid;
-    GLPath                          m_glPath;
+    SceneGraph::GLAxis              m_glAxis;
     GLMap                           m_glMap;
 
     // objects for view container
@@ -173,8 +173,8 @@ void Gui::Init()
     SceneGraph::GLSceneGraph::ApplyPreferredGlSettings();
     glClearColor( 0, 0, 0, 0 );
     m_gl3dGraph.AddChild( &m_glGrid );
+    m_gl3dGraph.AddChild( &m_glAxis );
     m_gl3dGraph.AddChild( &m_glMap );
-    m_gl3dGraph.AddChild( &m_glPath );
 
     m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 3000) );
     m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-20, 0, -30, 0, 0, 0, pangolin::AxisNegZ) );
@@ -224,7 +224,6 @@ void Gui::InitReset()
 
     // init-reset objects
     m_glMap.InitReset( m_pRenderMap );
-    m_glPath.InitReset( m_pRenderMap );
 
     // init-reset extras
     m_TimerView.InitReset();
@@ -247,8 +246,6 @@ void Gui::Run()
 
          // update gui variables
          m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
-         m_glPath.SetPoseDisplay( guiConfig.g_nNumPosesToShow );
-         m_glPath.SetSphereRadius( feConfig.g_fCloseKeyframeNorm );
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -332,7 +329,7 @@ void Gui::_RegisterKeyboardCallbacks()
 
     // print map
     pangolin::RegisterKeyPressCallback( 'm',
-                                        [this](){ m_pRenderMap->ImportMap(); }
+                                        [this](){ m_pRenderMap->PrintMap(); }
                                         );
 
     // export map

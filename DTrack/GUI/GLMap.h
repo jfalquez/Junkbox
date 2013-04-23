@@ -78,6 +78,7 @@ public:
                     }
                 }
             }
+            m_dLastModifiedTime = m_pMap->GetLastModifiedTime();
         }
 
         std::map<unsigned int, Eigen::Matrix4d>& vPoses = m_pMap->GetInternalPath();
