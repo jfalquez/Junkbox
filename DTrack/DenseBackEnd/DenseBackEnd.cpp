@@ -137,7 +137,7 @@ void DenseBackEnd::_PoseRelax()
         Sophus::SE3d Tse = vAbsPoses[nStartId].inverse() * vAbsPoses[nEndId];
         pEdge->SetTransform( Tse.matrix() );
     }
-//    m_pMap->UpdateInternalPathFull();
+    m_pMap->UpdateInternalPathFull();
 }
 
 

@@ -217,6 +217,13 @@ public:
             std::vector< std::pair< unsigned int, float > >&    vKeyframes
         );
 
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /// find all the keyframes that are similar to input thumbnail and less than score -- searches through all the map
+    void FindSimilarKeyframes(
+            const cv::Mat&                                      GreyThumb,      //< Input
+            float                                               fMaxScore,      //< Input
+            std::vector< std::pair< unsigned int, float > >&    vKeyframes      //< Output
+        );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// Copy changes from RHS into this
@@ -266,6 +273,12 @@ private:
             std::pair< unsigned int, float > rhs
         );
 
+
+    /////
+    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+public:
+    Eigen::Matrix4d                             m_dCurPose;
+    Eigen::Matrix4d                             m_dPrevPose;
 
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

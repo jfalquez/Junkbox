@@ -119,7 +119,6 @@ class DTrackApp
 
                 if( m_pLocalizer->Iterate( m_vImages ) == false ) {
                     std::cerr << "critical: something went wrong during the last iteration." << std::endl;
-                    rGui.SetState( PAUSED );
                 }
                 m_pLocalizer->Toc();
 
@@ -130,12 +129,11 @@ class DTrackApp
 
                 // pause if we are lost
                 if( m_pLocalizer->TrackingState() == eTrackingFail ) {
-//                    rGui.SetState( PAUSED );
+//                    rGui.SetState( RESETTING );
                 }
             } else {
                 // no more images, pause
                 m_pLocalizer->Toc();
-                rGui.SetState( PAUSED );
             }
         }
 

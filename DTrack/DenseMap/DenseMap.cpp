@@ -3,6 +3,8 @@
 #include <Mvlpp/Mvl.h>
 #include <RPG/Utils/ImageWrapper.h>
 
+#include <Utils/ImageHelpers.h>
+
 #include "DenseMap.h"
 
 
@@ -312,7 +314,7 @@ bool DenseMap::CopyMapChanges(
     )
 {
     if( m_dLastModifiedTime >= rRHS.m_dLastModifiedTime ){
-        return false; // nothing to do, map is up-to date
+//        return false; // nothing to do, map is up-to date
     }
 
     if( m_CModPyrGrey.IsInit() == false ) {
@@ -331,6 +333,10 @@ bool DenseMap::CopyMapChanges(
     Lock();
     rRHS.Lock();
 
+    // copy poses
+    m_dCurPose = rRHS.m_dCurPose;
+    m_dPrevPose = rRHS.m_dPrevPose;
+
     // since these are pointers, we don't need to update the data itself within
     const unsigned int nNumEdges = m_vEdges.size();
     const unsigned int nNumEdgesRHS = rRHS.m_vEdges.size();
@@ -340,11 +346,13 @@ bool DenseMap::CopyMapChanges(
     m_vFrames.resize( nNumFramesRHS );
 
     for( unsigned int ii = nNumEdges; ii < nNumEdgesRHS; ii++ ) {
-        m_vEdges[ii] = std::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
+//        m_vEdges[ii] = std::shared_ptr<TransformEdge>( new TransformEdge( *rRHS.m_vEdges[ii] ) );
+        m_vEdges[ii] = rRHS.m_vEdges[ii];
     }
 
     for( unsigned int ii = nNumFrames; ii < nNumFramesRHS; ii++ ) {
-        m_vFrames[ii] = std::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
+//        m_vFrames[ii] = std::shared_ptr<ReferenceFrame>( new ReferenceFrame( *rRHS.m_vFrames[ii] ) );
+        m_vFrames[ii] = rRHS.m_vFrames[ii];
     }
 
     m_pCurKeyframe = std::shared_ptr<ReferenceFrame>( new ReferenceFrame( *(rRHS.m_pCurKeyframe) ) );
@@ -418,6 +426,34 @@ void DenseMap::FindClosestKeyframes(
     std::sort( vKeyframes.begin(), vKeyframes.end(), _CompareNorm );
 }
 
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseMap::FindSimilarKeyframes(
+        const cv::Mat&                                      GreyThumb,      //< Input
+        float                                               fMaxScore,      //< Input
+        std::vector< std::pair< unsigned int, float > >&    vKeyframes      //< Output
+    )
+{
+    for( unsigned int ii = 0; ii < m_vFrames.size(); ++ii ) {
+
+        // get frame pointer
+        FramePtr pCandidateFrame = m_vFrames[ii];
+
+        // do not compare with non-keyframes
+        if( pCandidateFrame->IsKeyframe() == false ) {
+            continue;
+        }
+
+        float fScore = ScoreImages<unsigned char>( GreyThumb, pCandidateFrame->GetGreyThumbRef() );
+
+        if( fScore < fMaxScore ) {
+            vKeyframes.push_back( std::pair<unsigned int, float>( ii, fScore ) );
+        }
+    }
+
+    // sort vector
+    std::sort( vKeyframes.begin(), vKeyframes.end(), _CompareNorm );
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void DenseMap::PrintMap()
@@ -567,9 +603,9 @@ bool DenseMap::ImportMap(
         cv::Mat GreyImage, GreyThumb;
         std::string GreyImageFile, GreyThumbFile;
         (*itFrame)["GreyImage"] >> GreyImageFile;
-        GreyImage = cv::imread( GreyImageFile );
+        GreyImage = cv::imread( GreyImageFile, 0 );
         (*itFrame)["GreyThumb"] >> GreyThumbFile;
-        GreyThumb = cv::imread( GreyThumbFile );
+        GreyThumb = cv::imread( GreyThumbFile, 0 );
         if( bIsKeyframe ) {
             rpg::ImageWrapper DepthImage, DepthThumb;
             std::string DepthImageFile, DepthThumbFile;

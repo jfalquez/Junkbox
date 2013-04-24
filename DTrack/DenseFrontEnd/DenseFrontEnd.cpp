@@ -3,9 +3,9 @@
 #include <pangolin/pangolin.h>
 #include <cuda_gl_interop.h>
 
-#include "DenseFrontEnd.h"
+#include <Utils/ImageHelpers.h>
 
-#include "ImageHelpers.h"
+#include "DenseFrontEnd.h"
 
 
 // Global CVars
@@ -515,6 +515,12 @@ double DenseFrontEnd::_EstimateRelativePose(
                                                                                     Kg, Kd, Tgd, Tck, KgTck,
                                                                                     m_cdWorkspace, m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight),
                                                                                     fNormC, ui_bDiscardMaxMin, 0.1, 140.0 );
+
+
+            cudaError err = cudaGetLastError();
+            if( err != cudaSuccess ) {
+                fprintf( stderr, "cudaCheckError: Failed with %s.", cudaGetErrorString(err) );
+            }
 
 // Show DEBUG image from minimization
 #if 0

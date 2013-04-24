@@ -156,9 +156,21 @@ private:
                 pVBO[nVboIdx+3] = 1;
             }
         }
-        */
+        /* */
 
-        for( int ii = 0; ii < nHeight; ++ii ) {
+        for( int ii = 0; ii < 10; ++ii ) {
+            for( int jj = 0; jj < nWidth; ++jj ) {
+                const unsigned int nIdx = (ii * nWidth) + jj;
+                const unsigned int nVboIdx = nIdx * 4;
+                pVBO[nVboIdx]   = 0.0/0.0;
+                pVBO[nVboIdx+1] = 0.0/0.0;
+                pVBO[nVboIdx+2] = 0.0/0.0;
+                pVBO[nVboIdx+3] = 1;
+            }
+        }
+
+        /* */
+        for( int ii = 10; ii < nHeight; ++ii ) {
             float lastDepth = -1;
             for( int jj = 0; jj < nWidth; ++jj ) {
                 const unsigned int nIdx = (ii * nWidth) + jj;
@@ -166,7 +178,7 @@ private:
                 if( lastDepth == -1 ) {
                     lastDepth = pDepth[nIdx];
                 }
-                if( fabs(lastDepth - pDepth[nIdx] ) > 0.5 ) {
+                if( fabs(lastDepth - pDepth[nIdx] ) > 0.3 ) {
                     pVBO[nVboIdx]   = 0.0/0.0;
                     pVBO[nVboIdx+1] = 0.0/0.0;
                     pVBO[nVboIdx+2] = 0.0/0.0;
@@ -179,6 +191,7 @@ private:
                 lastDepth = pDepth[nIdx];
             }
         }
+        /* */
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

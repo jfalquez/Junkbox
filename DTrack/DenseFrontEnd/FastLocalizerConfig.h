@@ -30,7 +30,7 @@ public:
         g_dLoopClosureThreshold( CVarUtils::CreateCVar<>( "FrontEnd.LoopClosure.MaximumRMSE", 8.0, "Maximum RMSE in order to accept a loop closure." ) ),
 
         // DEBUG OPTIONS
-        g_nErrorLevel( CVarUtils::CreateCVar<>( "FrontEnd.Debug.ErrorLevel", 0, "Verbosity level for printing errors." ) ),
+        g_nErrorLevel( CVarUtils::CreateCVar<>( "FrontEnd.Debug.ErrorLevel", 1, "Verbosity level for printing errors." ) ),
         g_nDebugGN( CVarUtils::CreateCVar<>( "FrontEnd.Debug.GN", 1u, "Print error level"))
     {}
 

@@ -22,7 +22,7 @@
 GuiConfig           guiConfig;
 extern              DenseFrontEndConfig feConfig;
 
-enum GuiState { PLAYING, STEPPING, PAUSED, RESETTING, RESET_COMPLETE, QUIT };
+enum GuiState { PLAYING, RESETTING, RESET_COMPLETE, QUIT };
 
 class Gui
 {
@@ -57,16 +57,6 @@ private:
 
     void _RegisterKeyboardCallbacks();
 
-    void _RIGHT_ARROW()
-    {
-        State = STEPPING;
-    }
-
-    void _SPACE_BAR()
-    {
-        State = (State == PAUSED) ? PLAYING : PAUSED;
-    }
-
     void _CTRL_R()
     {
         State = RESETTING;
@@ -74,7 +64,6 @@ private:
             usleep(10000);
         }
         InitReset(); // not called from elsewhere
-        State = PAUSED;
     }
 
 
@@ -224,6 +213,7 @@ void Gui::InitReset()
 
     // init-reset objects
     m_glMap.InitReset( m_pRenderMap );
+    m_glMap.SetVisible( false );
 
     // init-reset extras
     m_TimerView.InitReset();
@@ -245,6 +235,14 @@ void Gui::Run()
          }
 
          // update gui variables
+         std::map<unsigned int, Eigen::Matrix4d>& vPoses = m_pRenderMap->GetInternalPath();
+         if( !vPoses.empty() ) {
+             Eigen::Matrix4d& dPathOrientation =  m_pRenderMap->GetPathOrientation();
+             // look for first pose of map, which is our "true" origin
+             Eigen::Matrix4d dOrigin = mvl::TInv( vPoses[0] );
+             Eigen::Matrix4d dPose = dPathOrientation * dOrigin * m_pRenderMap->m_dCurPose;
+             m_glAxis.SetPose( dPose );
+         }
          m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -315,27 +313,9 @@ void Gui::UpdateAnalytics(
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::_RegisterKeyboardCallbacks()
 {
-    // step once
-    pangolin::RegisterKeyPressCallback( pangolin::PANGO_SPECIAL + GLUT_KEY_RIGHT,
-                                        std::bind( &Gui::_RIGHT_ARROW, this) );
-
-    // play / pause
-    pangolin::RegisterKeyPressCallback( ' ',
-                                        std::bind( &Gui::_SPACE_BAR, this) );
-
     // reset app
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'r',
                                         std::bind( &Gui::_CTRL_R, this) );
-
-    // print map
-    pangolin::RegisterKeyPressCallback( 'm',
-                                        [this](){ m_pRenderMap->PrintMap(); }
-                                        );
-
-    // export map
-    pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'm',
-                                        [this](){ m_pRenderMap->ExportMap(); }
-                                        );
 
     // toggle showing side panel
     pangolin::RegisterKeyPressCallback('~', [this](){ static bool showpanel = false; showpanel = !showpanel;

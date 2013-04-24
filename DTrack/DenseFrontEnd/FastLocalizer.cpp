@@ -3,13 +3,13 @@
 #include <pangolin/pangolin.h>
 #include <cuda_gl_interop.h>
 
-#include "FastLocalizer.h"
+#include <Utils/ImageHelpers.h>
 
-#include "ImageHelpers.h"
+#include "FastLocalizer.h"
 
 
 // Global CVars
-DenseFrontEndConfig         feConfig;
+FastLocalizerConfig         flConfig;
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -21,7 +21,7 @@ FastLocalizer::FastLocalizer( unsigned int nImageWidth, unsigned int nImageHeigh
     m_cdDebug( nImageWidth, nImageHeight ),
     m_cdTemp( nImageWidth, nImageHeight )
 {
-    mvl::PrintHandlerSetErrorLevel( feConfig.g_nErrorLevel );
+    mvl::PrintHandlerSetErrorLevel( flConfig.g_nErrorLevel );
 
     m_nImageWidth   = nImageWidth;
     m_nImageHeight  = nImageHeight;
@@ -32,15 +32,15 @@ FastLocalizer::FastLocalizer( unsigned int nImageWidth, unsigned int nImageHeigh
 
     // initialize max number of iterations to perform at each pyramid level
     // level 0 is finest (ie. biggest image)
-    feConfig.g_vPyrMaxIters.resize( MAX_PYR_LEVELS );
-    feConfig.g_vPyrMaxIters.setZero();
-    feConfig.g_vPyrMaxIters << 1, 1, 2, 2, 5;
+    flConfig.g_vPyrMaxIters.resize( MAX_PYR_LEVELS );
+    flConfig.g_vPyrMaxIters.setZero();
+    flConfig.g_vPyrMaxIters << 1, 2, 3, 4, 5;
 
     // initialize if full estimate should be performed at a particular level
     // 1: full estimate          0: just rotation
-    feConfig.g_vPyrFullMask.resize( MAX_PYR_LEVELS );
-    feConfig.g_vPyrFullMask.setZero();
-    feConfig.g_vPyrFullMask << 1, 1, 1, 1, 0;
+    flConfig.g_vPyrFullMask.resize( MAX_PYR_LEVELS );
+    flConfig.g_vPyrFullMask.setZero();
+    flConfig.g_vPyrFullMask << 1, 1, 1, 1, 0;
 
     m_pMap   = NULL; // passed in by the user
     m_pTimer = NULL; // passed in by the user
@@ -81,13 +81,62 @@ bool FastLocalizer::Init(
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///
 
-    ///----- run relocalizer
-    /// do thumbnail search on all map and select those with SAD < THRESHOLD
+    // allocate thumb image
+    cv::Mat GreyThumb( m_nThumbHeight, m_nThumbWidth, CV_8UC1 );
+
+    // generate thumbnail
+    GenerateGreyThumbnail( m_cdTemp, vImages[0].Image, GreyThumb );
+
+    // find most similar keyframes
+    std::vector< std::pair< unsigned int, float > > vSimilarKeyframes;
+    const float fMaxSAD =  (m_nThumbHeight * m_nThumbWidth) * 10;
+    m_pMap->FindSimilarKeyframes( GreyThumb, fMaxSAD, vSimilarKeyframes );
+
+    double dLastError = DBL_MAX;
+    Eigen::Matrix4d Tkc;
+    for( unsigned int ii = 0; ii < vSimilarKeyframes.size(); ii++ ) {
+
+        // get frame pointer
+        const unsigned int nId = std::get<0>( vSimilarKeyframes[ii] );
+        FramePtr pSimilarKeyframe = m_pMap->GetFramePtr( nId );
+
+        Eigen::Matrix4d T;
+        T.setIdentity();
+        unsigned int nNumObs;
+        double dError = _EstimateRelativePose( vImages[0].Image, pSimilarKeyframe, T, nNumObs );
+
+        if( dError > dLastError ) {
+            break;
+        }
+
+        Tkc = T;
+        dLastError = dError;
+        m_pMap->SetKeyframe( nId );
+    }
+
+    FramePtr pKeyframe = m_pMap->GetCurrentKeyframe();
+    const unsigned int nKeyframeId = pKeyframe->GetId();
+
+    std::cout << "Best Keyframe: " << nKeyframeId << std::endl;
+    Eigen::Vector6d E;
+    E = mvl::T2Cart( Tkc );
+    std::cout << "Esimate: " << E.transpose() << std::endl;
+
+    // get path of global poses
+    std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
+
+    Eigen::Matrix4d Twk = vPath[nKeyframeId];
+
+    // store estimated pose in global coordinate frame
+    m_pMap->m_dCurPose = m_pMap->m_dPrevPose = Twk * Tkc;
+
     /// for each candidate
     /// run coarse pyramid and discard if error > THRESHOLD
     /// run next level and discard if error > THRESHOLD
     /// ...
     /// in the end, chose one with lowest score
+
+    /// for now, do this inneficiently
 
 
     return true;
@@ -99,20 +148,17 @@ bool FastLocalizer::Iterate(
     )
 {
     // update error level in case user changed it
-    mvl::PrintHandlerSetErrorLevel( feConfig.g_nErrorLevel );
+    mvl::PrintHandlerSetErrorLevel( flConfig.g_nErrorLevel );
 
-    // The map's global poses are updated at the end of every iteration with respect to the last frame.
-    // So in essence, the previous frame is the new origin in global coordinates: Twp = I4
-    Eigen::Matrix4d T_w_c; T_w_c.setIdentity();
-    Eigen::Matrix4d T_w_p; T_w_p.setIdentity();
-
+    Eigen::Matrix4d& T_w_c = m_pMap->m_dCurPose;
+    Eigen::Matrix4d& T_w_p = m_pMap->m_dPrevPose;
 
     ///---------- MOTION MODELS
     // given a motion model or IMU, get estimated pose
-    if( feConfig.g_bConstantVelocityMotionModel == true ) {
-        T_w_c = m_T_p_c;
+    if( flConfig.g_bConstantVelocityMotionModel == true ) {
+        Eigen::Matrix4d T_p_c = mvl::TInv( T_w_p ) * T_w_c;
+        T_w_c = T_w_c * T_p_c;
     }
-
 
     ///---------- CREATE NEW FRAME WITH INPUT IMAGES
     // allocate thumb image
@@ -135,6 +181,11 @@ bool FastLocalizer::Iterate(
     // we can seed this via: Tkc = Tkw * Twc = TInv( Twk ) * Twc
     Eigen::Matrix4d T_lk_c = mvl::TInv( T_w_lk ) * T_w_c;
 
+    {
+        Eigen::Vector6d E2 = mvl::T2Cart(T_lk_c);
+        PrintMessage( 1, "--- Seed: [ %f, %f, %f, %f, %f, %f ]\n", E2(0), E2(1), E2(2), E2(3), E2(4), E2(5) );
+    }
+
     unsigned int nNumObsLastKeyframe;
     double dErrorLastKeyframe = _EstimateRelativePose( vImages[0].Image, pLastKeyframe, T_lk_c, nNumObsLastKeyframe );
     m_Analytics["RMSE Last"] = std::pair<double, double>( dErrorLastKeyframe, 0 );
@@ -148,22 +199,21 @@ bool FastLocalizer::Iterate(
     ///---------- FIND CLOSEST KEYFRAMES
     Tic("Find Close KF");
     // based on current pose, load closest keyframe (euclidean distance including rotation of sorts)
-    std::vector< std::pair< unsigned int, float > > vNearKeyframes;
-    m_pMap->FindClosestKeyframes( T_w_c, feConfig.g_fCloseKeyframeNorm, vNearKeyframes );
+    std::vector< std::pair< unsigned int, float > > vClosestKeyframes;
+    m_pMap->FindClosestKeyframes( T_w_c, flConfig.g_fCloseKeyframeNorm, vClosestKeyframes );
 
 
     ///---------- FIND BEST KEYFRAME
     FramePtr pClosestKeyframe = NULL;
-    if( vNearKeyframes.empty() == false ) {
+    if( vClosestKeyframes.empty() == false ) {
 
         // TODO add grey-depth contribution ratio for matching?
         float       fBestScore = FLT_MAX;
 
-        for( unsigned int ii = 0; ii < vNearKeyframes.size(); ++ii ) {
-
-            const unsigned int nId = std::get<0>( vNearKeyframes[ii] );
+        for( unsigned int ii = 0; ii < vClosestKeyframes.size(); ++ii ) {
 
             // get frame pointer
+            const unsigned int nId = std::get<0>( vClosestKeyframes[ii] );
             FramePtr pCandidateFrame = m_pMap->GetFramePtr( nId );
 
             // do not compare with non-keyframes
@@ -178,15 +228,6 @@ bool FastLocalizer::Iterate(
                 pClosestKeyframe = pCandidateFrame;
             }
         }
-
-        double dSADThreshold = feConfig.g_nLoopClosureSAD * (m_nThumbHeight * m_nThumbWidth);
-
-        m_Analytics["LC SAD"] = std::pair<double, double>( fBestScore, dSADThreshold );
-
-        // if match is found, find pose estimate
-        if( fBestScore > dSADThreshold ) {
-            pClosestKeyframe = NULL;
-        }
     }
     Toc("Find Close KF");
 
@@ -195,14 +236,18 @@ bool FastLocalizer::Iterate(
     Tic("Localize Close");
     unsigned int nNumObsClosestKeyframe;
     double dErrorClosestKeyframe = DBL_MAX;
+    Eigen::Matrix4d T_w_ck;
     Eigen::Matrix4d T_ck_c;
     if( pClosestKeyframe == NULL || pLastKeyframe == pClosestKeyframe ) {
         m_Analytics["RMSE Closest"] = std::pair<double, double>( 0, 0 );
-        m_Analytics["Loop Closure"] = std::pair<double, double>( 0, 0 );
     } else {
-        T_ck_c.setIdentity();    // the drift would kill this if we try to seed like for LastKeyframe
-        Eigen::Vector6d E2 = mvl::T2Cart(T_ck_c);
-        PrintMessage( 1, "--- Seed: [ %f, %f, %f, %f, %f, %f ]\n", E2(0), E2(1), E2(2), E2(3), E2(4), E2(5) );
+        const unsigned int nClosestKeyframeId = pClosestKeyframe->GetId();
+        T_w_ck = vPath[nClosestKeyframeId];
+        T_ck_c = mvl::TInv( T_w_ck ) * T_w_c;
+        {
+            Eigen::Vector6d E2 = mvl::T2Cart(T_ck_c);
+            PrintMessage( 1, "--- Seed: [ %f, %f, %f, %f, %f, %f ]\n", E2(0), E2(1), E2(2), E2(3), E2(4), E2(5) );
+        }
         dErrorClosestKeyframe = _EstimateRelativePose( vImages[0].Image, pClosestKeyframe, T_ck_c, nNumObsClosestKeyframe );
         m_Analytics["RMSE Closest"] = std::pair<double, double>( dErrorClosestKeyframe, 0 );
         {
@@ -220,22 +265,25 @@ bool FastLocalizer::Iterate(
     double dTrackingError;
     Eigen::Matrix4d T_k_c;
     Eigen::Matrix4d T_w_k;
-    if( dErrorLastKeyframe < dErrorClosestKeyframe || feConfig.g_bAlwaysUseLastKeyframe ) {
+    if( dErrorLastKeyframe < dErrorClosestKeyframe || flConfig.g_bAlwaysUseLastKeyframe ) {
         // choose estimate based on last keyframe
         pKeyframe = pLastKeyframe;
         dTrackingError = dErrorLastKeyframe;
         nNumObservations = nNumObsLastKeyframe;
         T_k_c = T_lk_c;
         T_w_k = T_w_lk;
+        std::cout << "--- Estimate against Last Keyframe chosen." << std::endl;
     } else {
         // choose estimate based on closest keyframe
         pKeyframe = pClosestKeyframe;
         dTrackingError = dErrorClosestKeyframe;
         nNumObservations = nNumObsClosestKeyframe;
-        T_k_c.setIdentity();
-        T_w_k.setIdentity();
+        T_k_c = T_ck_c;
+        T_w_k = T_w_ck;
+        std::cout << "--- Estimate against Closest Keyframe chosen." << std::endl;
     }
 
+    m_Analytics["RMSE"] = std::pair<double, double>( dTrackingError, 35.0 );
     if( dTrackingError < 8.0 ) {
         m_eTrackingState = eTrackingGood;
     } else if( dTrackingError < 20.0 ) {
@@ -247,25 +295,56 @@ bool FastLocalizer::Iterate(
         PrintMessage( 0, "warning: tracking is failing (RMSE: %f)!! Calling relocalizer... \n", dTrackingError );
 
         ///---------- TRY GLOBAL RELOCALIZER
-        // TODO?? Expand search??
 
+        // find most similar keyframes
+        std::vector< std::pair< unsigned int, float > > vSimilarKeyframes;
+        const float fMaxSAD =  (m_nThumbHeight * m_nThumbWidth) * 10;
+        m_pMap->FindSimilarKeyframes( GreyThumb, fMaxSAD, vSimilarKeyframes );
 
-        ///---------- WHEN ALL FAILS
-        PrintMessage( 1, "critical: Relocalizer failed!\n" );
-        m_eTrackingState = eTrackingFail;
-        // discard estimate
-//        T_k_c.setIdentity();
+        double dLastError = DBL_MAX;
+        for( unsigned int ii = 0; ii < vSimilarKeyframes.size(); ii++ ) {
+
+            // get frame pointer
+            const unsigned int nId = std::get<0>( vSimilarKeyframes[ii] );
+            FramePtr pSimilarKeyframe = m_pMap->GetFramePtr( nId );
+
+            Eigen::Matrix4d T;
+            T.setIdentity();
+            unsigned int nNumObs;
+            double dError = _EstimateRelativePose( vImages[0].Image, pSimilarKeyframe, T, nNumObs );
+
+            if( dError > dLastError ) {
+                break;
+            }
+
+            T_k_c = T;
+            dLastError = dError;
+            m_pMap->SetKeyframe( nId );
+        }
+
+        FramePtr pKeyframe = m_pMap->GetCurrentKeyframe();
+        const unsigned int nKeyframeId = pKeyframe->GetId();
+
+        std::cout << "Best Keyframe: " << nKeyframeId << std::endl;
+        Eigen::Vector6d E;
+        E = mvl::T2Cart( T_k_c );
+        std::cout << "Esimate: " << E.transpose() << std::endl;
+
+        // get path of global poses
+        std::map< unsigned int, Eigen::Matrix4d >& vPath = m_pMap->GetInternalPath();
+
+        T_w_k = vPath[nKeyframeId];
     }
 
 
     ///---------- UPDATE KEYFRAME
+    std::cout << "New Keyframe ID: " << pKeyframe->GetId() << std::endl;
     m_pMap->SetKeyframe( pKeyframe );
 
 
-    // we would also like to get Tpc: transform from previous frame to current frame
-    // we obtain this via: Tpc = Tpk * Tkc
-    // given: Tpk = Tpw * Twk = TInv( Twp ) * Twk
-    m_T_p_c = mvl::TInv( T_w_p ) * T_w_k * T_k_c;
+    // update global pose
+    T_w_p = T_w_c;
+    T_w_c = T_w_k * T_k_c;
 
     return true;
 }
@@ -346,7 +425,7 @@ double FastLocalizer::_EstimateRelativePose(
 
     for( int PyrLvl = MAX_PYR_LEVELS-1; PyrLvl >= 0; PyrLvl-- ) {
         dLastError = DBL_MAX;
-        for(int ii = 0; ii < feConfig.g_vPyrMaxIters[PyrLvl]; ii++ ) {
+        for(int ii = 0; ii < flConfig.g_vPyrMaxIters[PyrLvl]; ii++ ) {
             const unsigned              PyrLvlWidth = m_nImageWidth >> PyrLvl;
             const unsigned              PyrLvlHeight = m_nImageHeight >> PyrLvl;
 
@@ -387,12 +466,12 @@ double FastLocalizer::_EstimateRelativePose(
             Eigen::Vector6d             X;
 
             // check if we are solving only for rotation, or full estimate
-            if( feConfig.g_vPyrFullMask(PyrLvl) != 0 ) {
+            if( flConfig.g_vPyrFullMask(PyrLvl) != 0 ) {
                 Eigen::FullPivLU< Eigen::Matrix<double,6,6> >    lu_JTJ(LHS);
 
                 // check degenerate system
                 if( lu_JTJ.rank() < 6 ) {
-                    PrintMessage( feConfig.g_nDebugGN, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
+                    PrintMessage( flConfig.g_nDebugGN, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
                     continue;
                 }
 
@@ -405,7 +484,7 @@ double FastLocalizer::_EstimateRelativePose(
 
                 // check degenerate system
                 if( lu_JTJ.rank() < 3 ) {
-                    PrintMessage( feConfig.g_nDebugGN, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
+                    PrintMessage( flConfig.g_nDebugGN, "warning(@L%d I%d) LS trashed. Rank deficient!\n", PyrLvl+1, ii+1 );
                     continue;
                 }
 
@@ -424,7 +503,7 @@ double FastLocalizer::_EstimateRelativePose(
 
             // if error decreases too slowly, break out of this level
             if( ( fabs( dNewError - dLastError ) < ui_fBreakErrorThreshold ) && ui_bBreakEarly ) {
-                PrintMessage( feConfig.g_nDebugGN, "notice: Breaking early @ L%d : I%d ...\n", PyrLvl+1, ii+1 );
+                PrintMessage( flConfig.g_nDebugGN, "notice: Breaking early @ L%d : I%d ...\n", PyrLvl+1, ii+1 );
                 break;
             }
 
