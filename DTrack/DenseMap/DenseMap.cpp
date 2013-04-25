@@ -25,16 +25,21 @@ DenseMap::~DenseMap()
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DenseMap::LoadCameraModels(
-        const std::string&          GreyCModFile,       //< Input: Grey camera model file name
-        const std::string&          DepthCModFile       //< Input: Depth camera model file name
+        const std::string&          LiveGreyCModFile,       //< Input: Grey camera model file name
+        const std::string&          RefGreyCModFile,        //< Input: Grey camera model file name
+        const std::string&          RefDepthCModFile        //< Input: Depth camera model file name
     )
 {
     // get intrinsics
-    if( !m_CModPyrGrey.Read( GreyCModFile ) ) {
+    if( !m_CModPyrLiveGrey.Read( LiveGreyCModFile ) ) {
         return false;
     }
 
-    if( !m_CModPyrDepth.Read( DepthCModFile ) ) {
+    if( !m_CModPyrRefGrey.Read( RefGreyCModFile ) ) {
+        return false;
+    }
+
+    if( !m_CModPyrRefDepth.Read( RefDepthCModFile ) ) {
         return false;
     }
 
@@ -176,42 +181,62 @@ bool DenseMap::IsKeyframe(
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-Eigen::Matrix3d DenseMap::GetGreyCameraK(
+Eigen::Matrix3d DenseMap::GetLiveGreyCameraK(
         unsigned int    nLevel          //< Input: Pyramid level intrinsic
     )
 {
-    if( m_CModPyrGrey.IsInit() == false ) {
+    if( m_CModPyrLiveGrey.IsInit() == false ) {
         std::cerr << "abort: Camera model files have not been initialized but are being requested. Was LoadCameraModels called?" << std::endl;
         exit(1);
     }
-    return m_CModPyrGrey.K( nLevel );
+    return m_CModPyrLiveGrey.K( nLevel );
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-Eigen::Matrix3d DenseMap::GetDepthCameraK(
+Eigen::Matrix3d DenseMap::GetRefGreyCameraK(
         unsigned int    nLevel          //< Input: Pyramid level intrinsic
     )
 {
-    if( m_CModPyrGrey.IsInit() == false ) {
+    if( m_CModPyrRefGrey.IsInit() == false ) {
         std::cerr << "abort: Camera model files have not been initialized but are being requested. Was LoadCameraModels called?" << std::endl;
         exit(1);
     }
-    return m_CModPyrDepth.K( nLevel );
+    return m_CModPyrRefGrey.K( nLevel );
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-Eigen::Matrix4d DenseMap::GetGreyCameraPose()
+Eigen::Matrix3d DenseMap::GetRefDepthCameraK(
+        unsigned int    nLevel          //< Input: Pyramid level intrinsic
+    )
 {
-    return m_CModPyrGrey.GetPose();
+    if( m_CModPyrRefDepth.IsInit() == false ) {
+        std::cerr << "abort: Camera model files have not been initialized but are being requested. Was LoadCameraModels called?" << std::endl;
+        exit(1);
+    }
+    return m_CModPyrRefDepth.K( nLevel );
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-Eigen::Matrix4d DenseMap::GetDepthCameraPose()
+Eigen::Matrix4d DenseMap::GetLiveGreyCameraPose()
 {
-    return m_CModPyrDepth.GetPose();
+    return m_CModPyrLiveGrey.GetPose();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Eigen::Matrix4d DenseMap::GetRefGreyCameraPose()
+{
+    return m_CModPyrRefGrey.GetPose();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Eigen::Matrix4d DenseMap::GetRefDepthCameraPose()
+{
+    return m_CModPyrRefDepth.GetPose();
 }
 
 
@@ -317,12 +342,16 @@ bool DenseMap::CopyMapChanges(
 //        return false; // nothing to do, map is up-to date
     }
 
-    if( m_CModPyrGrey.IsInit() == false ) {
-        m_CModPyrGrey.Read( rRHS.m_CModPyrGrey.GetCamModFilename() );
+    if( m_CModPyrLiveGrey.IsInit() == false ) {
+        m_CModPyrLiveGrey.Read( rRHS.m_CModPyrLiveGrey.GetCamModFilename() );
     }
 
-    if( m_CModPyrDepth.IsInit() == false ) {
-        m_CModPyrDepth.Read( rRHS.m_CModPyrDepth.GetCamModFilename() );
+    if( m_CModPyrRefGrey.IsInit() == false ) {
+        m_CModPyrRefGrey.Read( rRHS.m_CModPyrRefGrey.GetCamModFilename() );
+    }
+
+    if( m_CModPyrRefDepth.IsInit() == false ) {
+        m_CModPyrRefDepth.Read( rRHS.m_CModPyrRefDepth.GetCamModFilename() );
     }
 
     // make sure we're dealing with the same map?

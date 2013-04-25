@@ -111,13 +111,16 @@ class DTrackApp
 
             std::string sCModFile;
 
-            sCModFile = clArgs.follow( "cmod.xml", "-cmod" );
-            std::string sGreyCModFilename = sSrcDir + "/" + sCModFile;
+            sCModFile = clArgs.follow( "", "-klg" );
+            std::string sLiveGreyCModFilename = sSrcDir + "/" + sCModFile;
 
-            sCModFile = clArgs.follow( "cmod_d.xml", "-dcmod" );
-            std::string sDepthCModFilename = sSrcDir + "/" + sCModFile;
+            sCModFile = clArgs.follow( "", "-krg" );
+            std::string sRefGreyCModFilename = sSrcDir + "/" + sCModFile;
 
-            if (m_pMap->LoadCameraModels( sGreyCModFilename, sDepthCModFilename ) == false ) {
+            sCModFile = clArgs.follow( "", "-krd" );
+            std::string sRefDepthCModFilename = sSrcDir + "/" + sCModFile;
+
+            if (m_pMap->LoadCameraModels( sLiveGreyCModFilename, sRefGreyCModFilename, sRefDepthCModFilename ) == false ) {
                 std::cerr << "abort: There was a problem loading the camera model files!" << std::endl;
                 return false;
             }
@@ -260,11 +263,11 @@ class DTrackApp
             }
 
             /// None
-//            const unsigned int nBottomMargin = 0;
-//            const unsigned int nMiddleMargin = 0;
+            const unsigned int nBottomMargin = 0;
+            const unsigned int nMiddleMargin = 0;
             /// Tompkins
-            const unsigned int nBottomMargin = 90;
-            const unsigned int nMiddleMargin = 150;
+//            const unsigned int nBottomMargin = 90;
+//            const unsigned int nMiddleMargin = 150;
             /// Toyota
 //            const unsigned int nBottomMargin = 90;
 //            const unsigned int nMiddleMargin = 180;

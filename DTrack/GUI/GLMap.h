@@ -64,7 +64,7 @@ public:
                         pangolin::GlBuffer* pCBO = new pangolin::GlBuffer( pangolin::GlArrayBuffer, nImgWidth * nImgHeight, GL_UNSIGNED_BYTE, 4, GL_STREAM_DRAW );
 
                         float VBO[nImgWidth * nImgHeight * 4];
-                        Eigen::Matrix3d DepthK = m_pMap->GetDepthCameraK( 4 );
+                        Eigen::Matrix3d DepthK = m_pMap->GetRefDepthCameraK( 4 );
                         _DepthToVBO( (float*)pFrame->GetDepthThumbPtr(), nImgWidth, nImgHeight, DepthK(0,0), DepthK(1,1), DepthK(0,2), DepthK(1,2), VBO );
                         pVBO->Upload( VBO, nImgWidth * nImgHeight * 4 * 4);
 
@@ -178,7 +178,7 @@ private:
                 if( lastDepth == -1 ) {
                     lastDepth = pDepth[nIdx];
                 }
-                if( fabs(lastDepth - pDepth[nIdx] ) > 0.3 ) {
+                if( fabs(lastDepth - pDepth[nIdx] ) > 1.0 ) {
                     pVBO[nVboIdx]   = 0.0/0.0;
                     pVBO[nVboIdx+1] = 0.0/0.0;
                     pVBO[nVboIdx+2] = 0.0/0.0;

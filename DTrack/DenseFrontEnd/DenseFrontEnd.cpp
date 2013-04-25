@@ -69,12 +69,14 @@ bool DenseFrontEnd::Init(
     m_pTimer->SetWindowSize( 40 );
 
     // print intrinsics information
-    std::cout << "Greyscale Camera Intrinsics: " << std::endl;
-    std::cout << m_pMap->GetGreyCameraK() << std::endl << std::endl;
-    std::cout << "Depth Camera Intrinsics: " << std::endl;
-    std::cout << m_pMap->GetDepthCameraK() << std::endl << std::endl;
+    std::cout << "Live Greyscale Camera Intrinsics: " << std::endl;
+    std::cout << m_pMap->GetLiveGreyCameraK() << std::endl << std::endl;
+    std::cout << "Reference Greyscale Camera Intrinsics: " << std::endl;
+    std::cout << m_pMap->GetRefGreyCameraK() << std::endl << std::endl;
+    std::cout << "Reference Depth Camera Intrinsics: " << std::endl;
+    std::cout << m_pMap->GetRefDepthCameraK() << std::endl << std::endl;
     std::cout << "Tgd: " << std::endl;
-    std::cout << mvl::T2Cart(m_pMap->GetDepthCameraPose()).transpose() << std::endl << std::endl;
+    std::cout << mvl::T2Cart(m_pMap->GetRefDepthCameraPose()).transpose() << std::endl << std::endl;
 
 
     ///
@@ -500,11 +502,12 @@ double DenseFrontEnd::_EstimateRelativePose(
             const unsigned              PyrLvlWidth = m_nImageWidth >> PyrLvl;
             const unsigned              PyrLvlHeight = m_nImageHeight >> PyrLvl;
 
-            Eigen::Matrix3d             Kg = m_pMap->GetGreyCameraK( PyrLvl );  // grey sensor's instrinsics
-            Eigen::Matrix3d             Kd = m_pMap->GetGreyCameraK( PyrLvl );  // depth sensor's intrinsics
-            Eigen::Matrix4d             Tgd = m_pMap->GetDepthCameraPose();     // depth sensor's pose w.r.t. grey sensor
+            Eigen::Matrix3d             Klg = m_pMap->GetLiveGreyCameraK( PyrLvl ); // grey sensor's instrinsics
+            Eigen::Matrix3d             Krg = m_pMap->GetRefGreyCameraK( PyrLvl );  // grey sensor's instrinsics
+            Eigen::Matrix3d             Krd = m_pMap->GetRefDepthCameraK( PyrLvl ); // depth sensor's intrinsics
+            Eigen::Matrix4d             Tgd = m_pMap->GetRefDepthCameraPose();      // depth sensor's pose w.r.t. grey sensor
             Eigen::Matrix4d             Tck = Tkc.inverse();
-            Eigen::Matrix<double,3,4>   KgTck = Kg * Tck.block<3,4>(0,0);       // precompute for speed
+            Eigen::Matrix<double,3,4>   KlgTck = Klg * Tck.block<3,4>(0,0);       // precompute for speed
 
             const float fNormC = ui_fNormC * ( 1 << PyrLvl );
 
@@ -512,7 +515,7 @@ double DenseFrontEnd::_EstimateRelativePose(
             Gpu::LeastSquaresSystem<float,6> LSS = Gpu::PoseRefinementFromDepthESM( m_cdGreyPyr[PyrLvl],
                                                                                     m_cdKeyGreyPyr[PyrLvl],
                                                                                     m_cdKeyDepthPyr[PyrLvl],
-                                                                                    Kg, Kd, Tgd, Tck, KgTck,
+                                                                                    Klg, Krg, Krd, Tgd, Tck, KlgTck,
                                                                                     m_cdWorkspace, m_cdDebug.SubImage(PyrLvlWidth, PyrLvlHeight),
                                                                                     fNormC, ui_bDiscardMaxMin, 0.1, 140.0 );
 

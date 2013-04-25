@@ -33,8 +33,9 @@ public:
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// load camera model files into a camera model pyramid
     bool LoadCameraModels(
-            const std::string&          GreyCModFile,       //< Input: Grey camera model file name
-            const std::string&          DepthCModFile       //< Input: Depth camera model file name
+            const std::string&          LiveGreyCModFile,       //< Input: Grey camera model file name
+            const std::string&          RefGreyCModFile,        //< Input: Grey camera model file name
+            const std::string&          RefDepthCModFile        //< Input: Depth camera model file name
         );
 
 
@@ -100,23 +101,22 @@ public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// get camera intrinsics
-    Eigen::Matrix3d GetGreyCameraK(
+    Eigen::Matrix3d GetLiveGreyCameraK(
+            unsigned int    nLevel = 0      //< Input: Pyramid level intrinsic
+        );
+    Eigen::Matrix3d GetRefGreyCameraK(
+            unsigned int    nLevel = 0      //< Input: Pyramid level intrinsic
+        );
+    Eigen::Matrix3d GetRefDepthCameraK(
             unsigned int    nLevel = 0      //< Input: Pyramid level intrinsic
         );
 
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    Eigen::Matrix3d GetDepthCameraK(
-            unsigned int    nLevel = 0      //< Input: Pyramid level intrinsic
-        );
-
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    Eigen::Matrix4d GetGreyCameraPose();
-
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    Eigen::Matrix4d GetDepthCameraPose();
+    /// get camera poses
+    Eigen::Matrix4d GetLiveGreyCameraPose();
+    Eigen::Matrix4d GetRefGreyCameraPose();
+    Eigen::Matrix4d GetRefDepthCameraPose();
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -287,8 +287,9 @@ private:
     FramePtr                                    m_pCurKeyframe;
     double                                      m_dLastModifiedTime;    // crucial that we keep this up-to date
 
-    CameraModelPyramid                          m_CModPyrGrey;
-    CameraModelPyramid                          m_CModPyrDepth;
+    CameraModelPyramid                          m_CModPyrLiveGrey;
+    CameraModelPyramid                          m_CModPyrRefGrey;
+    CameraModelPyramid                          m_CModPyrRefDepth;
 
     bool                                        m_bFitPlane;
     Eigen::Matrix4d                             m_dPathOrientation;
