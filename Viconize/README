@@ -1,0 +1,4 @@
+This program takes as input a series of images and a file of Vicon poses.
+It obtains the timestamps in the images, and interpolates the Vicon poses in
+order to calculate the Vicon pose at the time the image was taken. The
+calculated pose is then added to the image's property map, which is later exported.

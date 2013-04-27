@@ -105,16 +105,16 @@ int main(int argc, char** argv)
 //        vImages[0].Image.convertTo( GreyImg, CV_8UC1 );
 
         // which one is it?
-        ColorImg = vImages[0].Image;
+//        ColorImg = vImages[0].Image;
 //        cv::resize( vImages[0].Image, ColorImg, cv::Size(0,0), 0.5, 0.5 );
-//        GreyImg = vImages[0].Image;
+        GreyImg = vImages[0].Image;
 //        cv::resize( vImages[0].Image, GreyImg, cv::Size(0,0), 0.5, 0.5 );
 
         //----- convert greyscale to RGB
-//        cv::cvtColor( GreyImg, ColorImg, CV_GRAY2RGB );
+        cv::cvtColor( GreyImg, ColorImg, CV_GRAY2RGB );
 
         //----- convert RGB to greyscale
-        cv::cvtColor( ColorImg, GreyImg, CV_RGB2GRAY );
+//        cv::cvtColor( ColorImg, GreyImg, CV_RGB2GRAY );
 
         //----- convert InfraRed to greyscale
 //        ColorImg.convertTo( GreyImg, CV_8UC1 );
@@ -154,9 +154,16 @@ int main(int argc, char** argv)
 
         if( pangolin::Pushed( ui_btnCalibrate ) ) {
             cout << "Calibrating..." << endl;
-            int Flags = 0;
-//            int Flags = cv::CALIB_ZERO_TANGENT_DIST | cv::CALIB_SAME_FOCAL_LENGTH | cv::CALIB_FIX_K1 | cv::CALIB_FIX_K2
-//                    | cv::CALIB_FIX_K3| cv::CALIB_FIX_K4 | cv::CALIB_FIX_K5 | cv::CALIB_FIX_K6;
+            int Flags = 0
+                    | cv::CALIB_SAME_FOCAL_LENGTH
+//                    | cv::CALIB_ZERO_TANGENT_DIST
+//                    | cv::CALIB_FIX_K1
+//                    | cv::CALIB_FIX_K2
+//                    | cv::CALIB_FIX_K3
+//                    | cv::CALIB_FIX_K4
+//                    | cv::CALIB_FIX_K5
+//                    | cv::CALIB_FIX_K6
+                    ;
             cv::TermCriteria Criteria = cv::TermCriteria( cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 50, DBL_EPSILON );
             double error = cv::calibrateCamera( vObjectPts, vImagePts, ColorImg.size(), Intrinsics,
                                                 Distortion, vRot, vTrans, Flags, Criteria );

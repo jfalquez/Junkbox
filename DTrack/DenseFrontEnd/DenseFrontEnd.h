@@ -7,6 +7,7 @@
 
 #include <DenseMap/DenseMap.h>
 
+#include "Common.h"
 #include "DenseFrontEndConfig.h"
 #include "GpuHelpers.h"
 #include "Timer.h"
@@ -28,17 +29,6 @@ typedef std::vector< rpg::ImageWrapper >               CamImages;
  * - Image2 as DEPTH CV_32FC1 format in METERS.
  *
  */
-
-// TODO: this is retarded since we are not using them as flags.. no need to have them powers of 2.
-// Eventually implement flags so that, say, tracking is good AND loop closure is flagged.
-enum eTrackingState
-{
-    eTrackingGood           = 1,
-    eTrackingPoor           = 2,
-    eTrackingBad            = 4,
-    eTrackingFail           = 8,
-    eTrackingLoopClosure    = 16
-};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 class DenseFrontEnd

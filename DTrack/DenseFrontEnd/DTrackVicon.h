@@ -1,5 +1,5 @@
-#ifndef _FAST_LOCALIZER_H_
-#define _FAST_LOCALIZER_H_
+#ifndef _DTRACK_VICON_H_
+#define _DTRACK_VICON_H_
 
 #include <Eigen/Dense>
 
@@ -8,7 +8,7 @@
 #include <DenseMap/DenseMap.h>
 
 #include "Common.h"
-#include "FastLocalizerConfig.h"
+#include "DTrackViconConfig.h"
 #include "GpuHelpers.h"
 #include "Timer.h"
 
@@ -16,20 +16,20 @@
 typedef std::vector< rpg::ImageWrapper >               CamImages;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class FastLocalizer
+class DTrackVicon
 {
 public:
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    FastLocalizer( unsigned int nImageWidth, unsigned int nImageHeight );
+    DTrackVicon( unsigned int nImageWidth, unsigned int nImageHeight );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    ~FastLocalizer();
+    ~DTrackVicon();
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// given a camera, initialize and reset the slam engine
     /// returns: true if no errors were encountered during initialization
-    bool Init( const CamImages& vImages, DenseMap* pMap, Timer* pTimer );
+    bool Init(CamImages &vImages, DenseMap* pMap, Timer* pTimer );
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// this is the main entry point that the enclosing application calls to advance the engine forward

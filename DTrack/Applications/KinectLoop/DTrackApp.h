@@ -213,6 +213,7 @@ class DTrackApp
         void UpdateGui( Gui& rGui )
         {
             rGui.CopyMapChanges( *m_pMap );
+
             rGui.UpdateImages( m_vImages[0].Image );
         }
 
@@ -263,11 +264,11 @@ class DTrackApp
             }
 
             /// None
-            const unsigned int nBottomMargin = 0;
-            const unsigned int nMiddleMargin = 0;
+//            const unsigned int nBottomMargin = 0;
+//            const unsigned int nMiddleMargin = 0;
             /// Tompkins
-//            const unsigned int nBottomMargin = 90;
-//            const unsigned int nMiddleMargin = 150;
+            const unsigned int nBottomMargin = 90;
+            const unsigned int nMiddleMargin = 150;
             /// Toyota
 //            const unsigned int nBottomMargin = 90;
 //            const unsigned int nMiddleMargin = 180;
@@ -276,9 +277,6 @@ class DTrackApp
                     vImages[1].Image.at<float>(ii,jj) = 0.0f;
                 }
             }
-
-//            vImages[1].Image = vImages[1].Image / 4;
-//            vImages[1].Image = vImages[1].Image * (359.428/718.8560);
         }
 
 

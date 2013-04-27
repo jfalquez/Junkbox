@@ -9,9 +9,10 @@
 #include <SceneGraph/SceneGraph.h>
 
 #include <DenseMap/DenseMap.h>
-#include <DenseFrontEnd/FastLocalizer.h>
+#include <DenseFrontEnd/DTrackVicon.h>
 
 #include <GUI/GLPath.h>
+#include <GUI/GLVicon.h>
 #include <GUI/GLMap.h>
 #include <GUI/AnalyticsView.h>
 #include <GUI/TimerView.h>
@@ -20,9 +21,9 @@
 
 
 GuiConfig           guiConfig;
-extern              FastLocalizerConfig feConfig;
+extern              DTrackViconConfig dtvConfig;
 
-enum GuiState { PLAYING, RESETTING, RESET_COMPLETE, QUIT };
+enum GuiState { PLAYING, STEPPING, PAUSED, RESETTING, RESET_COMPLETE, QUIT };
 
 class Gui
 {
@@ -57,6 +58,16 @@ private:
 
     void _RegisterKeyboardCallbacks();
 
+    void _RIGHT_ARROW()
+    {
+        State = STEPPING;
+    }
+
+    void _SPACE_BAR()
+    {
+        State = (State == PAUSED) ? PLAYING : PAUSED;
+    }
+
     void _CTRL_R()
     {
         State = RESETTING;
@@ -64,6 +75,7 @@ private:
             usleep(10000);
         }
         InitReset(); // not called from elsewhere
+        State = PAUSED;
     }
 
 
@@ -76,7 +88,7 @@ public:
 private:
     bool                            m_bMapDirty;
 
-    FastLocalizer*                  m_pLocalizer;
+    DTrackVicon*                    m_pFrontEnd;
     DenseMap*                       m_pRenderMap;          // re-allocated on reset. for now.
     DenseMap*                       m_pChangesBufferMap;   // re-allocated on reset. for now.
 
@@ -94,7 +106,8 @@ private:
 
     // objects for 3d view
     SceneGraph::GLGrid              m_glGrid;
-    SceneGraph::GLAxis              m_glAxis;
+    GLPath                          m_glPath;
+    GLVicon                         m_glVicon;
     GLMap                           m_glMap;
 
     // objects for view container
@@ -162,8 +175,9 @@ void Gui::Init()
     SceneGraph::GLSceneGraph::ApplyPreferredGlSettings();
     glClearColor( 0, 0, 0, 0 );
     m_gl3dGraph.AddChild( &m_glGrid );
-    m_gl3dGraph.AddChild( &m_glAxis );
     m_gl3dGraph.AddChild( &m_glMap );
+    m_gl3dGraph.AddChild( &m_glPath );
+    m_gl3dGraph.AddChild( &m_glVicon );
 
     m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 3000) );
     m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-20, 0, -30, 0, 0, 0, pangolin::AxisNegZ) );
@@ -209,11 +223,12 @@ void Gui::InitReset()
 
     // set properties
     m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
-    m_glGrid.SetLineSpacing( 1.0 );
+    m_glGrid.SetLineSpacing( 3.0 );
 
     // init-reset objects
     m_glMap.InitReset( m_pRenderMap );
-    m_glMap.SetVisible( false );
+    m_glPath.InitReset( m_pRenderMap );
+    m_glVicon.InitReset( m_pRenderMap );
 
     // init-reset extras
     m_TimerView.InitReset();
@@ -235,15 +250,10 @@ void Gui::Run()
          }
 
          // update gui variables
-         std::map<unsigned int, Eigen::Matrix4d>& vPoses = m_pRenderMap->GetInternalPath();
-         if( !vPoses.empty() ) {
-             Eigen::Matrix4d& dPathOrientation =  m_pRenderMap->GetPathOrientation();
-             // look for first pose of map, which is our "true" origin
-             Eigen::Matrix4d dOrigin = mvl::TInv( vPoses[0] );
-             Eigen::Matrix4d dPose = dPathOrientation * dOrigin * m_pRenderMap->m_dCurPose;
-             m_glAxis.SetPose( dPose );
-         }
          m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
+         m_glVicon.SetPoseDisplay( guiConfig.g_nNumPosesToShow );
+         m_glPath.SetPoseDisplay( guiConfig.g_nNumPosesToShow );
+         m_glPath.SetSphereRadius( dtvConfig.g_fCloseKeyframeNorm );
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -313,9 +323,27 @@ void Gui::UpdateAnalytics(
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void Gui::_RegisterKeyboardCallbacks()
 {
+    // step once
+    pangolin::RegisterKeyPressCallback( pangolin::PANGO_SPECIAL + GLUT_KEY_RIGHT,
+                                        std::bind( &Gui::_RIGHT_ARROW, this) );
+
+    // play / pause
+    pangolin::RegisterKeyPressCallback( ' ',
+                                        std::bind( &Gui::_SPACE_BAR, this) );
+
     // reset app
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'r',
                                         std::bind( &Gui::_CTRL_R, this) );
+
+    // print map
+    pangolin::RegisterKeyPressCallback( 'm',
+                                        [this](){ m_pRenderMap->PrintMap(); }
+                                        );
+
+    // export map
+    pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'm',
+                                        [this](){ m_pRenderMap->ExportMap(); }
+                                        );
 
     // toggle showing side panel
     pangolin::RegisterKeyPressCallback('~', [this](){ static bool showpanel = false; showpanel = !showpanel;

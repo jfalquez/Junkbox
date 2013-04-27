@@ -143,6 +143,82 @@ void DenseBackEnd::_PoseRelax()
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+class ViconAlignCostFunc : public ceres::AutoDiffArrayCostFunction< ceres::CostFunction, ViconAlignCostFunc, Sophus::SE3d::DoF, Sophus::SE3d::num_parameters, Sophus::SE3d::num_parameters >
+{
+public:
+    ViconAlignCostFunc( Sophus::SE3d Tvf, Sophus::SE3d Twc ) { m_Tfv = Tvf.inverse(), m_Twc = Twc; }
+
+    template <typename T>
+    bool Evaluate(const T * const *parameters, T *residuals ) const
+    {
+        Eigen::Map< Eigen::Matrix<T, Sophus::SE3d::DoF, 1> >    r(residuals);
+        Eigen::Map< const Sophus::SE3Group<T> > Tvw(parameters[0]);
+        Eigen::Map< const Sophus::SE3Group<T> > Tcf(parameters[1]);
+
+        const Sophus::SE3Group<T> myTvf = Tvw * m_Twc.cast<T>() * Tcf;
+        Sophus::SE3Group<T> Terror = m_Tfv.cast<T>() * myTvf;
+        r = Terror.log();
+
+        return true;
+   }
+
+private:
+    Sophus::SE3d        m_Tfv;      // fiducials in "vicon" world
+    Sophus::SE3d        m_Twc;      // my "viconized" estimates (to camera)
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void DenseBackEnd::_ViconAlign()
+{
+    // my estimates brought to the first frame
+    std::map< unsigned int, Eigen::Matrix4d > vPoses;
+    m_pMap->GenerateAbsolutePoses( vPoses, 0 );
+
+    // get first frame's Vicon pose
+    FramePtr pFrame = m_pMap->GetFramePtr(0);
+    Eigen::Matrix4d& Initial_Tvw = pFrame->m_dViconPose;
+
+    std::vector< Sophus::SE3d  > vViconPoses;
+    vViconPoses.reserve( vPoses.size() );
+
+    std::vector< Sophus::SE3d  > vMyPoses;
+    vMyPoses.reserve( vPoses.size() );
+
+    ceres::Problem Problem;
+
+    // stuff we are solving
+    Sophus::SE3d Tvw = Sophus::SE3d( Initial_Tvw );
+    LocalParamSe3* pLocalParam0 = new LocalParamSe3;
+    Problem.AddParameterBlock( Tvw.data(), 7, pLocalParam0 );
+    Sophus::SE3d Tcf;
+    LocalParamSe3* pLocalParam1 = new LocalParamSe3;
+    Problem.AddParameterBlock( Tcf.data(), 7, pLocalParam1 );
+
+    for( unsigned int ii = 0; ii < vPoses.size(); ++ii ) {
+
+        pFrame = m_pMap->GetFramePtr(ii);
+        vViconPoses.push_back( Sophus::SE3d( pFrame->m_dViconPose ) );
+
+        vMyPoses.push_back( Sophus::SE3d( vPoses[ii] ) );
+
+        ViconAlignCostFunc* pCostFunc = new ViconAlignCostFunc( vViconPoses.back(), vMyPoses.back() );
+        Problem.AddResidualBlock( pCostFunc, NULL, Tvw.data(), Tcf.data() );
+
+    }
+
+    ceres::Solver::Options SolverOptions;
+    ceres::Solver::Summary SolverSummary;
+    ceres::Solve( SolverOptions, &Problem, &SolverSummary );
+    std::cout << SolverSummary.BriefReport() << std::endl;
+
+    // copy back results
+    m_pMap->m_dViconWorld = Tvw.matrix();
+    m_pMap->m_dCameraFiducials = Tcf.matrix();
+}
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

@@ -362,9 +362,10 @@ bool DenseMap::CopyMapChanges(
     Lock();
     rRHS.Lock();
 
-    // copy poses
+    // TODO CLEANME
     m_dCurPose = rRHS.m_dCurPose;
     m_dPrevPose = rRHS.m_dPrevPose;
+
 
     // since these are pointers, we don't need to update the data itself within
     const unsigned int nNumEdges = m_vEdges.size();
@@ -635,6 +636,20 @@ bool DenseMap::ImportMap(
         GreyImage = cv::imread( GreyImageFile, 0 );
         (*itFrame)["GreyThumb"] >> GreyThumbFile;
         GreyThumb = cv::imread( GreyThumbFile, 0 );
+
+
+        cv::Rect myROI;
+        myROI.x = 96;
+        myROI.y = 76;
+        myROI.width = 320;
+        myROI.height = 240;
+//        cv::Mat GreyImageCropped = GreyImage( myROI );
+//        cv::Mat NewGreyImage;
+//        GreyImageCropped.copyTo( NewGreyImage );
+
+//        cv::Mat NewGreyThumb;
+//        cv::resize( NewGreyImage, NewGreyThumb, cv::Size(0,0), 0.0625, 0.0625 );
+
         if( bIsKeyframe ) {
             rpg::ImageWrapper DepthImage, DepthThumb;
             std::string DepthImageFile, DepthThumbFile;
@@ -642,7 +657,15 @@ bool DenseMap::ImportMap(
             DepthImage.read( DepthImageFile, false );
             (*itFrame)["DepthThumb"] >> DepthThumbFile;
             DepthThumb.read( DepthThumbFile, false );
+
+
+//            cv::Mat DepthImageCropped = DepthImage.Image( myROI );
+//            cv::Mat NewDepthImage;
+//            DepthImageCropped.copyTo( NewDepthImage );
+
+
             FramePtr pFrame = NewKeyframe( dTime, GreyImage, DepthImage.Image, GreyThumb, DepthThumb.Image );
+//            FramePtr pFrame = NewKeyframe( dTime, NewGreyImage, NewDepthImage, NewGreyThumb, DepthThumb.Image );
             if( nFrameId != (int)pFrame->GetId() ) {
                 std::cerr << "error: FrameId does not match ID of import file!" << std::endl;
                 return false;
