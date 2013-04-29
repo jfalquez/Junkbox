@@ -171,6 +171,16 @@ bool DTrackVicon::Init(
         ViconPose(4) = vImages[0].Map.GetProperty<double>( "ViconPoseQ", 0 );
         ViconPose(5) = vImages[0].Map.GetProperty<double>( "ViconPoseR", 0 );
         pFrame->m_dViconPose = mvl::Cart2T(ViconPose);
+
+        // vicon-robotics permutation matrix
+        Eigen::Matrix4d Tvr;
+        Tvr << 1, 0, 0, 0,
+               0, -1, 0, 0,
+               0, 0, -1, 0,
+               0, 0, 0, 1;
+
+        // convert initial pose to VISION reference frame
+        pFrame->m_dViconPose = Tvr.inverse() * pFrame->m_dViconPose * Tvr;
         }
 
         if( pFrame == NULL ) {
@@ -236,6 +246,16 @@ bool DTrackVicon::Iterate(
     ViconPose(4) = vImages[0].Map.GetProperty<double>( "ViconPoseQ", 0 );
     ViconPose(5) = vImages[0].Map.GetProperty<double>( "ViconPoseR", 0 );
     pFrame->m_dViconPose = mvl::Cart2T(ViconPose);
+
+    // vicon-robotics permutation matrix
+    Eigen::Matrix4d Tvr;
+    Tvr << 1, 0, 0, 0,
+           0, -1, 0, 0,
+           0, 0, -1, 0,
+           0, 0, 0, 1;
+
+    // convert initial pose to VISION reference frame
+    pFrame->m_dViconPose = Tvr.inverse() * pFrame->m_dViconPose * Tvr;
     }
 
 
