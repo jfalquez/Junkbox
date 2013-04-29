@@ -8,7 +8,6 @@ SET( DENSE_FRONT_END_HDRS
         FastLocalizerConfig.h
         GpuHelpers.h
         Timer.h
-        Vicon.h
    )
 
 SET( DENSE_FRONT_END_SRCS
@@ -16,7 +15,6 @@ SET( DENSE_FRONT_END_SRCS
         DTrackVicon.cpp
         FastLocalizer.cpp
         GpuHelpers.cpp
-        Vicon.cpp
    )
 
 ADD_LIBRARY( DenseFrontEnd ${DENSE_FRONT_END_HDRS} ${DENSE_FRONT_END_SRCS} )

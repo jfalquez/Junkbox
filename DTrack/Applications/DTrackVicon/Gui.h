@@ -9,7 +9,6 @@
 #include <SceneGraph/SceneGraph.h>
 
 #include <DenseMap/DenseMap.h>
-#include <DenseFrontEnd/DTrackVicon.h>
 
 #include <GUI/GLPath.h>
 #include <GUI/GLVicon.h>
@@ -23,7 +22,7 @@
 GuiConfig           guiConfig;
 extern              DTrackViconConfig dtvConfig;
 
-enum GuiState { PLAYING, STEPPING, PAUSED, RESETTING, RESET_COMPLETE, QUIT };
+enum GuiState { PLAYING, STEPPING, PAUSED, RESETTING, RESET_COMPLETE, QUIT, VICON_ALIGN };
 
 class Gui
 {
@@ -58,24 +57,9 @@ private:
 
     void _RegisterKeyboardCallbacks();
 
-    void _RIGHT_ARROW()
-    {
-        State = STEPPING;
-    }
-
-    void _SPACE_BAR()
-    {
-        State = (State == PAUSED) ? PLAYING : PAUSED;
-    }
 
     void _CTRL_R()
     {
-        State = RESETTING;
-        while( State != RESET_COMPLETE ) {
-            usleep(10000);
-        }
-        InitReset(); // not called from elsewhere
-        State = PAUSED;
     }
 
 
@@ -88,7 +72,6 @@ public:
 private:
     bool                            m_bMapDirty;
 
-    DTrackVicon*                    m_pFrontEnd;
     DenseMap*                       m_pRenderMap;          // re-allocated on reset. for now.
     DenseMap*                       m_pChangesBufferMap;   // re-allocated on reset. for now.
 
@@ -176,8 +159,8 @@ void Gui::Init()
     glClearColor( 0, 0, 0, 0 );
     m_gl3dGraph.AddChild( &m_glGrid );
     m_gl3dGraph.AddChild( &m_glMap );
-    m_gl3dGraph.AddChild( &m_glPath );
     m_gl3dGraph.AddChild( &m_glVicon );
+    m_gl3dGraph.AddChild( &m_glPath );
 
     m_gl3dRenderState.SetProjectionMatrix( pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 3000) );
     m_gl3dRenderState.SetModelViewMatrix( pangolin::ModelViewLookAt(-20, 0, -30, 0, 0, 0, pangolin::AxisNegZ) );
@@ -223,7 +206,7 @@ void Gui::InitReset()
 
     // set properties
     m_glGrid.SetNumLines( guiConfig.g_nNumGridLines );
-    m_glGrid.SetLineSpacing( 3.0 );
+    m_glGrid.SetLineSpacing( 1.0 );
 
     // init-reset objects
     m_glMap.InitReset( m_pRenderMap );
@@ -325,35 +308,67 @@ void Gui::_RegisterKeyboardCallbacks()
 {
     // step once
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_SPECIAL + GLUT_KEY_RIGHT,
-                                        std::bind( &Gui::_RIGHT_ARROW, this) );
+                                        [&](){
+                                            State = STEPPING;
+                                        });
 
     // play / pause
     pangolin::RegisterKeyPressCallback( ' ',
-                                        std::bind( &Gui::_SPACE_BAR, this) );
+                                        [&](){
+                                            State = (State == PAUSED) ? PLAYING : PAUSED;
+                                        });
+
 
     // reset app
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'r',
-                                        std::bind( &Gui::_CTRL_R, this) );
+                                        [&](){
+                                            State = RESETTING;
+                                            while( State != RESET_COMPLETE ) {
+                                                usleep(10000);
+                                            }
+                                            InitReset(); // not called from elsewhere
+                                            State = PAUSED;
+                                        });
+
+
+    // print map
+    pangolin::RegisterKeyPressCallback( 'v',
+                                        [&](){
+                                            State = VICON_ALIGN;
+                                        });
 
     // print map
     pangolin::RegisterKeyPressCallback( 'm',
-                                        [this](){ m_pRenderMap->PrintMap(); }
-                                        );
+                                        [&](){
+                                            m_pRenderMap->PrintMap();
+                                        });
 
     // export map
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'm',
-                                        [this](){ m_pRenderMap->ExportMap(); }
-                                        );
+                                        [&](){
+                                            m_pRenderMap->ExportMap();
+                                        });
 
     // toggle showing side panel
-    pangolin::RegisterKeyPressCallback('~', [this](){ static bool showpanel = false; showpanel = !showpanel;
-        if(showpanel) { m_TimerView.Show(false); m_AnalyticsView.Show(false);  } else
-            { m_TimerView.Show(true); m_AnalyticsView.Show(true); }
-                    pangolin::Display("ui").Show(showpanel); } );
-
+    pangolin::RegisterKeyPressCallback('~',
+                                       [&](){
+                                           static bool showpanel = false;
+                                           showpanel = !showpanel;
+                                           if(showpanel) {
+                                               m_TimerView.Show(false);
+                                               m_AnalyticsView.Show(false);
+                                           } else {
+                                               m_TimerView.Show(true);
+                                               m_AnalyticsView.Show(true);
+                                           }
+                                           pangolin::Display("ui").Show(showpanel);
+                                        });
 
      // toggle showing map
-    pangolin::RegisterKeyPressCallback( '1', [this](){ m_glMap.ToggleShow(); } );
+    pangolin::RegisterKeyPressCallback( '1',
+                                        [&](){
+                                            m_glMap.ToggleShow();
+                                        });
 }
 
 

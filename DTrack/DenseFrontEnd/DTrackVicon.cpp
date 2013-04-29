@@ -190,7 +190,7 @@ bool DTrackVicon::Init(
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 bool DTrackVicon::Iterate(
-        const CamImages&    vImages     //< Input: Camera capture
+        CamImages&    vImages     //< Input: Camera capture
     )
 {
     // update error level in case user changed it
@@ -226,6 +226,18 @@ bool DTrackVicon::Iterate(
         return false;
     }
     const unsigned int nFrameId = pFrame->GetId();
+
+    {
+    Eigen::Vector6d ViconPose;
+    ViconPose(0) = vImages[0].Map.GetProperty<double>( "ViconPoseX", 0 );
+    ViconPose(1) = vImages[0].Map.GetProperty<double>( "ViconPoseY", 0 );
+    ViconPose(2) = vImages[0].Map.GetProperty<double>( "ViconPoseZ", 0 );
+    ViconPose(3) = vImages[0].Map.GetProperty<double>( "ViconPoseP", 0 );
+    ViconPose(4) = vImages[0].Map.GetProperty<double>( "ViconPoseQ", 0 );
+    ViconPose(5) = vImages[0].Map.GetProperty<double>( "ViconPoseR", 0 );
+    pFrame->m_dViconPose = mvl::Cart2T(ViconPose);
+    }
+
 
 
     ///---------- LOCALIZE AGAINST LAST KEYFRAME

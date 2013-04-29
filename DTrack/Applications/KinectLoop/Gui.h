@@ -9,7 +9,6 @@
 #include <SceneGraph/SceneGraph.h>
 
 #include <DenseMap/DenseMap.h>
-#include <DenseFrontEnd/DenseFrontEnd.h>
 
 #include <GUI/GLPath.h>
 #include <GUI/GLMap.h>
@@ -57,26 +56,6 @@ private:
 
     void _RegisterKeyboardCallbacks();
 
-    void _RIGHT_ARROW()
-    {
-        State = STEPPING;
-    }
-
-    void _SPACE_BAR()
-    {
-        State = (State == PAUSED) ? PLAYING : PAUSED;
-    }
-
-    void _CTRL_R()
-    {
-        State = RESETTING;
-        while( State != RESET_COMPLETE ) {
-            usleep(10000);
-        }
-        InitReset(); // not called from elsewhere
-        State = PAUSED;
-    }
-
 
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -87,7 +66,6 @@ public:
 private:
     bool                            m_bMapDirty;
 
-    DenseFrontEnd*                  m_pFrontEnd;
     DenseMap*                       m_pRenderMap;          // re-allocated on reset. for now.
     DenseMap*                       m_pChangesBufferMap;   // re-allocated on reset. for now.
 
@@ -320,35 +298,60 @@ void Gui::_RegisterKeyboardCallbacks()
 {
     // step once
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_SPECIAL + GLUT_KEY_RIGHT,
-                                        std::bind( &Gui::_RIGHT_ARROW, this) );
+                                        [&](){
+                                            State = STEPPING;
+                                        });
 
     // play / pause
     pangolin::RegisterKeyPressCallback( ' ',
-                                        std::bind( &Gui::_SPACE_BAR, this) );
+                                        [&](){
+                                            State = (State == PAUSED) ? PLAYING : PAUSED;
+                                        });
+
 
     // reset app
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'r',
-                                        std::bind( &Gui::_CTRL_R, this) );
+                                        [&](){
+                                            State = RESETTING;
+                                            while( State != RESET_COMPLETE ) {
+                                                usleep(10000);
+                                            }
+                                            InitReset(); // not called from elsewhere
+                                            State = PAUSED;
+                                        });
 
     // print map
     pangolin::RegisterKeyPressCallback( 'm',
-                                        [this](){ m_pRenderMap->PrintMap(); }
-                                        );
+                                        [&](){
+                                            m_pRenderMap->PrintMap();
+                                        });
 
     // export map
     pangolin::RegisterKeyPressCallback( pangolin::PANGO_CTRL + 'm',
-                                        [this](){ m_pRenderMap->ExportMap(); }
-                                        );
+                                        [&](){
+                                            m_pRenderMap->ExportMap();
+                                        });
 
     // toggle showing side panel
-    pangolin::RegisterKeyPressCallback('~', [this](){ static bool showpanel = false; showpanel = !showpanel;
-        if(showpanel) { m_TimerView.Show(false); m_AnalyticsView.Show(false);  } else
-            { m_TimerView.Show(true); m_AnalyticsView.Show(true); }
-                    pangolin::Display("ui").Show(showpanel); } );
-
+    pangolin::RegisterKeyPressCallback('~',
+                                       [&](){
+                                           static bool showpanel = false;
+                                           showpanel = !showpanel;
+                                           if(showpanel) {
+                                               m_TimerView.Show(false);
+                                               m_AnalyticsView.Show(false);
+                                           } else {
+                                               m_TimerView.Show(true);
+                                               m_AnalyticsView.Show(true);
+                                           }
+                                           pangolin::Display("ui").Show(showpanel);
+                                        });
 
      // toggle showing map
-    pangolin::RegisterKeyPressCallback( '1', [this](){ m_glMap.ToggleShow(); } );
+    pangolin::RegisterKeyPressCallback( '1',
+                                        [&](){
+                                            m_glMap.ToggleShow();
+                                        });
 }
 
 

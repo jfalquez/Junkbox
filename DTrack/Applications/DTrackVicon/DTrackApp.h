@@ -217,6 +217,15 @@ class DTrackApp
         }
 
 
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        void CallViconAlign()
+        {
+            std::cout << "Aligning Vicon..." << std::endl;
+            m_pBackEnd->_ViconAlign();
+            std::cout << "Aligning Vicon complete!" << std::endl;
+        }
+
+
     private:
 
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -263,11 +272,11 @@ class DTrackApp
             }
 
             /// None
-            const unsigned int nBottomMargin = 0;
-            const unsigned int nMiddleMargin = 0;
+//            const unsigned int nBottomMargin = 0;
+//            const unsigned int nMiddleMargin = 0;
             /// Tompkins
-//            const unsigned int nBottomMargin = 90;
-//            const unsigned int nMiddleMargin = 150;
+            const unsigned int nBottomMargin = 90;
+            const unsigned int nMiddleMargin = 150;
             /// Toyota
 //            const unsigned int nBottomMargin = 90;
 //            const unsigned int nMiddleMargin = 180;

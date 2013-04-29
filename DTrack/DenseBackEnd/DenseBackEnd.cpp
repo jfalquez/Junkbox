@@ -125,6 +125,7 @@ void DenseBackEnd::_PoseRelax()
     }
 
     ceres::Solver::Options SolverOptions;
+    SolverOptions.num_threads = 4;
     ceres::Solver::Summary SolverSummary;
     ceres::Solve( SolverOptions, &Problem, &SolverSummary );
     std::cout << SolverSummary.BriefReport() << std::endl;
@@ -187,12 +188,18 @@ void DenseBackEnd::_ViconAlign()
     ceres::Problem Problem;
 
     // stuff we are solving
-    Sophus::SE3d Tvw = Sophus::SE3d( Initial_Tvw );
-    LocalParamSe3* pLocalParam0 = new LocalParamSe3;
-    Problem.AddParameterBlock( Tvw.data(), 7, pLocalParam0 );
+    Sophus::SE3d Tvw(m_pMap->m_dViconWorld);
     Sophus::SE3d Tcf;
-    LocalParamSe3* pLocalParam1 = new LocalParamSe3;
-    Problem.AddParameterBlock( Tcf.data(), 7, pLocalParam1 );
+    if( Tvw.log().norm() < 0.01 ) {
+        Tvw = Sophus::SE3d( Initial_Tvw );
+    } else {
+        Tvw = Sophus::SE3d( m_pMap->m_dViconWorld );
+        Tcf = Sophus::SE3d( m_pMap->m_dCameraFiducials );
+    }
+    // TODO set this to member being initalized once
+    LocalParamSe3* pLocalParam = new LocalParamSe3;
+    Problem.AddParameterBlock( Tvw.data(), 7, pLocalParam );
+    Problem.AddParameterBlock( Tcf.data(), 7, pLocalParam );
 
     for( unsigned int ii = 0; ii < vPoses.size(); ++ii ) {
 
@@ -207,6 +214,7 @@ void DenseBackEnd::_ViconAlign()
     }
 
     ceres::Solver::Options SolverOptions;
+    SolverOptions.num_threads = 4;
     ceres::Solver::Summary SolverSummary;
     ceres::Solve( SolverOptions, &Problem, &SolverSummary );
     std::cout << SolverSummary.BriefReport() << std::endl;

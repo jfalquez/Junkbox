@@ -17,7 +17,7 @@ public:
     GLVicon()
     {
         m_bInitGLComplete = false;
-        m_fLineColor(0) = 1.0;
+        m_fLineColor(0) = 0.0;
         m_fLineColor(1) = 1.0;
         m_fLineColor(2) = 0.0;
         m_fLineColor(3) = 1.0;
@@ -65,6 +65,15 @@ public:
 
         if( nNumFrames > 0 ) {
 
+
+            Eigen::Matrix4d Tvw = m_pMap->m_dViconWorld;
+            Eigen::Matrix4d Twv = Tvw.inverse();
+            Eigen::Matrix4d Tcf = m_pMap->m_dCameraFiducials;
+            Eigen::Matrix4d Tfc = Tcf.inverse();
+
+            glPushMatrix();
+            glMultMatrixd( MAT4_COL_MAJOR_DATA( Twv ) );
+
             FramePtr pFrame;
 
             if( m_bDrawAxis ) {
@@ -77,7 +86,8 @@ public:
                 for( unsigned int ii = start; ii < nNumFrames; ++ii ) {
                     pFrame = m_pMap->GetFramePtr(ii);
                     glPushMatrix();
-                    glMultMatrixd( MAT4_COL_MAJOR_DATA( pFrame->m_dViconPose ) );
+                    Eigen::Matrix4d Pose = mvl::Cart2T( mvl::T2Cart( pFrame->m_dViconPose * Tfc ));
+                    glMultMatrixd( MAT4_COL_MAJOR_DATA( Pose ) );
                     glCallList( m_nDrawListId );
                     glPopMatrix();
                 }
@@ -93,12 +103,14 @@ public:
                 glBegin( GL_LINE_STRIP );
                 for( unsigned int ii = 0; ii < nNumFrames; ++ii ) {
                     pFrame = m_pMap->GetFramePtr(ii);
-                    Eigen::Matrix4d&    Pose = pFrame->m_dViconPose;
+                    Eigen::Matrix4d Pose = mvl::Cart2T( mvl::T2Cart( pFrame->m_dViconPose * Tfc ));
                     glVertex3f( Pose(0,3), Pose(1,3), Pose(2,3) );
                 }
                 glEnd();
                 glPopMatrix();
             }
+
+            glPopMatrix();
         }
 
         glPopAttrib();

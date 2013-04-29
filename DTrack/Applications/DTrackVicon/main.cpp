@@ -30,6 +30,10 @@ void DTrackThread( Gui& gui, int argc, char** argv)
                 app.StepOnce( gui );
                 gui.SetState( PAUSED );
             }
+            if( gui.State == VICON_ALIGN ) {
+                app.CallViconAlign();
+                gui.SetState( PAUSED );
+            }
 
             app.UpdateGui( gui );
 
