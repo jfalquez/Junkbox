@@ -19,7 +19,7 @@ int main( int argc, char** argv )
 
     // create GUI windows
     cv::namedWindow( "Image 1", CV_WINDOW_AUTOSIZE );
-//    cv::namedWindow( "Image 2", CV_WINDOW_AUTOSIZE );
+    cv::namedWindow( "Image 2", CV_WINDOW_AUTOSIZE );
 
 
     // variable to calculate frame rate
@@ -31,20 +31,8 @@ int main( int argc, char** argv )
             std::cout << "Error getting images." << std::endl;
         }
 
-//        cv::Mat Tmp;
-//        cv::resize( vImages[0].Image, Tmp, cv::Size(0,0), 0.5, 0.5 );
-//        vImages[0].Image = Tmp;
-
-        cv::Rect myROI;
-        myROI.x = 96;
-        myROI.y = 76;
-        myROI.width = 320;
-        myROI.height = 240;
-//        cv::Mat Tmp = vImages[0].Image( myROI );
-
         cv::imshow( "Image 1", vImages[0].Image );
-//        cv::imshow( "Image 1", Tmp );
-//        cv::imshow( "Image 2", vImages[1].Image );
+        cv::imshow( "Image 2", vImages[1].Image );
 
         char c;
         c = cv::waitKey(1);
