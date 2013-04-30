@@ -16,8 +16,7 @@ DenseMap::DenseMap()
     m_dPathOrientation.setIdentity();
 
     // TODO CLEANME
-    m_dViconWorld.setIdentity();
-    m_dCameraFiducials.setIdentity();
+    m_dTfc.setIdentity();
 }
 
 
@@ -369,8 +368,7 @@ bool DenseMap::CopyMapChanges(
     // TODO CLEANME
     m_dCurPose = rRHS.m_dCurPose;
     m_dPrevPose = rRHS.m_dPrevPose;
-    m_dViconWorld = rRHS.m_dViconWorld;
-    m_dCameraFiducials = rRHS.m_dCameraFiducials;
+    m_dTfc = rRHS.m_dTfc;
 
 
     // since these are pointers, we don't need to update the data itself within

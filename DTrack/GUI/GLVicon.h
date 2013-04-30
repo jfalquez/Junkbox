@@ -65,16 +65,16 @@ public:
 
         if( nNumFrames > 0 ) {
 
+            Eigen::Matrix4d& Tfc = m_pMap->m_dTfc;
+            Eigen::Matrix4d Tcf = Tfc.inverse();
+            Eigen::Matrix4d& dPathOrientation =  m_pMap->GetPathOrientation();
 
-            Eigen::Matrix4d Tvw = m_pMap->m_dViconWorld;
-            Eigen::Matrix4d Twv = Tvw.inverse();
-            Eigen::Matrix4d Tcf = m_pMap->m_dCameraFiducials;
-            Eigen::Matrix4d Tfc = Tcf.inverse();
+            FramePtr pFrame = m_pMap->GetFramePtr(0);
+            Eigen::Matrix4d& Twf1 = pFrame->m_dViconPose;
+            Eigen::Matrix4d Tf1w = Twf1.inverse();
 
             glPushMatrix();
-            glMultMatrixd( MAT4_COL_MAJOR_DATA( Twv ) );
-
-            FramePtr pFrame;
+            glMultMatrixd( MAT4_COL_MAJOR_DATA( dPathOrientation * Tcf * Tf1w ) );
 
             if( m_bDrawAxis ) {
                 int start = 0;
@@ -86,7 +86,7 @@ public:
                 for( unsigned int ii = start; ii < nNumFrames; ++ii ) {
                     pFrame = m_pMap->GetFramePtr(ii);
                     glPushMatrix();
-                    Eigen::Matrix4d Pose = mvl::Cart2T( mvl::T2Cart( pFrame->m_dViconPose * Tfc ));
+                    Eigen::Matrix4d Pose = pFrame->m_dViconPose;
                     glMultMatrixd( MAT4_COL_MAJOR_DATA( Pose ) );
                     glCallList( m_nDrawListId );
                     glPopMatrix();
@@ -103,7 +103,7 @@ public:
                 glBegin( GL_LINE_STRIP );
                 for( unsigned int ii = 0; ii < nNumFrames; ++ii ) {
                     pFrame = m_pMap->GetFramePtr(ii);
-                    Eigen::Matrix4d Pose = mvl::Cart2T( mvl::T2Cart( pFrame->m_dViconPose * Tfc ));
+                    Eigen::Matrix4d Pose = pFrame->m_dViconPose;
                     glVertex3f( Pose(0,3), Pose(1,3), Pose(2,3) );
                 }
                 glEnd();

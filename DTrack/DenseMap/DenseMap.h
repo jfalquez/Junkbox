@@ -281,8 +281,7 @@ public:
     Eigen::Matrix4d                             m_dCurPose;
     Eigen::Matrix4d                             m_dPrevPose;
 
-    Eigen::Matrix4d                             m_dViconWorld;
-    Eigen::Matrix4d                             m_dCameraFiducials;
+    Eigen::Matrix4d                             m_dTfc;
 
 /////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

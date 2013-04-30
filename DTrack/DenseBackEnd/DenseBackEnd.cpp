@@ -144,28 +144,28 @@ void DenseBackEnd::_PoseRelax()
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class ViconAlignCostFunc : public ceres::AutoDiffArrayCostFunction< ceres::CostFunction, ViconAlignCostFunc, Sophus::SE3d::DoF, Sophus::SE3d::num_parameters, Sophus::SE3d::num_parameters >
+class ViconAlignCostFunc : public ceres::AutoDiffArrayCostFunction< ceres::CostFunction, ViconAlignCostFunc, Sophus::SE3d::DoF, Sophus::SE3d::num_parameters >
 {
 public:
-    ViconAlignCostFunc( Sophus::SE3d Tvf, Sophus::SE3d Twc ) { m_Tfv = Tvf.inverse(), m_Twc = Twc; }
+    ViconAlignCostFunc( Sophus::SE3d Twf1, Sophus::SE3d Twf, Sophus::SE3d Tgc ) { m_Twf1 = Twf1, m_Tfw = Twf.inverse(), m_Tgc = Tgc; }
 
     template <typename T>
     bool Evaluate(const T * const *parameters, T *residuals ) const
     {
         Eigen::Map< Eigen::Matrix<T, Sophus::SE3d::DoF, 1> >    r(residuals);
-        Eigen::Map< const Sophus::SE3Group<T> > Tvw(parameters[0]);
-        Eigen::Map< const Sophus::SE3Group<T> > Tcf(parameters[1]);
+        Eigen::Map< const Sophus::SE3Group<T> > Tfc(parameters[0]);
 
-        const Sophus::SE3Group<T> myTvf = Tvw * m_Twc.cast<T>() * Tcf;
-        Sophus::SE3Group<T> Terror = m_Tfv.cast<T>() * myTvf;
+        const Sophus::SE3Group<T> myTwf = m_Twf1.cast<T>() * Tfc * m_Tgc.cast<T>();
+        Sophus::SE3Group<T> Terror = m_Tfw.cast<T>() * myTwf;
         r = Terror.log();
 
         return true;
    }
 
 private:
-    Sophus::SE3d        m_Tfv;      // fiducials in "vicon" world
-    Sophus::SE3d        m_Twc;      // my "viconized" estimates (to camera)
+    Sophus::SE3d        m_Twf1;     // first fiducial pose in Vicon world frame (this is our origin)
+    Sophus::SE3d        m_Tfw;      // i'th pose in Vicon world frame (inverted)
+    Sophus::SE3d        m_Tgc;      // my i'th camera poses brought from relative to a "global" frame
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -177,7 +177,7 @@ void DenseBackEnd::_ViconAlign()
 
     // get first frame's Vicon pose
     FramePtr pFrame = m_pMap->GetFramePtr(0);
-    Eigen::Matrix4d& Initial_Tvw = pFrame->m_dViconPose;
+    Eigen::Matrix4d& Twf1 = pFrame->m_dViconPose;
 
     std::vector< Sophus::SE3d  > vViconPoses;
     vViconPoses.reserve( vPoses.size() );
@@ -188,18 +188,11 @@ void DenseBackEnd::_ViconAlign()
     ceres::Problem Problem;
 
     // stuff we are solving
-    Sophus::SE3d Tvw(m_pMap->m_dViconWorld);
-    Sophus::SE3d Tcf;
-    if( Tvw.log().norm() < 0.01 ) {
-        Tvw = Sophus::SE3d( Initial_Tvw );
-    } else {
-        Tvw = Sophus::SE3d( m_pMap->m_dViconWorld );
-        Tcf = Sophus::SE3d( m_pMap->m_dCameraFiducials );
-    }
+    Sophus::SE3d Tfc( m_pMap->m_dTfc );
+
     // TODO set this to member being initalized once
     LocalParamSe3* pLocalParam = new LocalParamSe3;
-    Problem.AddParameterBlock( Tvw.data(), 7, pLocalParam );
-    Problem.AddParameterBlock( Tcf.data(), 7, pLocalParam );
+    Problem.AddParameterBlock( Tfc.data(), 7, pLocalParam );
 
     for( unsigned int ii = 0; ii < vPoses.size(); ++ii ) {
 
@@ -208,8 +201,8 @@ void DenseBackEnd::_ViconAlign()
 
         vMyPoses.push_back( Sophus::SE3d( vPoses[ii] ) );
 
-        ViconAlignCostFunc* pCostFunc = new ViconAlignCostFunc( vViconPoses.back(), vMyPoses.back() );
-        Problem.AddResidualBlock( pCostFunc, NULL, Tvw.data(), Tcf.data() );
+        ViconAlignCostFunc* pCostFunc = new ViconAlignCostFunc( Sophus::SE3d(Twf1), vViconPoses.back(), vMyPoses.back() );
+        Problem.AddResidualBlock( pCostFunc, NULL, Tfc.data() );
 
     }
 
@@ -220,8 +213,7 @@ void DenseBackEnd::_ViconAlign()
     std::cout << SolverSummary.BriefReport() << std::endl;
 
     // copy back results
-    m_pMap->m_dViconWorld = Tvw.matrix();
-    m_pMap->m_dCameraFiducials = Tcf.matrix();
+    m_pMap->m_dTfc = Tfc.matrix();
 }
 
 
