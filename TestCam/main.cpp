@@ -1,8 +1,9 @@
+#include <unistd.h>
+
 #include <opencv.hpp>
 
-#include <RPG/Utils/InitCam.h>
-#include <RPG/Utils/TicToc.h>
-#include <RPG/Devices/Camera/CameraDevice.h>
+#include <HAL/Utils/TicToc.h>
+#include <HAL/Camera/CameraDevice.h>
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -10,12 +11,14 @@
 int main( int argc, char** argv )
 {
 
-    CameraDevice Cam;
+    hal::CameraDevice Cam;
+    std::cout << "Camera ok..." << std::endl;
 
-    rpg::InitCam( Cam, argc, argv );
-
-    // container for images
-    std::vector< rpg::ImageWrapper > vImages;
+    if( Cam.InitDriver( argc, argv ) == false ) {
+        std::cerr << "Error initializing driver." << std::endl;
+        exit(1);
+    }
+    std::cout << "Init ok..." << std::endl;
 
     // create GUI windows
     cv::namedWindow( "Image 1", CV_WINDOW_AUTOSIZE );
@@ -26,13 +29,19 @@ int main( int argc, char** argv )
     double t = Tic();
     unsigned int nFrames = 0;
 
+    pb::ImageArray vImages;
+
     while(1) {
         if( !Cam.Capture(vImages) ) {
             std::cout << "Error getting images." << std::endl;
         }
 
-        cv::imshow( "Image 1", vImages[0].Image );
-        cv::imshow( "Image 2", vImages[1].Image );
+        cv::imshow( "Image 1", vImages(0).cvMat() );
+        cv::Mat Depth;
+        vImages(1).cvMat().convertTo( Depth, CV_32FC1 );
+        Depth = Depth / 1000;
+        Depth = Depth / 10.0;
+        cv::imshow( "Image 2", Depth );
 
         char c;
         c = cv::waitKey(1);

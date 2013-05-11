@@ -264,11 +264,11 @@ class DTrackApp
             }
 
             /// None
-//            const unsigned int nBottomMargin = 0;
-//            const unsigned int nMiddleMargin = 0;
+            const unsigned int nBottomMargin = 0;
+            const unsigned int nMiddleMargin = 0;
             /// Tompkins
-            const unsigned int nBottomMargin = 90;
-            const unsigned int nMiddleMargin = 150;
+//            const unsigned int nBottomMargin = 90;
+//            const unsigned int nMiddleMargin = 150;
             /// Toyota
 //            const unsigned int nBottomMargin = 90;
 //            const unsigned int nMiddleMargin = 180;
