@@ -2,6 +2,7 @@
 
 #include <opencv.hpp>
 
+#include <HAL/Utils/GetPot>
 #include <HAL/Utils/TicToc.h>
 #include <HAL/Camera/CameraDevice.h>
 
@@ -11,14 +12,12 @@
 int main( int argc, char** argv )
 {
 
-    hal::CameraDevice Cam;
-    std::cout << "Camera ok..." << std::endl;
+    GetPot clArgs( argc, argv );
 
-    if( Cam.InitDriver( argc, argv ) == false ) {
-        std::cerr << "Error initializing driver." << std::endl;
-        exit(1);
-    }
-    std::cout << "Init ok..." << std::endl;
+    std::cout << "Initializing Camera... " << std::endl;
+    hal::Camera Cam( clArgs.follow("", "-cam") );
+    std::cout << " OK." << std::endl;
+
 
     // create GUI windows
     cv::namedWindow( "Image 1", CV_WINDOW_AUTOSIZE );
@@ -36,12 +35,13 @@ int main( int argc, char** argv )
             std::cout << "Error getting images." << std::endl;
         }
 
-        cv::imshow( "Image 1", vImages(0).cvMat() );
+        cv::imshow( "Image 1", cv::Mat(vImages[0]) );
         cv::Mat Depth;
-        vImages(1).cvMat().convertTo( Depth, CV_32FC1 );
-        Depth = Depth / 1000;
-        Depth = Depth / 10.0;
-        cv::imshow( "Image 2", Depth );
+//        cv::Mat(vImages[1]).convertTo( Depth, CV_32FC1 );
+//        Depth = Depth / 1000;
+//        Depth = Depth / 10.0;
+//        cv::imshow( "Image 2", Depth );
+        cv::imshow( "Image 2", cv::Mat(vImages[1]) );
 
         char c;
         c = cv::waitKey(1);
@@ -56,5 +56,6 @@ int main( int argc, char** argv )
             t = Tic();
         }
     }
+
     return 0;
 }
