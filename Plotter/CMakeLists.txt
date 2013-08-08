@@ -8,15 +8,16 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 find_package( HAL 0.1 REQUIRED )
 find_package( Pangolin 0.1 REQUIRED )
 find_package( SceneGraph 0.1 REQUIRED )
-find_package( Protobuf REQUIRED )
+find_package( NODE REQUIRED )
 
+find_package( Protobuf REQUIRED )
 include_directories( ${CMAKE_BINARY_DIR} )
 PROTOBUF_GENERATE_CPP( PROTO_SRCS PROTO_HDRS Command.proto )
-
 
 include_directories( ${HAL_INCLUDE_DIRS} )
 include_directories( ${Pangolin_INCLUDE_DIRS} )
 include_directories( ${SceneGraph_INCLUDE_DIRS} )
+include_directories( ${NODE_INCLUDE_DIRS} )
 
 add_subdirectory( Gamepad )
 
@@ -31,4 +32,4 @@ target_link_libraries( ${PROJECT_NAME} ${HAL_LIBRARIES})
 target_link_libraries( ${PROJECT_NAME} ${Pangolin_LIBRARIES})
 target_link_libraries( ${PROJECT_NAME} ${SceneGraph_LIBRARIES} )
 target_link_libraries( ${PROJECT_NAME} Gamepad )
-#link_directories( ${CMAKE_BINARY_DIR}/Gamepad )
+target_link_libraries( ${PROJECT_NAME} ${NODE_LIBRARIES} )
