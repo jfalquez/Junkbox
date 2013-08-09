@@ -71,11 +71,11 @@ int main(int argc, char** argv)
     theIMU.RegisterIMUDataCallback(IMU_Handler);
 
     ///-------------------- INIT GAMEPAD
-    if(theGamepad.InitializeJoystick()) {
-        std::cout << "Successfully initialized gamepad." << std::endl;
-    } else {
-        std::cerr << "Failed to initialized gamepad." << std::endl;
-    }
+//    if(theGamepad.InitializeJoystick()) {
+//        std::cout << "Successfully initialized gamepad." << std::endl;
+//    } else {
+//        std::cerr << "Failed to initialized gamepad." << std::endl;
+//    }
 
     ///-------------------- INIT PANGOLIN
 
@@ -100,11 +100,11 @@ int main(int argc, char** argv)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // update the joystick and get the accel/phi values
-        theGamepad.UpdateJoystick();
+//        theGamepad.UpdateJoystick();
 //        double joystickAccel = (((double)theGamepad.GetAxisValue(1)/JOYSTICK_AXIS_MAX)*-40.0);
-        double joystickAccel = (theGamepad.GetAxisValue(1) + 1 ) * (MAX_ACCEL / 2);
+//        double joystickAccel = (theGamepad.GetAxisValue(1) + 1 ) * (MAX_ACCEL / 2);
 //        double joystickPhi = (((double)theGamepad.GetAxisValue(2)/(double)JOYSTICK_AXIS_MAX) * (MAX_SERVO_ANGLE*M_PI/180.0)*0.5);
-        double joystickPhi = (theGamepad.GetAxisValue(2) + 1) * (MAX_PHI / 2);
+//        double joystickPhi = (theGamepad.GetAxisValue(2) + 1) * (MAX_PHI / 2);
 
 //        joystickAccel = joystickAccel*DEFAULT_ACCEL_COEF + DEFAULT_ACCEL_OFFSET;
 //        joystickPhi = joystickPhi*DEFAULT_STEERING_COEF + DEFAULT_STEERING_OFFSET;
