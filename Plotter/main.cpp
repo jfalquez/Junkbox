@@ -2,8 +2,7 @@
 #include <HAL/Utils/GetPot>
 #include <HAL/IMU/IMUDevice.h>
 
-//#include <HAL/Utils/Node.h>
-#include <Node/Node.h>
+#include <HAL/Utils/Node.h>
 
 #include "Command.pb.h"
 #include "JoystickHandler.h"
@@ -22,7 +21,6 @@ pangolin::DataLog theLog;
 
 JoystickHandler theGamepad;
 
-rpg::node Node;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 inline double Tic()
@@ -32,8 +30,6 @@ inline double Tic()
     return tv.tv_sec + 1e-6 * (tv.tv_usec);
 }
 
-static float scale = Tic();
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void IMU_Handler(pb::ImuMsg& IMUdata)
 {
@@ -41,7 +37,7 @@ void IMU_Handler(pb::ImuMsg& IMUdata)
     const pb::VectorMsg& pbGyr = IMUdata.gyro();
     const pb::VectorMsg& pbMag = IMUdata.mag();
 //    std::cout << pbAcc.data(0) << " " <<  pbAcc.data(1) << " " <<  pbAcc.data(2) << std::endl;
-//    const float scale = 1;
+    const float scale = 1;
     std::vector< float > vData;
     vData.push_back( pbAcc.data(0)/scale );
     vData.push_back( pbAcc.data(1)/scale );
@@ -64,7 +60,7 @@ int main(int argc, char** argv)
     GetPot clArgs( argc, argv );
 
     ///-------------------- INIT NODE
-    Node.init("Plotter");
+//    rpg::Node Node;
 
     ///-------------------- INIT IMU
     hal::IMU theIMU( clArgs.follow("", "-imu") );
