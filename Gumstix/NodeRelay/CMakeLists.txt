@@ -23,7 +23,7 @@ PROTOBUF_GENERATE_CPP( PROTO_SRCS PROTO_HDRS Command.proto )
 
 
 set( HDRS ${PROTO_HDRS} FtdiDriver.h Node.h )
-set( SRCS main.cpp ${PROTO_SRCS} )
+set( SRCS NodeRelay.cpp ${PROTO_SRCS} )
 
 
 add_executable( NodeRelay ${HDRS} ${SRCS} )

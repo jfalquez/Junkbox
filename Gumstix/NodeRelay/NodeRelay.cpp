@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include <HAL/Utils/GetPot>
 #include <HAL/IMU/IMUDevice.h>
 #include <PbMsgs/Imu.pb.h>
 
@@ -8,6 +9,7 @@
 #include "Node.h"
 
 
+rpg::Node   Relay(5001);
 FtdiDriver  g_FtdiDriver;
 
 
@@ -31,23 +33,24 @@ void ProgramControlRpc( CommandMsg& Req, CommandReply& /*Rep*/, void* /*userData
     g_FtdiDriver.SendCommandPacket(dPhi,dAccel);
 }
 
-rpg::Node Relay(5001);
 
-
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// IMU callback
 void IMU_Handler(pb::ImuMsg& IMUdata)
 {
     if ( Relay.Write( "IMU", IMUdata ) == false ) {
-        printf("Error sending message.\n");
+        printf("NodeRelay: Error sending message.\n");
     }
-
 }
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-int main()
+int main(int argc, char** argv)
 {
+    GetPot clArgs(argc, argv);
+
     printf("Connecting to FTDI com port...\n");
 //    g_FtdiDriver.Connect("/dev/cu.usbserial-DA009KYM");
 
@@ -62,8 +65,9 @@ int main()
 //    }
 
     // set up a publisher
-    if( Relay.Publish("IMU", 5002) == false ) {
-        printf("Error setting publisher.\n");
+    unsigned int nPort = clArgs.follow( 5002, "-port");
+    if( Relay.Publish("IMU", nPort) == false ) {
+        printf("NodeRelay: Error setting publisher.\n");
     }
 
     for( size_t ii = 0; ; ++ii ) {
