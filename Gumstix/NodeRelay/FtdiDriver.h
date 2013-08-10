@@ -19,9 +19,9 @@ typedef int ComPortHandle;
 #pragma pack(1)
 struct CommandPacket
 {
-    char m_cDelimiter1 = FTDI_PACKET_DELIMITER1;
-    char m_cDelimiter2 = FTDI_PACKET_DELIMITER2;
-    char m_cSize = 11;
+    char m_cDelimiter1;
+    char m_cDelimiter2;
+    char m_cSize;
     int m_nSteering;
     int m_nSpeed;
 };
@@ -29,9 +29,9 @@ struct CommandPacket
 #pragma pack(1)
 struct SensorPacket
 {
-    char m_cDelimiter1 = FTDI_PACKET_DELIMITER1;
-    char m_cDelimiter2 = FTDI_PACKET_DELIMITER2;
-    char m_cSize = sizeof(SensorPacket);
+    char m_cDelimiter1;
+    char m_cDelimiter2;
+    char m_cSize;
     short int   Acc_x;
     short int   Acc_y;
     short int   Acc_z;
@@ -52,7 +52,6 @@ struct SensorPacket
     short int   ADC_RF_yaw;
     short int   ADC_RF_rol;
 };
-
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -133,7 +132,6 @@ private:
           bytesRead = read(comPort, bytes, ii);
       }
 
-//      std::cout << bytesRead << " " << bytes[3] << " " << bytes[4] << std::endl;
       return bytesRead;
 
     }
