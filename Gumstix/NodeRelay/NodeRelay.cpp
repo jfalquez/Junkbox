@@ -1,26 +1,18 @@
 #include <stdio.h>
 #include <chrono>
+#include <thread>
 
 #include <HAL/Utils/GetPot>
+#include <HAL/Utils/Node.h>
 #include <HAL/IMU/IMUDevice.h>
 #include <PbMsgs/Imu.pb.h>
 
+#include <HAL/IMU/Drivers/Ninja/FtdiListener.h>
+
 #include "Command.pb.h"
-#include "Node.h"
 
 
-rpg::Node   Relay(5001);
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// RPC call which handles setting servo positions
-void ProgramControlRpc( CommandMsg& Req, CommandReply& /*Rep*/, void* /*userData*/ )
-{
-    printf("Received a=%.2f and p=%.2f\n",Req.accel(),Req.phi());
-    fflush(stdout);
-    double dAccel = std::min(500.0,std::max(0.0,Req.accel()));
-    double dPhi = std::min(500.0,std::max(0.0,Req.phi()));
-}
+rpg::Node   Relay;
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -40,25 +32,36 @@ int main(int argc, char** argv)
 {
     GetPot clArgs(argc, argv);
 
-    printf("Initializing RELAY node on port 5001....\n");
+    printf("Initializing RELAY node....\n");
     hal::IMU imu( clArgs.follow("", "-imu") );
     imu.RegisterIMUDataCallback(IMU_Handler);
 
-    // set up a publisher
-//    if( Relay.Register("ControlRpc", &ProgramControlRpc, NULL) == false ) {
-//        printf("Error setting RPC callback.\n");
-//    }
 
     // set up a publisher
-    unsigned int nPort = clArgs.follow( 5002, "-port");
+    unsigned int nPort = clArgs.follow( 5001, "-port");
     if( Relay.Publish("IMU", nPort) == false ) {
         printf("NodeRelay: Error setting publisher.\n");
     }
 
+    Relay.Subscribe("CarControl", clArgs.follow("","-control" )  );
+
+    CommandMsg cMsg;
+
+    FtdiListener& Listener = FtdiListener::GetInstance(); 
+
     for( size_t ii = 0; ; ++ii ) {
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-//        sleep(1);
+        cMsg.Clear();
+        Relay.ReadBlocking("CarControl", cMsg);
+
+        const int accel = int(cMsg.accel());
+        const int phi = int(cMsg.phi());
+        printf("Accel: %3d --- Phi: %3d\r", accel, phi );
+        fflush(stdout);
+        Listener.SendCommandPacket( phi, accel );
+
+
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
 
