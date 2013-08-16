@@ -23,14 +23,6 @@ JoystickHandler theGamepad;
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-inline double Tic()
-{
-    struct timeval tv;
-    gettimeofday(&tv, 0);
-    return tv.tv_sec + 1e-6 * (tv.tv_usec);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void IMU_Handler(pb::ImuMsg& IMUdata)
 {
     const pb::VectorMsg& pbAcc = IMUdata.accel();
@@ -60,18 +52,19 @@ int main(int argc, char** argv)
     GetPot clArgs( argc, argv );
 
     ///-------------------- INIT NODE
-//    rpg::Node Node;
+    rpg::Node Node;
+    Node.Publish("CarControl", 6001);
 
     ///-------------------- INIT IMU
     hal::IMU theIMU( clArgs.follow("", "-imu") );
     theIMU.RegisterIMUDataCallback(IMU_Handler);
 
     ///-------------------- INIT GAMEPAD
-//    if(theGamepad.InitializeJoystick()) {
-//        std::cout << "Successfully initialized gamepad." << std::endl;
-//    } else {
-//        std::cerr << "Failed to initialized gamepad." << std::endl;
-//    }
+    if(theGamepad.InitializeJoystick()) {
+        std::cout << "Successfully initialized gamepad." << std::endl;
+    } else {
+        std::cerr << "Failed to initialized gamepad." << std::endl;
+    }
 
     ///-------------------- INIT PANGOLIN
 
@@ -96,22 +89,21 @@ int main(int argc, char** argv)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // update the joystick and get the accel/phi values
-//        theGamepad.UpdateJoystick();
+        theGamepad.UpdateJoystick();
 //        double joystickAccel = (((double)theGamepad.GetAxisValue(1)/JOYSTICK_AXIS_MAX)*-40.0);
-//        double joystickAccel = (theGamepad.GetAxisValue(1) + 1 ) * (MAX_ACCEL / 2);
+        double joystickAccel = (theGamepad.GetAxisValue(1) + 1 ) * (MAX_ACCEL / 2);
 //        double joystickPhi = (((double)theGamepad.GetAxisValue(2)/(double)JOYSTICK_AXIS_MAX) * (MAX_SERVO_ANGLE*M_PI/180.0)*0.5);
-//        double joystickPhi = (theGamepad.GetAxisValue(2) + 1) * (MAX_PHI / 2);
+        double joystickPhi = (theGamepad.GetAxisValue(2) + 1) * (MAX_PHI / 2);
 
 //        joystickAccel = joystickAccel*DEFAULT_ACCEL_COEF + DEFAULT_ACCEL_OFFSET;
 //        joystickPhi = joystickPhi*DEFAULT_STEERING_COEF + DEFAULT_STEERING_OFFSET;
 
-//        printf("Accel: %f      Phi: %f\r",joystickAccel,joystickPhi);
+        printf("Accel: %3d      Phi: %3d\r",int(joystickAccel),int(joystickPhi));
 
-//        CommandMsg Req;
-//        CommandReply Rep;
-//        Req.set_accel(joystickAccel);
-//        Req.set_phi(joystickPhi);
-//        Node.call_rpc("NodeRelay/ControlRpc",Req,Rep);
+        CommandMsg cMsg;
+        cMsg.set_accel(joystickAccel);
+        cMsg.set_phi(joystickPhi);
+        Node.Write("CarControl", cMsg);
 
         // update pangolin GUI
         pangolin::FinishFrame();
