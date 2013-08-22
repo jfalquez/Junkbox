@@ -1,13 +1,15 @@
 #include <pangolin/pangolin.h>
 #include <HAL/Utils/GetPot>
 #include <HAL/IMU/IMUDevice.h>
+#include <HAL/Encoder/EncoderDevice.h>
 
 #include <HAL/Utils/Node.h>
 
 #include "Command.pb.h"
 #include "JoystickHandler.h"
 
-pangolin::DataLog theLog;
+pangolin::DataLog logAccel;
+pangolin::DataLog logEncoder;
 
 #define MIN_ACCEL 500
 #define MAX_ACCEL 500
@@ -26,23 +28,19 @@ JoystickHandler theGamepad;
 void IMU_Handler(pb::ImuMsg& IMUdata)
 {
     const pb::VectorMsg& pbAcc = IMUdata.accel();
-    const pb::VectorMsg& pbGyr = IMUdata.gyro();
-    const pb::VectorMsg& pbMag = IMUdata.mag();
-//    std::cout << pbAcc.data(0) << " " <<  pbAcc.data(1) << " " <<  pbAcc.data(2) << std::endl;
     const float scale = 1;
-    std::vector< float > vData;
-    vData.push_back( pbAcc.data(0)/scale );
-    vData.push_back( pbAcc.data(1)/scale );
-    vData.push_back( pbAcc.data(2)/scale );
-//    vData.push_back( pbGyr.data(0)/scale );
-//    vData.push_back( pbGyr.data(1)/scale );
-//    vData.push_back( pbGyr.data(2)/scale );
-//    vData.push_back( pbMag.data(0)/scale );
-//    vData.push_back( pbMag.data(1)/scale );
-//    vData.push_back( pbMag.data(2)/scale );
-//    theLog.Log(vData);
-    theLog.Log( pbAcc.data(0)/scale, pbAcc.data(1)/scale, pbAcc.data(2)/scale );
+    logAccel.Log( pbAcc.data(0)/scale, pbAcc.data(1)/scale, pbAcc.data(2)/scale );
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void Encoder_Handler(pb::EncoderMsg& ENCdata)
+{
+    const float scale = 1;
+    logEncoder.Log( ENCdata.data(0)/scale, ENCdata.data(1)/scale );
+}
+
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -55,9 +53,16 @@ int main(int argc, char** argv)
     rpg::Node Node;
     Node.Publish("CarControl", 6001);
 
+
     ///-------------------- INIT IMU
     hal::IMU theIMU( clArgs.follow("", "-imu") );
     theIMU.RegisterIMUDataCallback(IMU_Handler);
+
+
+    ///-------------------- INIT Encoder
+    hal::Encoder theEncoder( clArgs.follow("", "-enc") );
+    theEncoder.RegisterEncoderDataCallback(Encoder_Handler);
+
 
     ///-------------------- INIT GAMEPAD
     if(theGamepad.InitializeJoystick()) {
@@ -66,6 +71,7 @@ int main(int argc, char** argv)
         std::cerr << "Failed to initialized gamepad." << std::endl;
     }
 
+
     ///-------------------- INIT PANGOLIN
 
     // Create OpenGL window in single line thanks to GLUT
@@ -73,16 +79,21 @@ int main(int argc, char** argv)
     glClearColor(0.0f,0.0f,0.0f,1.0f);
 
     // OpenGL 'view' of data. We might have many views of the same data.
-    pangolin::Plotter thePlotter(&theLog,0,600,-2000,15000,60,0.5);
+    pangolin::Plotter thePlotter(&logAccel,0,600,-2000,15000,60,0.5);
     thePlotter.SetBounds(0.0, 1.0, 0.0, 1.0);
     pangolin::DisplayBase().AddDisplay(thePlotter);
 
     // Optionally add named labels
-    std::vector<std::string> vLabels;
-    vLabels.push_back(std::string("x"));
-    vLabels.push_back(std::string("y"));
-    vLabels.push_back(std::string("z"));
-    theLog.SetLabels(vLabels);
+    std::vector<std::string> vLabelsAccel;
+    vLabelsAccel.push_back(std::string("x"));
+    vLabelsAccel.push_back(std::string("y"));
+    vLabelsAccel.push_back(std::string("z"));
+    logAccel.SetLabels(vLabelsAccel);
+
+    std::vector<std::string> vLabelsEncoder;
+    vLabelsEncoder.push_back(std::string("RB"));
+    vLabelsEncoder.push_back(std::string("LB"));
+    logEncoder.SetLabels(vLabelsEncoder);
 
 
     while(!pangolin::ShouldQuit()) {
@@ -93,7 +104,7 @@ int main(int argc, char** argv)
 //        double joystickAccel = (((double)theGamepad.GetAxisValue(1)/JOYSTICK_AXIS_MAX)*-40.0);
         double joystickAccel = (theGamepad.GetAxisValue(1) + 1 ) * (MAX_ACCEL / 2);
 //        double joystickPhi = (((double)theGamepad.GetAxisValue(2)/(double)JOYSTICK_AXIS_MAX) * (MAX_SERVO_ANGLE*M_PI/180.0)*0.5);
-        double joystickPhi = (theGamepad.GetAxisValue(2) + 1) * (MAX_PHI / 2);
+        double joystickPhi = (-theGamepad.GetAxisValue(2) + 1) * (MAX_PHI / 2);
 
 //        joystickAccel = joystickAccel*DEFAULT_ACCEL_COEF + DEFAULT_ACCEL_OFFSET;
 //        joystickPhi = joystickPhi*DEFAULT_STEERING_COEF + DEFAULT_STEERING_OFFSET;
