@@ -8,23 +8,27 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Wall -Wextra")
 # add to module path, so we can find our cmake modules
 set( CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules ${CMAKE_MODULE_PATH} )
 
+if(ANDROID)
+    set(ANDROID_PACKAGE_NAME "edu.gwu.robotics")
+    include(AndroidUtils)
+endif()
 
-find_package( ZeroMQ REQUIRED )
+find_package( Pangolin 0.1 REQUIRED )
 find_package( HAL 0.1 REQUIRED )
-find_package( PbMsgs 2.0 REQUIRED )
-
-include_directories( ${ZeroMQ_INCLUDE_DIRS} )
-include_directories( ${HAL_INCLUDE_DIRS} )
-include_directories( ${PbMsgs_INCLUDE_DIRS} )
-
+find_package( ZeroMQ REQUIRED )
 find_package( Protobuf REQUIRED )
+
+include_directories( ${Pangolin_INCLUDE_DIRS} )
+include_directories( ${HAL_INCLUDE_DIRS} )
+include_directories( ${ZeroMQ_INCLUDE_DIRS} )
+
 include_directories( ${CMAKE_BINARY_DIR} )
 PROTOBUF_GENERATE_CPP( PROTO_SRCS PROTO_HDRS Command.proto )
 
 
-set( HDRS ${PROTO_HDRS} FtdiDriver.h Node.h )
+set( HDRS ${PROTO_HDRS} )
 set( SRCS NodeRelay.cpp ${PROTO_SRCS} )
 
 
 add_executable( NodeRelay ${HDRS} ${SRCS} )
-target_link_libraries( NodeRelay ${ZeroMQ_LIBRARIES} ${HAL_LIBRARIES} ${PbMsgs_LIBRARIES} ${PROTOBUF_LIBRARIES} )
+target_link_libraries( NodeRelay ${Pangolin_LIBRARIES} ${HAL_LIBRARIES} ${ZeroMQ_LIBRARIES} ${PROTOBUF_LIBRARIES} )

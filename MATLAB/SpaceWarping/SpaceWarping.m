@@ -57,13 +57,8 @@ function ctx = SolveFullSlam( ctx )
     ctx.sw = 10; % sliding window size
     ctx.active_idx_start = max( size(ctx.poses,2)-ctx.sw, 1 );
     ctx.active_idx_end   = min( ctx.active_idx_start+ctx.sw, size(ctx.poses,2) );
-%     ctx.active_idx_start = 1;
-%     ctx.active_idx_end   = size(ctx.poses,2);
     ctx.static_idx_start = max( ctx.active_idx_start-5, 1 );
     ctx.static_idx_end   = ctx.active_idx_start-1;
-%     ctx.static_idx_start = 2;
-%     ctx.static_idx_end   = 1;
-
 
     [ctx,x] = GetState(ctx);
     x = GaussNewton( @(x)SlamResidualWithJacobian(x,ctx), x );
@@ -72,6 +67,8 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [ctx,x] = GetState(ctx)
+%     num_elems = 3*((ctx.static_idx_end+1-ctx.static_idx_start)...
+%                 +(ctx.active_idx_end+1-ctx.active_idx_start));
     x = [];
     ctx.num_measurements = 0;
     ctx.lmk_idxs = [];
@@ -117,7 +114,8 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function [r,J] = SlamResidualJacobian( x, ctx )
-    J = sparse(2*ctx.num_measurements,numel(x));
+%     J = sparse(2*ctx.num_measurements,numel(x));
+    J = zeros(2*ctx.num_measurements,numel(x));
     r = zeros(2*ctx.num_measurements,1);
     ri = 1;
 
@@ -131,7 +129,7 @@ function [r,J] = SlamResidualJacobian( x, ctx )
             xwmj = x(lmk_stateidx:lmk_stateidx+1);
             zij = zi(1:2,cc);
             
-            [hij,Jwpi,Jwmj] = SensorModel( xwpi, xwmj );
+            [hij,~,Jwmj] = SensorModel( xwpi, xwmj );
             r(ri:ri+1) = zij-hij;
             J(ri:ri+1,lmk_stateidx:lmk_stateidx+1) = -Jwmj;
             ri = ri+2;
@@ -200,12 +198,12 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function r = MotionResidual( x, ctx )
-    r = [];
+    r = zeros(2*size(ctx.z,2),1);
     for jj = 1:size(ctx.z,2)
         zij = ctx.z(1:2,jj);
         lmidx = ctx.z(4,jj);
         hij = SensorModel( x, ctx.landmarks{lmidx}.x );
-        r = [ r; zij-hij ]; 
+        r(jj*2-1:jj*2,1) = zij-hij;
     end
 end
 
