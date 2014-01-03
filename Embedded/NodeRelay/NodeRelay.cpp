@@ -1,6 +1,16 @@
-#ifndef ANDROID
+#ifndef _GLIBCXX_USE_NANOSLEEP
 #define _GLIBCXX_USE_NANOSLEEP
 #endif
+
+#ifdef ANDROID
+#    include <android/log.h>
+#    define PrintMessage( ... ) \
+          (void)__android_log_print(ANDROID_LOG_INFO,  "NodeRelay", __VA_ARGS__);
+#else
+#    define PrintMessage( ... ) \
+          printf( __VA_ARGS__ );
+#endif
+
 
 #include <stdio.h>
 #include <chrono>
@@ -15,28 +25,22 @@
 #include <PbMsgs/Imu.pb.h>
 #include <HAL/IMU/IMUDevice.h>
 
-//#include <HAL/IMU/Drivers/Ninja/FtdiListener.h>
+#include <HAL/IMU/Drivers/Ninja/FtdiListener.h>
 
 #include "Command.pb.h"
 
 
 rpg::Node   Relay;
 
-pangolin::DataLog g_PlotLogAccel;
-pangolin::DataLog g_PlotLogGryo;
-pangolin::DataLog g_PlotLogMag;
 
-
-/*
 /////////////////////////////////////////////////////////////////////////////
 /// IMU callback
 void IMU_Handler(pb::ImuMsg& IMUdata)
 {
-    if ( Relay.Write( "IMU", IMUdata ) == false ) {
-        printf("NodeRelay: Error sending message.\n");
-    }
+  if ( Relay.Write( "IMU", IMUdata ) == false ) {
+    PrintMessage("NodeRelay: Error sending message.\n");
+  }
 }
-*/
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -44,93 +48,57 @@ void IMU_Handler(pb::ImuMsg& IMUdata)
 /////////////////////////////////////////////////////////////////////////////
 int main(int argc, char** argv)
 {
-  pangolin::CreateWindowAndBind(__FILE__,1280,800);
+  GetPot clArgs(argc, argv);
 
-  pangolin::View& imuView = pangolin::CreateDisplay().SetLayout(pangolin::LayoutEqualVertical);
-  imuView.AddDisplay( pangolin::CreatePlotter("Accel", &g_PlotLogAccel) );
-  imuView.AddDisplay( pangolin::CreatePlotter("Gryo", &g_PlotLogGryo) );
-  imuView.AddDisplay( pangolin::CreatePlotter("Mag", &g_PlotLogMag) );
-
+  // We need to create a window for Pangolin to handle our program entry point
+  // in Android.
+  pangolin::CreateWindowAndBind("NodeRelay",1280,800);
   glDisable(GL_LINE_SMOOTH);
   glDisable(GL_LIGHTING);
 
-  GetPot clArgs(argc, argv);
+  ///--------------------
 
-//    printf("Initializing RELAY node....\n");
-//    hal::IMU imu( clArgs.follow("", "-imu") );
-//    imu.RegisterIMUDataCallback(IMU_Handler);
-
+  PrintMessage("Setting up publisher....\n");
 
   // set up a publisher
   unsigned int nPort = clArgs.follow( 5001, "-port");
   if( Relay.Publish("IMU", nPort) == false ) {
-      printf("NodeRelay: Error setting publisher.\n");
+      PrintMessage("NodeRelay: Error setting publisher.\n");
   }
 
-//    Relay.Subscribe("CarControl", clArgs.follow("","-control" )  );
+  PrintMessage("Setting up control subscription....\n");
+  Relay.Subscribe("CarControl", clArgs.follow("128.164.202.95:6001","-control" )  );
 
-//    CommandMsg cMsg;
+  CommandMsg cMsg;
+  FtdiListener& Listener = FtdiListener::GetInstance();
 
-//    FtdiListener& Listener = FtdiListener::GetInstance();
+  ///--------------------
+#if ANDROID
+  PrintMessage("Setting correct permissions....\n");
+  system("su -c 'chmod 0777 /dev/ttyUSB0'");
+#endif
 
+  PrintMessage("Initializing IMU....\n");
+  hal::IMU imu( clArgs.follow("ninja:///dev/ttyUSB0", "-imu") );
 
-  const double tinc = 0.01;
-  double t = 0;
+  PrintMessage("Registering callback....\n");
+  imu.RegisterIMUDataCallback(IMU_Handler);
 
-    for( size_t ii = 0; ; ++ii ) {
+  ///--------------------
 
-      pb::ImuMsg IMUdata;
+  for( size_t ii = 0; ; ++ii ) {
 
-      IMUdata.Clear();
+    cMsg.Clear();
+    Relay.ReadBlocking("CarControl", cMsg);
 
-      IMUdata.set_id(1);
-      IMUdata.set_device_time( hal::Tic() );
-
-      float st = sin(t);
-      float ct = cos(t);
-      float tt = tan(t);
-      t += tinc;
-
-      pb::VectorMsg* pbVec = IMUdata.mutable_accel();
-      pbVec->add_data(st);
-      pbVec->add_data(ct);
-      pbVec->add_data(tt);
-
-      pbVec = IMUdata.mutable_gyro();
-      pbVec->add_data(ct);
-      pbVec->add_data(tt);
-      pbVec->add_data(st);
-
-      pbVec = IMUdata.mutable_mag();
-      pbVec->add_data(tt);
-      pbVec->add_data(st);
-      pbVec->add_data(ct);
-
-      g_PlotLogAccel.Log( IMUdata.accel().data(0), IMUdata.accel().data(1), IMUdata.accel().data(2) );
-      g_PlotLogGryo.Log( IMUdata.gyro().data(0), IMUdata.gyro().data(1), IMUdata.gyro().data(2) );
-      g_PlotLogMag.Log( IMUdata.mag().data(0), IMUdata.mag().data(1), IMUdata.mag().data(2) );
-
-      if ( Relay.Write( "IMU", IMUdata ) == false ) {
-          printf("NodeRelay: Error sending message.\n");
-      }
-
-      /*
-        cMsg.Clear();
-        Relay.ReadBlocking("CarControl", cMsg);
-
-        const int accel = int(cMsg.accel());
-        const int phi = int(cMsg.phi());
-        printf("Accel: %3d --- Phi: %3d\r", accel, phi );
-        fflush(stdout);
-        Listener.SendCommandPacket( phi, accel );
-    */
-
-      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-      pangolin::FinishFrame();
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    const int accel = int(cMsg.accel());
+    const int phi = int(cMsg.phi());
+    PrintMessage("Accel: %3d --- Phi: %3d\r", accel, phi );
+    fflush(stdout);
+    Listener.SendCommandPacket( phi, accel );
+  }
 
 
-    return 0;
+  return 0;
 }
 

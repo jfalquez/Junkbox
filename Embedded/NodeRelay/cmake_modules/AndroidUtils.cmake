@@ -26,12 +26,14 @@ if(ANDROID AND NOT TARGET apk)
 
     <!-- This is the platform API where NativeActivity was introduced. -->
     <uses-sdk android:minSdkVersion=\"14\" />
-    <uses-feature android:name=\"android.hardware.camera\" />
-    <uses-feature android:name=\"android.hardware.usb.host\" />
+    <uses-feature android:name=\"android.hardware.camera\" android:required=\"true\" />
+    <uses-feature android:name=\"android.hardware.usb.host\" android:required=\"true\" />
+    <uses-feature android:name=\"android.hardware.wifi\" android:required=\"true\" />
     <uses-permission android:name=\"android.permission.CAMERA\"/>
+    <uses-permission android:name=\"android.permission.INTERNET\"/>
     <uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>
     <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>
-    <uses-permission android:name=\"android.permission.INTERNET\"/>
+    <uses-permission android:name=\"android.permission.ACCESS_SUPERUSER\" />
 
     <!-- This .apk has no Java code itself, so set hasCode to false. -->
     <application android:label=\"${activity_name}\" android:hasCode=\"false\">
@@ -48,17 +50,33 @@ if(ANDROID AND NOT TARGET apk)
             <!-- Tell NativeActivity the name of our .so -->
             <meta-data android:name=\"android.app.lib_name\"
                     android:value=\"${prog_name}_start\" />
+            <meta-data android:name=\"android.hardware.usb.action.USB_DEVICE_ATTACHED\"
+                    android:resource=\"@xml/device_filter\" />
             <intent-filter>
                 <action android:name=\"android.intent.action.MAIN\" />
-                <action android:name=\"android.hardware.usb.action.USB_DEVICE_ATTACHED\" />
-                <action android:name=\"android.hardware.usb.action.USB_DEVICE_DETACHED\" />
                 <category android:name=\"android.intent.category.LAUNCHER\" />
+                <action android:name=\"android.hardware.usb.action.USB_DEVICE_ATTACHED\" />
             </intent-filter>
         </activity>
     </application>
 
 </manifest>
 <!-- END_INCLUDE(manifest) -->" )
+    endmacro()
+
+    macro( create_device_filter filename )
+        file( WRITE ${filename}
+"<?xml version=\"1.0\" encoding=\"utf-8\"?>
+<resources>
+  <usb-device vendor-id=\"1118\" product-id=\"688\"></usb-device>
+  <usb-device vendor-id=\"1027\" product-id=\"24577\" /> <!-- FT232RL -->
+  <usb-device vendor-id=\"1027\" product-id=\"24596\" /> <!-- FT232H -->
+  <usb-device vendor-id=\"1027\" product-id=\"24592\" /> <!-- FT2232C/D/HL -->
+  <usb-device vendor-id=\"1027\" product-id=\"24593\" /> <!-- FT4232HL -->
+  <usb-device vendor-id=\"1027\" product-id=\"24597\" /> <!-- FT230X -->
+  <usb-device vendor-id=\"1412\" product-id=\"45088\" /> <!-- REX-USB60F -->
+</resources>"
+        )
     endmacro()
 
     macro( create_bootstrap_library prog_name package_name)
@@ -112,6 +130,8 @@ void ANativeActivity_onCreate(ANativeActivity * app, void * ud, size_t udsize) {
 
         # Add required link libs for android
         target_link_libraries(${prog_name} log android )
+
+        create_device_filter("${CMAKE_CURRENT_BINARY_DIR}/bin/res/xml/device_filter.xml")
 
         # Create manifest required for APK
         create_android_manifest_xml(
